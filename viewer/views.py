@@ -27,15 +27,30 @@ from .serializers import DicomStudySerializer, DicomImageSerializer
 
 
 def ensure_media_directories():
-    """Ensure media directories exist"""
+    """Ensure media directories exist with proper permissions"""
     media_root = default_storage.location
     dicom_dir = os.path.join(media_root, 'dicom_files')
     temp_dir = os.path.join(media_root, 'temp')
     
     for directory in [media_root, dicom_dir, temp_dir]:
-        if not os.path.exists(directory):
-            os.makedirs(directory, exist_ok=True)
-            print(f"Created directory: {directory}")
+        try:
+            if not os.path.exists(directory):
+                os.makedirs(directory, mode=0o755, exist_ok=True)
+                print(f"Created directory: {directory}")
+            else:
+                # Ensure directory is writable
+                if not os.access(directory, os.W_OK):
+                    os.chmod(directory, 0o755)
+                    print(f"Updated permissions for directory: {directory}")
+        except Exception as e:
+            print(f"Error creating/checking directory {directory}: {e}")
+            # Try to create in a different location if needed
+            if directory == media_root:
+                # Fallback to current directory if media_root fails
+                fallback_dir = os.path.join(os.getcwd(), 'media')
+                if not os.path.exists(fallback_dir):
+                    os.makedirs(fallback_dir, mode=0o755, exist_ok=True)
+                print(f"Using fallback media directory: {fallback_dir}")
 
 
 class HomeView(TemplateView):
@@ -145,74 +160,141 @@ def create_radiologist(request):
 @csrf_exempt
 @require_http_methods(['POST'])
 def upload_dicom_files(request):
-    """Handle DICOM file uploads with improved worklist integration"""
+    """Handle DICOM file uploads with comprehensive error handling and validation"""
     try:
-        # Ensure media directories exist
+        # Ensure media directories exist with proper permissions
         ensure_media_directories()
         
         if 'files' not in request.FILES:
             return JsonResponse({'error': 'No files provided'}, status=400)
         
         files = request.FILES.getlist('files')
+        if not files:
+            return JsonResponse({'error': 'No files provided'}, status=400)
+        
         uploaded_files = []
         study = None
+        errors = []
         
         for file in files:
             try:
-                # More permissive DICOM file validation
-                file_ext = file.name.lower()
-                if not (file_ext.endswith(('.dcm', '.dicom')) or 
-                       file_ext.endswith(('.dcm.gz', '.dicom.gz')) or
-                       file_ext.endswith(('.dcm.bz2', '.dicom.bz2')) or
-                       '.' not in file.name):  # Allow files without extension
+                # More comprehensive file validation
+                file_name = file.name.lower()
+                file_size = file.size
+                
+                # Check file size (100MB limit)
+                if file_size > 100 * 1024 * 1024:  # 100MB
+                    errors.append(f"File {file.name} is too large (max 100MB)")
                     continue
                 
-                # Save file to proper DICOM directory
-                file_path = default_storage.save(f'dicom_files/{file.name}', ContentFile(file.read()))
+                # Accept any file that might be DICOM (more permissive)
+                is_dicom_candidate = (
+                    file_name.endswith(('.dcm', '.dicom')) or
+                    file_name.endswith(('.dcm.gz', '.dicom.gz')) or
+                    file_name.endswith(('.dcm.bz2', '.dicom.bz2')) or
+                    '.' not in file.name or  # Files without extension
+                    file_name.endswith('.img') or  # Common DICOM format
+                    file_name.endswith('.ima') or  # Common DICOM format
+                    file_name.endswith('.raw') or  # Raw data
+                    file_size > 1024  # Files larger than 1KB (likely not text)
+                )
                 
-                # Read DICOM data with better error handling
+                if not is_dicom_candidate:
+                    errors.append(f"File {file.name} does not appear to be a DICOM file")
+                    continue
+                
+                # Save file with unique name to avoid conflicts
+                import uuid
+                unique_filename = f"{uuid.uuid4()}_{file.name}"
+                file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file.read()))
+                
+                # Try to read DICOM data with multiple fallback methods
+                dicom_data = None
                 try:
+                    # Method 1: Try reading from file path
                     dicom_data = pydicom.dcmread(default_storage.path(file_path))
-                except Exception as e:
-                    print(f"Error reading DICOM file {file.name}: {e}")
-                    # Try to read as bytes if file path fails
+                except Exception as e1:
                     try:
+                        # Method 2: Try reading from file object
                         file.seek(0)  # Reset file pointer
                         dicom_data = pydicom.dcmread(file)
-                        # Save the file again after successful read
-                        file_path = default_storage.save(f'dicom_files/{file.name}', ContentFile(file.read()))
+                        # Re-save the file after successful read
+                        file.seek(0)
+                        file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file.read()))
                     except Exception as e2:
-                        print(f"Failed to read DICOM file {file.name} as bytes: {e2}")
-                        # Clean up the saved file
-                        default_storage.delete(file_path)
-                        continue
+                        try:
+                            # Method 3: Try reading as bytes
+                            file.seek(0)
+                            file_bytes = file.read()
+                            dicom_data = pydicom.dcmread(file_bytes)
+                            # Save the bytes
+                            file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file_bytes))
+                        except Exception as e3:
+                            print(f"Failed to read DICOM file {file.name}: {e1}, {e2}, {e3}")
+                            # Clean up the saved file
+                            try:
+                                default_storage.delete(file_path)
+                            except:
+                                pass
+                            errors.append(f"Could not read DICOM data from {file.name}")
+                            continue
                 
-                # Create/update study with facility association
+                # Validate that we have essential DICOM tags
+                if not dicom_data:
+                    errors.append(f"No DICOM data found in {file.name}")
+                    continue
+                
+                # Get study UID with fallback
                 study_uid = str(dicom_data.get('StudyInstanceUID', ''))
                 if not study_uid:
-                    print(f"No StudyInstanceUID found in {file.name}")
-                    default_storage.delete(file_path)
-                    continue
-                    
+                    # Try to generate a fallback study UID
+                    study_uid = f"STUDY_{uuid.uuid4()}"
+                    print(f"Generated fallback StudyInstanceUID for {file.name}: {study_uid}")
+                
+                # Create or update study with comprehensive data extraction
                 if not study:
+                    # Extract patient information with fallbacks
+                    patient_name = 'Unknown'
+                    if hasattr(dicom_data, 'PatientName'):
+                        try:
+                            patient_name = str(dicom_data.PatientName)
+                        except:
+                            patient_name = 'Unknown'
+                    
+                    patient_id = 'Unknown'
+                    if hasattr(dicom_data, 'PatientID'):
+                        try:
+                            patient_id = str(dicom_data.PatientID)
+                        except:
+                            patient_id = 'Unknown'
+                    
+                    # Extract other fields with safe fallbacks
+                    study_date = parse_dicom_date(getattr(dicom_data, 'StudyDate', None))
+                    study_time = parse_dicom_time(getattr(dicom_data, 'StudyTime', None))
+                    study_description = str(getattr(dicom_data, 'StudyDescription', ''))
+                    modality = str(dicom_data.Modality) if hasattr(dicom_data, 'Modality') else 'OT'
+                    institution_name = str(getattr(dicom_data, 'InstitutionName', ''))
+                    accession_number = str(getattr(dicom_data, 'AccessionNumber', ''))
+                    referring_physician = str(getattr(dicom_data, 'ReferringPhysicianName', ''))
+                    
                     study, created = DicomStudy.objects.get_or_create(
                         study_instance_uid=study_uid,
                         defaults={
-                            'patient_name': str(dicom_data.PatientName) if hasattr(dicom_data, 'PatientName') else 'Unknown',
-                            'patient_id': str(dicom_data.PatientID) if hasattr(dicom_data, 'PatientID') else 'Unknown',
-                            'study_date': parse_dicom_date(getattr(dicom_data, 'StudyDate', None)),
-                            'study_time': parse_dicom_time(getattr(dicom_data, 'StudyTime', None)),
-                            'study_description': str(getattr(dicom_data, 'StudyDescription', '')),
-                            'modality': str(dicom_data.Modality) if hasattr(dicom_data, 'Modality') else 'OT',
-                            'institution_name': str(getattr(dicom_data, 'InstitutionName', '')),
+                            'patient_name': patient_name,
+                            'patient_id': patient_id,
+                            'study_date': study_date,
+                            'study_time': study_time,
+                            'study_description': study_description,
+                            'modality': modality,
+                            'institution_name': institution_name,
                             'uploaded_by': request.user if request.user.is_authenticated else None,
                             'facility': request.user.facility_staff.facility if hasattr(request.user, 'facility_staff') else None,
-                            'accession_number': str(getattr(dicom_data, 'AccessionNumber', '')),
-                            'referring_physician': str(getattr(dicom_data, 'ReferringPhysicianName', '')),
+                            'accession_number': accession_number,
+                            'referring_physician': referring_physician,
                         }
                     )
                     
-                    # Create corresponding worklist entry
+                    # Create worklist entry if study was created
                     if created:
                         try:
                             WorklistEntry.objects.create(
@@ -232,24 +314,12 @@ def upload_dicom_files(request):
                         except Exception as e:
                             print(f"Error creating worklist entry: {e}")
                 
-                # If study was created, send notifications to radiologists
-                if created:
-                    radiologists = User.objects.filter(groups__name='Radiologists')
-                    for radiologist in radiologists:
-                        Notification.objects.create(
-                            recipient=radiologist,
-                            notification_type='new_study',
-                            title=f'New {study.modality} Study',
-                            message=f'New study uploaded for {study.patient_name}',
-                            related_study=study
-                        )
-                
-                # Create or get series
+                # Create or get series with fallback UID
                 series_uid = str(dicom_data.get('SeriesInstanceUID', ''))
                 if not series_uid:
-                    print(f"No SeriesInstanceUID found in {file.name}")
-                    continue
-                    
+                    series_uid = f"SERIES_{uuid.uuid4()}"
+                    print(f"Generated fallback SeriesInstanceUID for {file.name}: {series_uid}")
+                
                 series, created = DicomSeries.objects.get_or_create(
                     study=study,
                     series_instance_uid=series_uid,
@@ -260,23 +330,60 @@ def upload_dicom_files(request):
                     }
                 )
                 
-                # Create image
+                # Create image with fallback UID
                 image_instance_uid = str(dicom_data.get('SOPInstanceUID', ''))
                 if not image_instance_uid:
-                    print(f"No SOPInstanceUID found in {file.name}")
-                    continue
-                    
+                    image_instance_uid = f"IMAGE_{uuid.uuid4()}"
+                    print(f"Generated fallback SOPInstanceUID for {file.name}: {image_instance_uid}")
+                
+                # Extract image data with safe fallbacks
+                rows = 0
+                columns = 0
+                bits_allocated = 16
+                samples_per_pixel = 1
+                photometric_interpretation = 'MONOCHROME2'
+                
+                if hasattr(dicom_data, 'Rows'):
+                    try:
+                        rows = int(dicom_data.Rows)
+                    except:
+                        rows = 0
+                
+                if hasattr(dicom_data, 'Columns'):
+                    try:
+                        columns = int(dicom_data.Columns)
+                    except:
+                        columns = 0
+                
+                if hasattr(dicom_data, 'BitsAllocated'):
+                    try:
+                        bits_allocated = int(dicom_data.BitsAllocated)
+                    except:
+                        bits_allocated = 16
+                
+                if hasattr(dicom_data, 'SamplesPerPixel'):
+                    try:
+                        samples_per_pixel = int(dicom_data.SamplesPerPixel)
+                    except:
+                        samples_per_pixel = 1
+                
+                if hasattr(dicom_data, 'PhotometricInterpretation'):
+                    try:
+                        photometric_interpretation = str(dicom_data.PhotometricInterpretation)
+                    except:
+                        photometric_interpretation = 'MONOCHROME2'
+                
                 image, created = DicomImage.objects.get_or_create(
                     series=series,
                     sop_instance_uid=image_instance_uid,
                     defaults={
                         'image_number': int(dicom_data.get('InstanceNumber', 0)),
                         'file_path': file_path,
-                        'rows': int(dicom_data.Rows) if hasattr(dicom_data, 'Rows') else 0,
-                        'columns': int(dicom_data.Columns) if hasattr(dicom_data, 'Columns') else 0,
-                        'bits_allocated': int(dicom_data.BitsAllocated) if hasattr(dicom_data, 'BitsAllocated') else 16,
-                        'samples_per_pixel': int(dicom_data.SamplesPerPixel) if hasattr(dicom_data, 'SamplesPerPixel') else 1,
-                        'photometric_interpretation': str(dicom_data.PhotometricInterpretation) if hasattr(dicom_data, 'PhotometricInterpretation') else 'MONOCHROME2',
+                        'rows': rows,
+                        'columns': columns,
+                        'bits_allocated': bits_allocated,
+                        'samples_per_pixel': samples_per_pixel,
+                        'photometric_interpretation': photometric_interpretation,
                         'pixel_spacing': str(getattr(dicom_data, 'PixelSpacing', '')),
                         'slice_thickness': float(getattr(dicom_data, 'SliceThickness', 0)),
                         'window_center': str(getattr(dicom_data, 'WindowCenter', '')),
@@ -289,6 +396,7 @@ def upload_dicom_files(request):
                 
             except Exception as e:
                 print(f"Error processing file {file.name}: {e}")
+                errors.append(f"Error processing {file.name}: {str(e)}")
                 if 'file_path' in locals():
                     try:
                         default_storage.delete(file_path)
@@ -296,70 +404,125 @@ def upload_dicom_files(request):
                         pass
                 continue
         
+        # Prepare response
         if not uploaded_files:
-            return JsonResponse({'error': 'No valid DICOM files were uploaded'}, status=400)
+            error_message = 'No valid DICOM files were uploaded'
+            if errors:
+                error_message += f'. Errors: {"; ".join(errors[:5])}'  # Limit error messages
+            return JsonResponse({'error': error_message}, status=400)
         
-        return JsonResponse({
+        response_data = {
             'message': f'Uploaded {len(uploaded_files)} files successfully',
             'uploaded_files': uploaded_files,
             'study_id': study.id if study else None
-        })
+        }
+        
+        if errors:
+            response_data['warnings'] = errors[:5]  # Include warnings for partial success
+        
+        return JsonResponse(response_data)
         
     except Exception as e:
         print(f"Unexpected error in upload_dicom_files: {e}")
+        import traceback
+        traceback.print_exc()
         return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
 
 
 @csrf_exempt
 @require_http_methods(['POST'])
 def upload_dicom_folder(request):
-    """Handle DICOM folder uploads"""
+    """Handle DICOM folder uploads with comprehensive error handling and validation"""
     try:
+        # Ensure media directories exist with proper permissions
+        ensure_media_directories()
+        
         if 'files' not in request.FILES:
             return JsonResponse({'error': 'No files provided'}, status=400)
         
         files = request.FILES.getlist('files')
+        if not files:
+            return JsonResponse({'error': 'No files provided'}, status=400)
+        
         uploaded_files = []
-        study = None
+        studies = {}
+        errors = []
         
         # Group files by study
-        studies = {}
-        
         for file in files:
             try:
-                # More permissive DICOM file validation
-                file_ext = file.name.lower()
-                if not (file_ext.endswith(('.dcm', '.dicom')) or 
-                       file_ext.endswith(('.dcm.gz', '.dicom.gz')) or
-                       file_ext.endswith(('.dcm.bz2', '.dicom.bz2')) or
-                       '.' not in file.name):  # Allow files without extension
+                # More comprehensive file validation
+                file_name = file.name.lower()
+                file_size = file.size
+                
+                # Check file size (100MB limit)
+                if file_size > 100 * 1024 * 1024:  # 100MB
+                    errors.append(f"File {file.name} is too large (max 100MB)")
                     continue
                 
-                # Save file to proper DICOM directory
-                file_path = default_storage.save(f'dicom_files/{file.name}', ContentFile(file.read()))
+                # Accept any file that might be DICOM (more permissive)
+                is_dicom_candidate = (
+                    file_name.endswith(('.dcm', '.dicom')) or
+                    file_name.endswith(('.dcm.gz', '.dicom.gz')) or
+                    file_name.endswith(('.dcm.bz2', '.dicom.bz2')) or
+                    '.' not in file.name or  # Files without extension
+                    file_name.endswith('.img') or  # Common DICOM format
+                    file_name.endswith('.ima') or  # Common DICOM format
+                    file_name.endswith('.raw') or  # Raw data
+                    file_size > 1024  # Files larger than 1KB (likely not text)
+                )
                 
-                # Read DICOM data with better error handling
+                if not is_dicom_candidate:
+                    errors.append(f"File {file.name} does not appear to be a DICOM file")
+                    continue
+                
+                # Save file with unique name to avoid conflicts
+                import uuid
+                unique_filename = f"{uuid.uuid4()}_{file.name}"
+                file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file.read()))
+                
+                # Try to read DICOM data with multiple fallback methods
+                dicom_data = None
                 try:
+                    # Method 1: Try reading from file path
                     dicom_data = pydicom.dcmread(default_storage.path(file_path))
-                except Exception as e:
-                    print(f"Error reading DICOM file {file.name}: {e}")
-                    # Try to read as bytes if file path fails
+                except Exception as e1:
                     try:
+                        # Method 2: Try reading from file object
                         file.seek(0)  # Reset file pointer
                         dicom_data = pydicom.dcmread(file)
-                        # Save the file again after successful read
-                        file_path = default_storage.save(f'dicom_files/{file.name}', ContentFile(file.read()))
+                        # Re-save the file after successful read
+                        file.seek(0)
+                        file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file.read()))
                     except Exception as e2:
-                        print(f"Failed to read DICOM file {file.name} as bytes: {e2}")
-                        default_storage.delete(file_path)
-                        continue
+                        try:
+                            # Method 3: Try reading as bytes
+                            file.seek(0)
+                            file_bytes = file.read()
+                            dicom_data = pydicom.dcmread(file_bytes)
+                            # Save the bytes
+                            file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file_bytes))
+                        except Exception as e3:
+                            print(f"Failed to read DICOM file {file.name}: {e1}, {e2}, {e3}")
+                            # Clean up the saved file
+                            try:
+                                default_storage.delete(file_path)
+                            except:
+                                pass
+                            errors.append(f"Could not read DICOM data from {file.name}")
+                            continue
                 
-                # Get study UID
+                # Validate that we have essential DICOM tags
+                if not dicom_data:
+                    errors.append(f"No DICOM data found in {file.name}")
+                    continue
+                
+                # Get study UID with fallback
                 study_uid = str(dicom_data.get('StudyInstanceUID', ''))
                 if not study_uid:
-                    print(f"No StudyInstanceUID found in {file.name}")
-                    default_storage.delete(file_path)
-                    continue
+                    # Try to generate a fallback study UID
+                    study_uid = f"STUDY_{uuid.uuid4()}"
+                    print(f"Generated fallback StudyInstanceUID for {file.name}: {study_uid}")
                 
                 # Group by study
                 if study_uid not in studies:
@@ -375,6 +538,7 @@ def upload_dicom_folder(request):
                 
             except Exception as e:
                 print(f"Error processing file {file.name}: {e}")
+                errors.append(f"Error processing {file.name}: {str(e)}")
                 if 'file_path' in locals():
                     try:
                         default_storage.delete(file_path)
@@ -388,20 +552,44 @@ def upload_dicom_folder(request):
                 # Create study from first file
                 first_dicom = study_data['dicom_data'][0]
                 
+                # Extract patient information with fallbacks
+                patient_name = 'Unknown'
+                if hasattr(first_dicom, 'PatientName'):
+                    try:
+                        patient_name = str(first_dicom.PatientName)
+                    except:
+                        patient_name = 'Unknown'
+                
+                patient_id = 'Unknown'
+                if hasattr(first_dicom, 'PatientID'):
+                    try:
+                        patient_id = str(first_dicom.PatientID)
+                    except:
+                        patient_id = 'Unknown'
+                
+                # Extract other fields with safe fallbacks
+                study_date = parse_dicom_date(getattr(first_dicom, 'StudyDate', None))
+                study_time = parse_dicom_time(getattr(first_dicom, 'StudyTime', None))
+                study_description = str(getattr(first_dicom, 'StudyDescription', ''))
+                modality = str(first_dicom.Modality) if hasattr(first_dicom, 'Modality') else 'OT'
+                institution_name = str(getattr(first_dicom, 'InstitutionName', ''))
+                accession_number = str(getattr(first_dicom, 'AccessionNumber', ''))
+                referring_physician = str(getattr(first_dicom, 'ReferringPhysicianName', ''))
+                
                 study, created = DicomStudy.objects.get_or_create(
                     study_instance_uid=study_uid,
                     defaults={
-                        'patient_name': str(first_dicom.PatientName) if hasattr(first_dicom, 'PatientName') else 'Unknown',
-                        'patient_id': str(first_dicom.PatientID) if hasattr(first_dicom, 'PatientID') else 'Unknown',
-                        'study_date': parse_dicom_date(getattr(first_dicom, 'StudyDate', None)),
-                        'study_time': parse_dicom_time(getattr(first_dicom, 'StudyTime', None)),
-                        'study_description': str(getattr(first_dicom, 'StudyDescription', '')),
-                        'modality': str(first_dicom.Modality) if hasattr(first_dicom, 'Modality') else 'OT',
-                        'institution_name': str(getattr(first_dicom, 'InstitutionName', '')),
+                        'patient_name': patient_name,
+                        'patient_id': patient_id,
+                        'study_date': study_date,
+                        'study_time': study_time,
+                        'study_description': study_description,
+                        'modality': modality,
+                        'institution_name': institution_name,
                         'uploaded_by': request.user if request.user.is_authenticated else None,
                         'facility': request.user.facility_staff.facility if hasattr(request.user, 'facility_staff') else None,
-                        'accession_number': str(getattr(first_dicom, 'AccessionNumber', '')),
-                        'referring_physician': str(getattr(first_dicom, 'ReferringPhysicianName', '')),
+                        'accession_number': accession_number,
+                        'referring_physician': referring_physician,
                     }
                 )
                 
@@ -428,11 +616,12 @@ def upload_dicom_folder(request):
                 # Process each file in the study
                 for i, dicom_data in enumerate(study_data['dicom_data']):
                     try:
-                        # Create or get series
+                        # Create or get series with fallback UID
                         series_uid = str(dicom_data.get('SeriesInstanceUID', ''))
                         if not series_uid:
-                            continue
-                            
+                            series_uid = f"SERIES_{uuid.uuid4()}"
+                            print(f"Generated fallback SeriesInstanceUID for {study_data['files'][i]}: {series_uid}")
+                        
                         series, created = DicomSeries.objects.get_or_create(
                             study=study,
                             series_instance_uid=series_uid,
@@ -443,26 +632,64 @@ def upload_dicom_folder(request):
                             }
                         )
                         
-                        # Create image
+                        # Create image with fallback UID
                         image_instance_uid = str(dicom_data.get('SOPInstanceUID', ''))
                         if not image_instance_uid:
-                            continue
-                            
+                            image_instance_uid = f"IMAGE_{uuid.uuid4()}"
+                            print(f"Generated fallback SOPInstanceUID for {study_data['files'][i]}: {image_instance_uid}")
+                        
+                        # Extract image data with safe fallbacks
+                        rows = 0
+                        columns = 0
+                        bits_allocated = 16
+                        samples_per_pixel = 1
+                        photometric_interpretation = 'MONOCHROME2'
+                        
+                        if hasattr(dicom_data, 'Rows'):
+                            try:
+                                rows = int(dicom_data.Rows)
+                            except:
+                                rows = 0
+                        
+                        if hasattr(dicom_data, 'Columns'):
+                            try:
+                                columns = int(dicom_data.Columns)
+                            except:
+                                columns = 0
+                        
+                        if hasattr(dicom_data, 'BitsAllocated'):
+                            try:
+                                bits_allocated = int(dicom_data.BitsAllocated)
+                            except:
+                                bits_allocated = 16
+                        
+                        if hasattr(dicom_data, 'SamplesPerPixel'):
+                            try:
+                                samples_per_pixel = int(dicom_data.SamplesPerPixel)
+                            except:
+                                samples_per_pixel = 1
+                        
+                        if hasattr(dicom_data, 'PhotometricInterpretation'):
+                            try:
+                                photometric_interpretation = str(dicom_data.PhotometricInterpretation)
+                            except:
+                                photometric_interpretation = 'MONOCHROME2'
+                        
                         image, created = DicomImage.objects.get_or_create(
                             series=series,
                             sop_instance_uid=image_instance_uid,
                             defaults={
                                 'image_number': int(dicom_data.get('InstanceNumber', 0)),
                                 'file_path': study_data['file_paths'][i],
-                                'rows': int(dicom_data.Rows) if hasattr(dicom_data, 'Rows') else 0,
-                                'columns': int(dicom_data.Columns) if hasattr(dicom_data, 'Columns') else 0,
-                                'bits_allocated': int(dicom_data.BitsAllocated) if hasattr(dicom_data, 'BitsAllocated') else 16,
-                                'samples_per_pixel': int(dicom_data.SamplesPerPixel) if hasattr(dicom_data, 'SamplesPerPixel') else 1,
-                                'photometric_interpretation': str(dicom_data.PhotometricInterpretation) if hasattr(dicom_data, 'PhotometricInterpretation') else 'MONOCHROME2',
+                                'rows': rows,
+                                'columns': columns,
+                                'bits_allocated': bits_allocated,
+                                'samples_per_pixel': samples_per_pixel,
+                                'photometric_interpretation': photometric_interpretation,
                                 'pixel_spacing': str(getattr(dicom_data, 'PixelSpacing', '')),
-                                'slice_thickness': float(dicom_data.SliceThickness) if hasattr(dicom_data, 'SliceThickness') else 0,
-                                'window_center': str(dicom_data.WindowCenter) if hasattr(dicom_data, 'WindowCenter') else '',
-                                'window_width': str(dicom_data.WindowWidth) if hasattr(dicom_data, 'WindowWidth') else '',
+                                'slice_thickness': float(getattr(dicom_data, 'SliceThickness', 0)),
+                                'window_center': str(getattr(dicom_data, 'WindowCenter', '')),
+                                'window_width': str(getattr(dicom_data, 'WindowWidth', '')),
                             }
                         )
                         
@@ -471,23 +698,36 @@ def upload_dicom_folder(request):
                             
                     except Exception as e:
                         print(f"Error processing image in study {study_uid}: {e}")
+                        errors.append(f"Error processing {study_data['files'][i]}: {str(e)}")
                         continue
                         
             except Exception as e:
                 print(f"Error processing study {study_uid}: {e}")
+                errors.append(f"Error processing study {study_uid}: {str(e)}")
                 continue
         
+        # Prepare response
         if not uploaded_files:
-            return JsonResponse({'error': 'No valid DICOM files were uploaded'}, status=400)
+            error_message = 'No valid DICOM files were uploaded'
+            if errors:
+                error_message += f'. Errors: {"; ".join(errors[:5])}'  # Limit error messages
+            return JsonResponse({'error': error_message}, status=400)
         
-        return JsonResponse({
+        response_data = {
             'message': f'Uploaded {len(uploaded_files)} files from {len(studies)} study(ies)',
             'uploaded_files': uploaded_files,
             'study_id': study.id if study else None
-        })
+        }
+        
+        if errors:
+            response_data['warnings'] = errors[:5]  # Include warnings for partial success
+        
+        return JsonResponse(response_data)
         
     except Exception as e:
         print(f"Unexpected error in upload_dicom_folder: {e}")
+        import traceback
+        traceback.print_exc()
         return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
 
 

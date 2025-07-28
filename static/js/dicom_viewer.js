@@ -272,8 +272,46 @@ class DicomViewer {
             return;
         }
         
+        // Validate files before upload
+        const validFiles = Array.from(files).filter(file => {
+            const fileName = file.name.toLowerCase();
+            const fileSize = file.size;
+            
+            // Check file size (100MB limit)
+            if (fileSize > 100 * 1024 * 1024) {
+                alert(`File ${file.name} is too large (max 100MB)`);
+                return false;
+            }
+            
+            // Accept various DICOM formats
+            const isDicomCandidate = (
+                fileName.endsWith('.dcm') ||
+                fileName.endsWith('.dicom') ||
+                fileName.endsWith('.dcm.gz') ||
+                fileName.endsWith('.dicom.gz') ||
+                fileName.endsWith('.dcm.bz2') ||
+                fileName.endsWith('.dicom.bz2') ||
+                fileName.endsWith('.img') ||
+                fileName.endsWith('.ima') ||
+                fileName.endsWith('.raw') ||
+                !fileName.includes('.') ||  // Files without extension
+                fileSize > 1024  // Files larger than 1KB
+            );
+            
+            if (!isDicomCandidate) {
+                console.warn(`File ${file.name} may not be a DICOM file`);
+            }
+            
+            return true; // Accept all files and let server handle validation
+        });
+        
+        if (validFiles.length === 0) {
+            alert('No valid files selected for upload');
+            return;
+        }
+        
         const formData = new FormData();
-        Array.from(files).forEach(file => {
+        validFiles.forEach(file => {
             formData.append('files', file);
         });
         
@@ -283,7 +321,7 @@ class DicomViewer {
         
         progressDiv.style.display = 'block';
         progressFill.style.width = '0%';
-        progressText.textContent = 'Uploading...';
+        progressText.textContent = `Uploading ${validFiles.length} files...`;
         
         try {
             const response = await fetch('/api/upload/', {
@@ -300,6 +338,14 @@ class DicomViewer {
                 const result = await response.json();
                 progressText.textContent = 'Upload complete!';
                 
+                // Show warnings if any
+                if (result.warnings && result.warnings.length > 0) {
+                    console.warn('Upload warnings:', result.warnings);
+                    setTimeout(() => {
+                        alert(`Upload completed with warnings:\n${result.warnings.join('\n')}`);
+                    }, 500);
+                }
+                
                 setTimeout(() => {
                     document.getElementById('upload-modal').style.display = 'none';
                     progressDiv.style.display = 'none';
@@ -312,22 +358,46 @@ class DicomViewer {
                     
                     // Show success message
                     if (result.uploaded_files && result.uploaded_files.length > 0) {
-                        alert(`Successfully uploaded ${result.uploaded_files.length} DICOM file(s)`);
+                        const message = `Successfully uploaded ${result.uploaded_files.length} DICOM file(s)`;
+                        if (result.warnings && result.warnings.length > 0) {
+                            alert(message + '\n\nSome files had issues but were processed successfully.');
+                        } else {
+                            alert(message);
+                        }
                     }
                 }, 1000);
             } else {
-                // Clone the response to avoid "body stream already read" error
-                const responseClone = response.clone();
+                // Enhanced error handling
+                let errorMessage = 'Upload failed';
                 try {
                     const errorData = await response.json();
-                    throw new Error(errorData.error || 'Upload failed');
+                    errorMessage = errorData.error || 'Upload failed';
+                    
+                    // Handle specific error types
+                    if (errorData.error_type === 'validation_error') {
+                        errorMessage = 'File validation failed: ' + errorMessage;
+                    } else if (errorData.error_type === 'csrf_error') {
+                        errorMessage = 'Security token error. Please refresh the page and try again.';
+                    }
                 } catch (parseError) {
                     console.error('Failed to parse error response:', parseError);
-                    // Use the cloned response to read the text
-                    const responseText = await responseClone.text();
-                    console.error('Response text:', responseText);
-                    throw new Error(`Server error (${response.status}). Please try again.`);
+                    // Try to get response text
+                    try {
+                        const responseText = await response.text();
+                        console.error('Response text:', responseText);
+                        
+                        // Check if it's HTML error page
+                        if (responseText.includes('<!DOCTYPE') || responseText.includes('<html')) {
+                            errorMessage = `Server returned HTML error (${response.status}). Please try again.`;
+                        } else {
+                            errorMessage = `Server error (${response.status}): ${responseText.substring(0, 200)}`;
+                        }
+                    } catch (textError) {
+                        errorMessage = `Server error (${response.status}). Please try again.`;
+                    }
                 }
+                
+                throw new Error(errorMessage);
             }
         } catch (error) {
             progressText.textContent = 'Upload failed: ' + error.message;
@@ -347,14 +417,37 @@ class DicomViewer {
             return;
         }
         
-        // Filter for DICOM files
-        const dicomFiles = Array.from(files).filter(file => 
-            file.name.toLowerCase().endsWith('.dcm') || 
-            file.name.toLowerCase().endsWith('.dicom')
-        );
+        // Enhanced DICOM file filtering
+        const dicomFiles = Array.from(files).filter(file => {
+            const fileName = file.name.toLowerCase();
+            const fileSize = file.size;
+            
+            // Check file size (100MB limit)
+            if (fileSize > 100 * 1024 * 1024) {
+                console.warn(`File ${file.name} is too large (max 100MB)`);
+                return false;
+            }
+            
+            // Accept various DICOM formats
+            const isDicomCandidate = (
+                fileName.endsWith('.dcm') ||
+                fileName.endsWith('.dicom') ||
+                fileName.endsWith('.dcm.gz') ||
+                fileName.endsWith('.dicom.gz') ||
+                fileName.endsWith('.dcm.bz2') ||
+                fileName.endsWith('.dicom.bz2') ||
+                fileName.endsWith('.img') ||
+                fileName.endsWith('.ima') ||
+                fileName.endsWith('.raw') ||
+                !fileName.includes('.') ||  // Files without extension
+                fileSize > 1024  // Files larger than 1KB
+            );
+            
+            return isDicomCandidate;
+        });
         
         if (dicomFiles.length === 0) {
-            alert('No DICOM files found in the selected folder');
+            alert('No DICOM files found in the selected folder. Please ensure the folder contains DICOM files (.dcm, .dicom, .img, .ima, etc.)');
             return;
         }
         
@@ -386,6 +479,14 @@ class DicomViewer {
                 const result = await response.json();
                 progressText.textContent = 'Upload complete!';
                 
+                // Show warnings if any
+                if (result.warnings && result.warnings.length > 0) {
+                    console.warn('Upload warnings:', result.warnings);
+                    setTimeout(() => {
+                        alert(`Upload completed with warnings:\n${result.warnings.join('\n')}`);
+                    }, 500);
+                }
+                
                 setTimeout(() => {
                     document.getElementById('upload-modal').style.display = 'none';
                     progressDiv.style.display = 'none';
@@ -398,22 +499,46 @@ class DicomViewer {
                     
                     // Show success message
                     if (result.uploaded_files && result.uploaded_files.length > 0) {
-                        alert(`Successfully uploaded ${result.uploaded_files.length} DICOM files from ${result.message.split(' ')[-2]} study(ies)`);
+                        const message = `Successfully uploaded ${result.uploaded_files.length} DICOM files from ${result.message.split(' ')[-2]} study(ies)`;
+                        if (result.warnings && result.warnings.length > 0) {
+                            alert(message + '\n\nSome files had issues but were processed successfully.');
+                        } else {
+                            alert(message);
+                        }
                     }
                 }, 1000);
             } else {
-                // Clone the response to avoid "body stream already read" error
-                const responseClone = response.clone();
+                // Enhanced error handling
+                let errorMessage = 'Upload failed';
                 try {
                     const errorData = await response.json();
-                    throw new Error(errorData.error || 'Upload failed');
+                    errorMessage = errorData.error || 'Upload failed';
+                    
+                    // Handle specific error types
+                    if (errorData.error_type === 'validation_error') {
+                        errorMessage = 'File validation failed: ' + errorMessage;
+                    } else if (errorData.error_type === 'csrf_error') {
+                        errorMessage = 'Security token error. Please refresh the page and try again.';
+                    }
                 } catch (parseError) {
                     console.error('Failed to parse error response:', parseError);
-                    // Use the cloned response to read the text
-                    const responseText = await responseClone.text();
-                    console.error('Response text:', responseText);
-                    throw new Error(`Server error (${response.status}). Please try again.`);
+                    // Try to get response text
+                    try {
+                        const responseText = await response.text();
+                        console.error('Response text:', responseText);
+                        
+                        // Check if it's HTML error page
+                        if (responseText.includes('<!DOCTYPE') || responseText.includes('<html')) {
+                            errorMessage = `Server returned HTML error (${response.status}). Please try again.`;
+                        } else {
+                            errorMessage = `Server error (${response.status}): ${responseText.substring(0, 200)}`;
+                        }
+                    } catch (textError) {
+                        errorMessage = `Server error (${response.status}). Please try again.`;
+                    }
                 }
+                
+                throw new Error(errorMessage);
             }
         } catch (error) {
             progressText.textContent = 'Upload failed: ' + error.message;
@@ -1516,6 +1641,11 @@ class DicomViewer {
         const token = this.getCookie('csrftoken');
         if (!token) {
             console.warn('CSRF token not found. Upload may fail.');
+            // Try to get token from meta tag as fallback
+            const metaToken = document.querySelector('meta[name="csrf-token"]');
+            if (metaToken) {
+                return metaToken.getAttribute('content');
+            }
             return '';
         }
         return token;
