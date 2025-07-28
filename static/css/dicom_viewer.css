@@ -673,3 +673,244 @@ body {
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
+/* Top Bar Controls */
+.top-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+#worklist-btn {
+    background: #444;
+    color: #fff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+#worklist-btn:hover {
+    background: #555;
+    transform: translateY(-1px);
+}
+
+#worklist-btn i {
+    font-size: 16px;
+}
+
+/* 3D Modal Styles */
+.modal-content.large {
+    width: 90%;
+    max-width: 1200px;
+    max-height: 90vh;
+}
+
+.3d-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.3d-controls .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.3d-controls label {
+    font-weight: 600;
+    color: #e0e0e0;
+}
+
+.3d-controls .slider {
+    width: 100%;
+}
+
+.3d-description {
+    grid-column: 1 / -1;
+    background: #333;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #0066cc;
+}
+
+.3d-description p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.3d-progress {
+    text-align: center;
+    margin: 20px 0;
+}
+
+.3d-progress-text {
+    margin-top: 10px;
+    font-weight: 600;
+    color: #0099ff;
+}
+
+.3d-results {
+    margin-top: 20px;
+}
+
+.3d-viewports {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.viewport-container {
+    text-align: center;
+    background: #333;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.viewport-container h4 {
+    margin: 0 0 10px 0;
+    color: #0099ff;
+    font-size: 16px;
+}
+
+.viewport-container canvas {
+    border: 2px solid #555;
+    border-radius: 4px;
+    background: #000;
+    max-width: 100%;
+    height: auto;
+}
+
+.3d-controls-panel {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+/* Volume Calculation Styles */
+.volume-tool-active {
+    cursor: crosshair !important;
+}
+
+.volume-contour {
+    stroke: #00ff00;
+    stroke-width: 2;
+    fill: none;
+    stroke-dasharray: 5,5;
+}
+
+.volume-point {
+    fill: #00ff00;
+    stroke: #ffffff;
+    stroke-width: 1;
+}
+
+/* Enhanced Modal Styles */
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #444;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .3d-viewports {
+        grid-template-columns: 1fr;
+    }
+    
+    .3d-controls {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .top-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .modal-content.large {
+        width: 95%;
+        margin: 20px auto;
+    }
+    
+    .right-panel {
+        width: 250px;
+    }
+    
+    .toolbar {
+        width: 60px;
+    }
+    
+    .tool-btn {
+        width: 50px;
+        height: 50px;
+    }
+    
+    .tool-btn span {
+        font-size: 8px;
+    }
+}
+
+/* Animation for 3D modal */
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-content.large {
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+/* Volume measurement highlight */
+.volume-highlight {
+    background: rgba(0, 255, 0, 0.2);
+    border: 2px solid #00ff00;
+    border-radius: 4px;
+    position: absolute;
+    pointer-events: none;
+}
+
+/* 3D reconstruction status */
+.3d-status {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 10px;
+}
+
+.3d-status.processing {
+    background: #ffaa00;
+    color: #000;
+}
+
+.3d-status.complete {
+    background: #00aa00;
+    color: #fff;
+}
+
+.3d-status.error {
+    background: #aa0000;
+    color: #fff;
+}
