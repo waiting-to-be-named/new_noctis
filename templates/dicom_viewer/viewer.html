@@ -65,6 +65,10 @@
                         <i class="fas fa-upload"></i>
                         Load DICOM Files
                     </button>
+                    <button id="worklist-btn" class="primary-btn">
+                        <i class="fas fa-list"></i>
+                        Worklist
+                    </button>
                     <select id="backend-studies" class="form-select">
                         <option value="">Select DICOM from System</option>
                     </select>
@@ -100,121 +104,333 @@
 
         <!-- Right Panel -->
         <div class="right-panel">
-            <div class="panel-content">
-                <!-- Window/Level Section -->
-                <div class="panel-section">
-                    <h3 class="section-title">Window/Level</h3>
-                    
-                    <div class="control-group">
-                        <div class="control-header">
-                            <label>Window Width</label>
-                            <span id="ww-value">400</span>
-                        </div>
-                        <input type="range" id="ww-slider" min="1" max="4000" value="400" class="slider">
-                    </div>
-                    
-                    <div class="control-group">
-                        <div class="control-header">
-                            <label>Window Level</label>
-                            <span id="wl-value">40</span>
-                        </div>
-                        <input type="range" id="wl-slider" min="-1000" max="1000" value="40" class="slider">
-                    </div>
-                    
-                    <div class="preset-buttons">
-                        <button class="preset-btn" data-preset="lung">Lung</button>
-                        <button class="preset-btn" data-preset="bone">Bone</button>
-                        <button class="preset-btn" data-preset="soft">Soft</button>
-                        <button class="preset-btn" data-preset="brain">Brain</button>
-                    </div>
+            <!-- Controls -->
+            <div class="controls-panel">
+                <h3>Controls</h3>
+                
+                <!-- Window/Level Controls -->
+                <div class="control-group">
+                    <label>Window Width</label>
+                    <input type="range" id="ww-slider" min="1" max="4000" value="400" class="slider">
+                    <span id="ww-value">400</span>
                 </div>
-
-                <!-- Navigation Section -->
-                <div class="panel-section">
-                    <h3 class="section-title">Image Navigation</h3>
-                    
-                    <div class="control-group">
-                        <div class="control-header">
-                            <label>Slice</label>
-                            <span id="slice-value">1</span>
-                        </div>
-                        <input type="range" id="slice-slider" min="0" max="0" value="0" class="slider">
-                    </div>
+                
+                <div class="control-group">
+                    <label>Window Level</label>
+                    <input type="range" id="wl-slider" min="-1000" max="1000" value="40" class="slider">
+                    <span id="wl-value">40</span>
                 </div>
-
-                <!-- Transform Section -->
-                <div class="panel-section">
-                    <h3 class="section-title">Transform</h3>
-                    
-                    <div class="control-group">
-                        <div class="control-header">
-                            <label>Zoom</label>
-                            <span id="zoom-value">100%</span>
-                        </div>
-                        <input type="range" id="zoom-slider" min="25" max="500" value="100" class="slider">
-                    </div>
+                
+                <div class="control-group">
+                    <label>Slice</label>
+                    <input type="range" id="slice-slider" min="0" max="0" value="0" class="slider">
+                    <span id="slice-value">1/1</span>
                 </div>
-
-                <!-- Image Info Section -->
-                <div class="panel-section">
-                    <h3 class="section-title">Image Info</h3>
-                    <div class="info-list">
-                        <div class="info-item">
-                            <label>Dimensions:</label>
-                            <span id="info-dimensions">-</span>
-                        </div>
-                        <div class="info-item">
-                            <label>Pixel Spacing:</label>
-                            <span id="info-pixel-spacing">-</span>
-                        </div>
-                        <div class="info-item">
-                            <label>Series:</label>
-                            <span id="info-series">-</span>
-                        </div>
-                        <div class="info-item">
-                            <label>Institution:</label>
-                            <span id="info-institution">-</span>
-                        </div>
-                    </div>
+                
+                <div class="control-group">
+                    <label>Zoom</label>
+                    <input type="range" id="zoom-slider" min="10" max="500" value="100" class="slider">
+                    <span id="zoom-value">100%</span>
                 </div>
-
-                <!-- Measurements Section -->
-                <div class="panel-section">
-                    <h3 class="section-title">Measurements</h3>
-                    <button id="clear-measurements" class="secondary-btn">Clear All</button>
-                    <div id="measurements-list" class="measurements-list"></div>
+                
+                <!-- Presets -->
+                <div class="presets">
+                    <h4>Window Presets</h4>
+                    <button class="preset-btn" data-preset="lung">Lung</button>
+                    <button class="preset-btn" data-preset="bone">Bone</button>
+                    <button class="preset-btn" data-preset="soft">Soft Tissue</button>
+                    <button class="preset-btn" data-preset="brain">Brain</button>
                 </div>
-
+            </div>
+            
+            <!-- Measurement Panel -->
+            <div class="measurement-panel">
+                <h3>Measurements</h3>
+                <div class="measurement-controls">
+                    <button id="clear-measurements" class="btn btn-secondary">Clear All</button>
+                </div>
+                <div id="measurements-list" class="measurements-list"></div>
+            </div>
+            
+            <!-- Annotations Panel -->
+            <div class="annotations-panel">
+                <h3>Annotations</h3>
+                <div id="annotations-list" class="annotations-list"></div>
             </div>
         </div>
     </div>
 
-    <!-- File Upload Modal -->
-    <div id="upload-modal" class="modal" style="display: none;">
-        <div class="modal-content">
+    <!-- Worklist Modal -->
+    <div id="worklist-modal" class="modal">
+        <div class="modal-content worklist-content">
             <div class="modal-header">
-                <h3>Upload DICOM Files</h3>
-                <button class="modal-close">&times;</button>
+                <h3>Patient Worklist</h3>
+                <span class="close">&times;</span>
             </div>
             <div class="modal-body">
-                <div class="upload-area" id="upload-area">
-                    <i class="fas fa-cloud-upload-alt"></i>
-                    <p>Drag and drop DICOM files here or click to select</p>
-                    <input type="file" id="file-input" multiple accept=".dcm,.dicom">
+                <div class="worklist-filters">
+                    <input type="text" id="patient-search" placeholder="Search patients..." class="form-input">
+                    <select id="facility-filter" class="form-select">
+                        <option value="">All Facilities</option>
+                    </select>
+                    <select id="modality-filter" class="form-select">
+                        <option value="">All Modalities</option>
+                        <option value="CT">CT</option>
+                        <option value="MR">MR</option>
+                        <option value="XR">XR</option>
+                        <option value="US">US</option>
+                    </select>
                 </div>
-                <div class="upload-progress" id="upload-progress" style="display: none;">
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progress-fill"></div>
-                    </div>
-                    <p id="progress-text">Uploading...</p>
+                <div class="worklist-table">
+                    <table id="patients-table">
+                        <thead>
+                            <tr>
+                                <th>Patient Name</th>
+                                <th>Patient ID</th>
+                                <th>Study Date</th>
+                                <th>Modality</th>
+                                <th>Facility</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="patients-tbody">
+                            <!-- Patient rows will be populated here -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Hidden file input for DICOM upload -->
-    <input type="file" id="hidden-file-input" multiple accept=".dcm,.dicom" style="display: none;">
+    <!-- Report Modal -->
+    <div id="report-modal" class="modal">
+        <div class="modal-content report-content">
+            <div class="modal-header">
+                <h3>Radiology Report</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="report-form">
+                    <div class="form-group">
+                        <label>Clinical Information</label>
+                        <textarea id="clinical-info" class="form-textarea" placeholder="Enter clinical information..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Findings</label>
+                        <textarea id="findings" class="form-textarea" placeholder="Enter findings..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Impression</label>
+                        <textarea id="impression" class="form-textarea" placeholder="Enter impression..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Recommendation</label>
+                        <textarea id="recommendation" class="form-textarea" placeholder="Enter recommendation..."></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="save-report">Save Report</button>
+                <button class="btn btn-secondary" id="print-report">Print Report</button>
+                <button class="btn btn-secondary" id="cancel-report">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Panel -->
+    <div id="notification-panel" class="notification-panel">
+        <div class="notification-header">
+            <h4>Notifications</h4>
+            <button class="close-notifications">&times;</button>
+        </div>
+        <div id="notifications-list" class="notifications-list">
+            <!-- Notifications will be populated here -->
+        </div>
+    </div>
 
     <script src="{% static 'js/dicom_viewer.js' %}"></script>
+    <script>
+        // Worklist functionality
+        document.getElementById('worklist-btn').addEventListener('click', () => {
+            document.getElementById('worklist-modal').style.display = 'block';
+            loadWorklist();
+        });
+
+        // Close modals
+        document.querySelectorAll('.close').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.target.closest('.modal').style.display = 'none';
+            });
+        });
+
+        // Close modal when clicking outside
+        window.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                e.target.style.display = 'none';
+            }
+        });
+
+        async function loadWorklist() {
+            try {
+                const response = await fetch('/api/worklist/');
+                const data = await response.json();
+                
+                const tbody = document.getElementById('patients-tbody');
+                tbody.innerHTML = '';
+                
+                data.patients.forEach(patient => {
+                    const row = document.createElement('tr');
+                    row.className = patient.facility === '{{ user.facility }}' ? 'facility-patient' : '';
+                    row.innerHTML = `
+                        <td>${patient.patient_name}</td>
+                        <td>${patient.patient_id}</td>
+                        <td>${patient.study_date}</td>
+                        <td>${patient.modality}</td>
+                        <td>${patient.facility}</td>
+                        <td><span class="status-${patient.status}">${patient.status}</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" onclick="viewPatient(${patient.study_id})">View</button>
+                            ${patient.status === 'new' ? '<button class="btn btn-sm btn-success" onclick="createReport(${patient.study_id})">Report</button>' : ''}
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Error loading worklist:', error);
+            }
+        }
+
+        function viewPatient(studyId) {
+            document.getElementById('worklist-modal').style.display = 'none';
+            if (window.viewer) {
+                window.viewer.loadStudy(studyId);
+            }
+        }
+
+        function createReport(studyId) {
+            document.getElementById('worklist-modal').style.display = 'none';
+            document.getElementById('report-modal').style.display = 'block';
+            // Load patient data for report
+            loadPatientForReport(studyId);
+        }
+
+        async function loadPatientForReport(studyId) {
+            try {
+                const response = await fetch(`/api/studies/${studyId}/`);
+                const data = await response.json();
+                
+                // Pre-fill report with patient information
+                document.getElementById('clinical-info').value = `Patient: ${data.patient_name}\nPatient ID: ${data.patient_id}\nStudy Date: ${data.study_date}`;
+            } catch (error) {
+                console.error('Error loading patient data:', error);
+            }
+        }
+
+        // Report functionality
+        document.getElementById('save-report').addEventListener('click', async () => {
+            const reportData = {
+                clinical_info: document.getElementById('clinical-info').value,
+                findings: document.getElementById('findings').value,
+                impression: document.getElementById('impression').value,
+                recommendation: document.getElementById('recommendation').value
+            };
+            
+            try {
+                const response = await fetch('/api/reports/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+                    },
+                    body: JSON.stringify(reportData)
+                });
+                
+                if (response.ok) {
+                    alert('Report saved successfully!');
+                    document.getElementById('report-modal').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error saving report:', error);
+            }
+        });
+
+        document.getElementById('print-report').addEventListener('click', () => {
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <html>
+                    <head>
+                        <title>Radiology Report</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; margin: 20px; }
+                            .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+                            .section { margin: 15px 0; }
+                            .section h3 { margin-bottom: 5px; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="header">
+                            <h1>Radiology Report</h1>
+                            <p>Generated on ${new Date().toLocaleDateString()}</p>
+                        </div>
+                        <div class="section">
+                            <h3>Clinical Information</h3>
+                            <p>${document.getElementById('clinical-info').value}</p>
+                        </div>
+                        <div class="section">
+                            <h3>Findings</h3>
+                            <p>${document.getElementById('findings').value}</p>
+                        </div>
+                        <div class="section">
+                            <h3>Impression</h3>
+                            <p>${document.getElementById('impression').value}</p>
+                        </div>
+                        <div class="section">
+                            <h3>Recommendation</h3>
+                            <p>${document.getElementById('recommendation').value}</p>
+                        </div>
+                    </body>
+                </html>
+            `);
+            printWindow.document.close();
+            printWindow.print();
+        });
+
+        // Notification system
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification notification-${type}`;
+            notification.innerHTML = `
+                <span>${message}</span>
+                <button class="close-notification">&times;</button>
+            `;
+            
+            document.getElementById('notifications-list').appendChild(notification);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+            
+            // Close button
+            notification.querySelector('.close-notification').addEventListener('click', () => {
+                notification.remove();
+            });
+        }
+
+        // Check for new uploads periodically
+        setInterval(async () => {
+            try {
+                const response = await fetch('/api/notifications/');
+                const data = await response.json();
+                
+                if (data.new_uploads > 0) {
+                    showNotification(`${data.new_uploads} new upload(s) available`, 'success');
+                }
+            } catch (error) {
+                console.error('Error checking notifications:', error);
+            }
+        }, 30000); // Check every 30 seconds
+    </script>
 </body>
 </html>
