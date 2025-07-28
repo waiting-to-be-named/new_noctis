@@ -29,6 +29,14 @@
                     <i class="fas fa-ruler"></i>
                     <span>Measure</span>
                 </button>
+                <button class="tool-btn" data-tool="ellipse" title="Ellipse">
+                    <i class="fas fa-circle"></i>
+                    <span>Ellipse</span>
+                </button>
+                <button class="tool-btn" data-tool="hounsfield" title="Hounsfield Units">
+                    <i class="fas fa-thermometer-half"></i>
+                    <span>HU</span>
+                </button>
                 <button class="tool-btn" data-tool="annotate" title="Annotate">
                     <i class="fas fa-edit"></i>
                     <span>Annotate</span>
@@ -129,6 +137,23 @@
                     </div>
                 </div>
 
+                <!-- Measurement Section -->
+                <div class="panel-section">
+                    <h3 class="section-title">Measurements</h3>
+                    
+                    <div class="measurement-controls">
+                        <select id="measurement-unit" class="form-select">
+                            <option value="px">Pixels</option>
+                            <option value="mm">Millimeters</option>
+                            <option value="cm">Centimeters</option>
+                            <option value="hu">Hounsfield Units</option>
+                        </select>
+                        <button id="clear-measurements" class="secondary-btn">Clear All</button>
+                    </div>
+                    
+                    <div id="measurements-list" class="measurements-list"></div>
+                </div>
+
                 <!-- Navigation Section -->
                 <div class="panel-section">
                     <h3 class="section-title">Image Navigation</h3>
@@ -155,6 +180,59 @@
                     </div>
                 </div>
 
+                <!-- AI Analysis Section -->
+                <div class="panel-section" id="ai-section" style="display: none;">
+                    <h3 class="section-title">AI Analysis</h3>
+                    
+                    <div class="ai-controls">
+                        <select id="ai-analysis-type" class="form-select">
+                            <option value="general">General Analysis</option>
+                            <option value="tumor_detection">Tumor Detection</option>
+                            <option value="fracture_detection">Fracture Detection</option>
+                            <option value="pneumonia_detection">Pneumonia Detection</option>
+                        </select>
+                        <button id="run-ai-analysis" class="primary-btn">Run Analysis</button>
+                    </div>
+                    
+                    <div id="ai-results" class="ai-results" style="display: none;">
+                        <div class="ai-confidence">
+                            <label>Confidence:</label>
+                            <span id="ai-confidence-score">-</span>
+                        </div>
+                        <div class="ai-findings">
+                            <label>Findings:</label>
+                            <div id="ai-findings-text">-</div>
+                        </div>
+                        <button id="copy-ai-results" class="secondary-btn">Copy Results</button>
+                    </div>
+                </div>
+
+                <!-- 3D Reconstruction Section -->
+                <div class="panel-section" id="3d-section" style="display: none;">
+                    <h3 class="section-title">3D Reconstruction</h3>
+                    
+                    <div class="3d-controls">
+                        <select id="3d-reconstruction-type" class="form-select">
+                            <option value="mpr">Multi-Planar Reconstruction</option>
+                            <option value="bone">3D Bone Reconstruction</option>
+                            <option value="angio">Angiography Reconstruction</option>
+                            <option value="virtual_surgery">Virtual Surgery</option>
+                        </select>
+                        <button id="create-3d-reconstruction" class="primary-btn">Create 3D</button>
+                    </div>
+                    
+                    <div id="3d-results" class="3d-results" style="display: none;">
+                        <div class="3d-status">
+                            <label>Status:</label>
+                            <span id="3d-status-text">-</span>
+                        </div>
+                        <div class="3d-preview">
+                            <label>Preview:</label>
+                            <div id="3d-preview-container">-</div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Image Info Section -->
                 <div class="panel-section">
                     <h3 class="section-title">Image Info</h3>
@@ -176,13 +254,6 @@
                             <span id="info-institution">-</span>
                         </div>
                     </div>
-                </div>
-
-                <!-- Measurements Section -->
-                <div class="panel-section">
-                    <h3 class="section-title">Measurements</h3>
-                    <button id="clear-measurements" class="secondary-btn">Clear All</button>
-                    <div id="measurements-list" class="measurements-list"></div>
                 </div>
 
             </div>
@@ -207,6 +278,27 @@
                         <div class="progress-fill" id="progress-fill"></div>
                     </div>
                     <p id="progress-text">Uploading...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Analysis Chat Modal -->
+    <div id="ai-chat-modal" class="modal" style="display: none;">
+        <div class="modal-content large-modal">
+            <div class="modal-header">
+                <h3>AI Analysis Chat</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="ai-chat-container">
+                    <div id="ai-chat-messages" class="ai-chat-messages">
+                        <!-- AI messages will appear here -->
+                    </div>
+                    <div class="ai-chat-input">
+                        <textarea id="ai-chat-input" placeholder="Ask AI about the image..."></textarea>
+                        <button id="send-ai-message" class="primary-btn">Send</button>
+                    </div>
                 </div>
             </div>
         </div>
