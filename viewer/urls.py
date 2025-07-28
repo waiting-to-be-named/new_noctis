@@ -4,21 +4,32 @@ from . import views
 app_name = 'viewer'
 
 urlpatterns = [
-    # Main viewer page
-    path('', views.DicomViewerView.as_view(), name='viewer'),
+    # Landing page
+    path('', views.IndexView.as_view(), name='index'),
     
-    # File upload
-    path('api/upload/', views.upload_dicom_files, name='upload_dicom'),
+    # Main viewer
+    path('viewer/', views.DicomViewerView.as_view(), name='viewer'),
     
-    # Study and image data
-    path('api/studies/', views.get_studies, name='get_studies'),
-    path('api/studies/<int:study_id>/images/', views.get_study_images, name='get_study_images'),
-    path('api/images/<int:image_id>/data/', views.get_image_data, name='get_image_data'),
+    # Worklist
+    path('worklist/', views.WorklistView.as_view(), name='worklist'),
     
-    # Measurements and annotations
-    path('api/measurements/save/', views.save_measurement, name='save_measurement'),
-    path('api/annotations/save/', views.save_annotation, name='save_annotation'),
-    path('api/images/<int:image_id>/measurements/', views.get_measurements, name='get_measurements'),
-    path('api/images/<int:image_id>/annotations/', views.get_annotations, name='get_annotations'),
-    path('api/images/<int:image_id>/clear-measurements/', views.clear_measurements, name='clear_measurements'),
+    # API endpoints
+    path('api/studies/', views.study_list, name='api_study_list'),
+    path('api/studies/<int:study_id>/images/', views.study_images, name='api_study_images'),
+    path('api/images/<int:image_id>/pixel-data/', views.image_pixel_data, name='api_image_pixel_data'),
+    path('api/upload/', views.upload_dicom_files, name='api_upload'),
+    path('api/measurements/', views.save_measurement, name='api_save_measurement'),
+    path('api/annotations/', views.save_annotation, name='api_save_annotation'),
+    
+    # Worklist API
+    path('api/worklist/studies', views.worklist_studies, name='api_worklist_studies'),
+    path('api/worklist/clinical-info', views.save_clinical_info, name='api_save_clinical_info'),
+    path('api/worklist/report', views.manage_report, name='api_manage_report'),
+    path('api/worklist/report/<int:study_id>', views.manage_report, name='api_get_report'),
+    path('api/worklist/report/<int:study_id>/print', views.print_report, name='print_report'),
+    
+    # Notifications API
+    path('api/worklist/notifications', views.get_notifications, name='api_notifications'),
+    path('api/worklist/notifications/unread', views.get_unread_notifications, name='api_unread_notifications'),
+    path('api/worklist/notifications/<int:notification_id>/read', views.mark_notification_read, name='api_mark_notification_read'),
 ]
