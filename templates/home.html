@@ -26,8 +26,28 @@
         .container {
             text-align: center;
             padding: 40px;
-            max-width: 800px;
+            max-width: 1000px;
             width: 100%;
+        }
+        
+        .user-info {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        .user-info a {
+            color: #00ff00;
+            text-decoration: none;
+            margin-left: 10px;
+        }
+        
+        .user-info a:hover {
+            text-decoration: underline;
         }
         
         .logo {
@@ -115,6 +135,54 @@
             line-height: 1.5;
         }
         
+        .admin-section {
+            margin-top: 40px;
+            padding-top: 40px;
+            border-top: 1px solid #333;
+        }
+        
+        .admin-section h2 {
+            color: #ff9900;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        
+        .admin-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .admin-card {
+            background: rgba(255, 153, 0, 0.1);
+            border: 2px solid #ff9900;
+            border-radius: 12px;
+            padding: 30px 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .admin-card:hover {
+            background: rgba(255, 153, 0, 0.2);
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(255, 153, 0, 0.3);
+        }
+        
+        .admin-card .action-icon {
+            color: #ff9900;
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        
+        .admin-card .action-title {
+            font-size: 18px;
+            color: #ff9900;
+        }
+        
+        .admin-card .action-desc {
+            font-size: 14px;
+        }
+        
         .launch-btn {
             display: inline-block;
             background: linear-gradient(45deg, #00ff00, #00cc00);
@@ -160,6 +228,15 @@
     </style>
 </head>
 <body>
+    <div class="user-info">
+        {% if user.is_authenticated %}
+            Welcome, {{ user.get_full_name|default:user.username }}
+            <a href="{% url 'logout' %}">Logout</a>
+        {% else %}
+            <a href="{% url 'login' %}">Login</a>
+        {% endif %}
+    </div>
+    
     <div class="container">
         <div class="logo">
             <i class="fas fa-x-ray"></i>
@@ -185,9 +262,40 @@
             </div>
         </div>
         
-        <a href="/" class="launch-btn" onclick="launchViewer(); return false;">
+        <a href="/viewer/" class="launch-btn">
             <i class="fas fa-rocket"></i> Launch DICOM Viewer
         </a>
+        
+        {% if user.is_superuser %}
+        <div class="admin-section">
+            <h2><i class="fas fa-cog"></i> Administration</h2>
+            <div class="admin-actions">
+                <div class="admin-card" onclick="window.location.href='{% url "viewer:facility_list" %}'">
+                    <div class="action-icon">
+                        <i class="fas fa-hospital"></i>
+                    </div>
+                    <h3 class="action-title">Manage Facilities</h3>
+                    <p class="action-desc">Add and manage healthcare facilities</p>
+                </div>
+                
+                <div class="admin-card" onclick="window.location.href='{% url "viewer:radiologist_list" %}'">
+                    <div class="action-icon">
+                        <i class="fas fa-user-md"></i>
+                    </div>
+                    <h3 class="action-title">Manage Radiologists</h3>
+                    <p class="action-desc">Add and manage radiologist accounts</p>
+                </div>
+                
+                <div class="admin-card" onclick="window.location.href='/admin/'">
+                    <div class="action-icon">
+                        <i class="fas fa-database"></i>
+                    </div>
+                    <h3 class="action-title">Django Admin</h3>
+                    <p class="action-desc">Access full system administration</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
         
         <div class="features">
             <div class="feature">
@@ -210,23 +318,31 @@
                 <i class="fas fa-edit"></i>
                 <p>Annotations</p>
             </div>
+            <div class="feature">
+                <i class="fas fa-calculator"></i>
+                <p>Volume Calculations</p>
+            </div>
         </div>
     </div>
     
     <script>
         function launchViewer() {
-            // Launch viewer in new window for better experience
-            window.open('/', 'DICOM_Viewer', 'width=' + screen.width + ',height=' + screen.height + ',fullscreen=yes');
+            // Launch viewer in same window
+            window.location.href = '/viewer/';
         }
         
         // Add hover effects to cards
-        document.querySelectorAll('.action-card').forEach(card => {
+        document.querySelectorAll('.action-card, .admin-card').forEach(card => {
             card.addEventListener('mouseenter', function() {
                 this.style.background = 'rgba(255, 255, 255, 0.1)';
             });
             
             card.addEventListener('mouseleave', function() {
-                this.style.background = 'rgba(255, 255, 255, 0.05)';
+                if (this.classList.contains('admin-card')) {
+                    this.style.background = 'rgba(255, 153, 0, 0.1)';
+                } else {
+                    this.style.background = 'rgba(255, 255, 255, 0.05)';
+                }
             });
         });
     </script>
