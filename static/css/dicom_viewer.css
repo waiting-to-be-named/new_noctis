@@ -295,18 +295,49 @@ body {
     padding: 40px;
     text-align: center;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: border-color 0.3s;
+    background: #2a2a2a;
 }
 
 .upload-area:hover {
     border-color: #0099ff;
-    background: rgba(0, 153, 255, 0.1);
 }
 
 .upload-area i {
     font-size: 48px;
     color: #666;
-    margin-bottom: 10px;
+    margin-bottom: 20px;
+    display: block;
+}
+
+.upload-buttons {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.upload-btn {
+    padding: 10px 20px;
+    background: #0099ff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 0.3s;
+}
+
+.upload-btn:hover {
+    background: #0077cc;
+}
+
+.upload-btn i {
+    font-size: 16px;
+    margin: 0;
 }
 
 /* Progress Bar */

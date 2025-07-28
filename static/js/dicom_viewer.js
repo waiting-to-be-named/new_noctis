@@ -165,19 +165,28 @@ class DicomViewer {
         const closeBtn = modal.querySelector('.modal-close');
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('file-input');
+        const hiddenFileInput = document.getElementById('hidden-file-input');
         
+        // Close modal
         closeBtn.addEventListener('click', () => {
             modal.style.display = 'none';
         });
         
-        uploadArea.addEventListener('click', () => {
-            fileInput.click();
+        // Close modal when clicking outside
+        window.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
         });
         
+        // File input change
         fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                this.uploadFiles(e.target.files);
-            }
+            this.uploadFiles(e.target.files);
+        });
+        
+        // Hidden file input for directory upload
+        hiddenFileInput.addEventListener('change', (e) => {
+            this.uploadFolder(e.target.files);
         });
         
         // Drag and drop
@@ -193,9 +202,55 @@ class DicomViewer {
         uploadArea.addEventListener('drop', (e) => {
             e.preventDefault();
             uploadArea.classList.remove('drag-over');
-            if (e.dataTransfer.files.length > 0) {
-                this.uploadFiles(e.dataTransfer.files);
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                // Check if this looks like a folder upload (multiple files with similar paths)
+                const filePaths = Array.from(files).map(f => f.webkitRelativePath || f.name);
+                const hasSubdirectories = filePaths.some(path => path.includes('/'));
+                
+                if (hasSubdirectories || files.length > 5) {
+                    // Treat as folder upload
+                    this.uploadFolder(files);
+                } else {
+                    // Treat as individual file upload
+                    this.uploadFiles(files);
+                }
             }
+        });
+        
+        // Click to select files
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        // Add directory upload button
+        const uploadAreaContent = uploadArea.innerHTML;
+        uploadArea.innerHTML = `
+            ${uploadAreaContent}
+            <div class="upload-buttons">
+                <button type="button" class="upload-btn" id="select-files-btn">
+                    <i class="fas fa-file"></i>
+                    Select Files
+                </button>
+                <button type="button" class="upload-btn" id="select-folder-btn">
+                    <i class="fas fa-folder"></i>
+                    Select Folder
+                </button>
+            </div>
+        `;
+        
+        // Add event listeners for buttons
+        document.getElementById('select-files-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            fileInput.click();
+        });
+        
+        document.getElementById('select-folder-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            hiddenFileInput.setAttribute('webkitdirectory', '');
+            hiddenFileInput.setAttribute('directory', '');
+            hiddenFileInput.click();
         });
     }
     
@@ -204,6 +259,11 @@ class DicomViewer {
     }
     
     async uploadFiles(files) {
+        if (!files || files.length === 0) {
+            alert('Please select DICOM files to upload');
+            return;
+        }
+        
         const formData = new FormData();
         Array.from(files).forEach(file => {
             formData.append('files', file);
@@ -215,6 +275,7 @@ class DicomViewer {
         
         progressDiv.style.display = 'block';
         progressFill.style.width = '0%';
+        progressText.textContent = 'Uploading...';
         
         try {
             const response = await fetch('/api/upload/', {
@@ -237,14 +298,104 @@ class DicomViewer {
                     
                     if (result.study_id) {
                         this.loadStudy(result.study_id);
+                        // Refresh the studies list
+                        this.loadBackendStudies();
+                    }
+                    
+                    // Show success message
+                    if (result.uploaded_files && result.uploaded_files.length > 0) {
+                        alert(`Successfully uploaded ${result.uploaded_files.length} DICOM file(s)`);
                     }
                 }, 1000);
             } else {
-                throw new Error('Upload failed');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Upload failed');
             }
         } catch (error) {
             progressText.textContent = 'Upload failed: ' + error.message;
             console.error('Upload error:', error);
+            
+            // Show error message to user
+            setTimeout(() => {
+                alert('Upload failed: ' + error.message);
+                progressDiv.style.display = 'none';
+            }, 2000);
+        }
+    }
+    
+    async uploadFolder(files) {
+        if (!files || files.length === 0) {
+            alert('Please select a folder containing DICOM files');
+            return;
+        }
+        
+        // Filter for DICOM files
+        const dicomFiles = Array.from(files).filter(file => 
+            file.name.toLowerCase().endsWith('.dcm') || 
+            file.name.toLowerCase().endsWith('.dicom')
+        );
+        
+        if (dicomFiles.length === 0) {
+            alert('No DICOM files found in the selected folder');
+            return;
+        }
+        
+        const formData = new FormData();
+        dicomFiles.forEach(file => {
+            formData.append('files', file);
+        });
+        
+        const progressDiv = document.getElementById('upload-progress');
+        const progressFill = document.getElementById('progress-fill');
+        const progressText = document.getElementById('progress-text');
+        
+        progressDiv.style.display = 'block';
+        progressFill.style.width = '0%';
+        progressText.textContent = `Uploading ${dicomFiles.length} DICOM files...`;
+        
+        try {
+            const response = await fetch('/api/upload-folder/', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': this.getCSRFToken()
+                }
+            });
+            
+            progressFill.style.width = '100%';
+            
+            if (response.ok) {
+                const result = await response.json();
+                progressText.textContent = 'Upload complete!';
+                
+                setTimeout(() => {
+                    document.getElementById('upload-modal').style.display = 'none';
+                    progressDiv.style.display = 'none';
+                    
+                    if (result.study_id) {
+                        this.loadStudy(result.study_id);
+                        // Refresh the studies list
+                        this.loadBackendStudies();
+                    }
+                    
+                    // Show success message
+                    if (result.uploaded_files && result.uploaded_files.length > 0) {
+                        alert(`Successfully uploaded ${result.uploaded_files.length} DICOM files from ${result.message.split(' ')[-2]} study(ies)`);
+                    }
+                }, 1000);
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Upload failed');
+            }
+        } catch (error) {
+            progressText.textContent = 'Upload failed: ' + error.message;
+            console.error('Upload error:', error);
+            
+            // Show error message to user
+            setTimeout(() => {
+                alert('Upload failed: ' + error.message);
+                progressDiv.style.display = 'none';
+            }, 2000);
         }
     }
     
@@ -277,7 +428,16 @@ class DicomViewer {
     async loadStudy(studyId) {
         try {
             const response = await fetch(`/api/studies/${studyId}/images/`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
             const data = await response.json();
+            
+            if (!data.images || data.images.length === 0) {
+                throw new Error('No images found in this study');
+            }
             
             this.currentStudy = data.study;
             this.currentSeries = data.series || null;
@@ -291,11 +451,15 @@ class DicomViewer {
             
         } catch (error) {
             console.error('Error loading study:', error);
+            alert('Error loading study: ' + error.message);
         }
     }
     
     async loadCurrentImage() {
-        if (!this.currentImages.length) return;
+        if (!this.currentImages.length) {
+            console.log('No images available');
+            return;
+        }
         
         const imageData = this.currentImages[this.currentImageIndex];
         
@@ -307,6 +471,11 @@ class DicomViewer {
             });
             
             const response = await fetch(`/api/images/${imageData.id}/data/?${params}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
             const data = await response.json();
             
             if (data.image_data) {
@@ -321,11 +490,18 @@ class DicomViewer {
                     this.loadMeasurements();
                     this.loadAnnotations();
                 };
+                img.onerror = () => {
+                    console.error('Failed to load image data');
+                    alert('Failed to load image. Please try again.');
+                };
                 img.src = data.image_data;
+            } else {
+                throw new Error(data.error || 'No image data received');
             }
             
         } catch (error) {
             console.error('Error loading image:', error);
+            alert('Error loading image: ' + error.message);
         }
     }
     

@@ -26,6 +26,18 @@ from .models import (
 from .serializers import DicomStudySerializer, DicomImageSerializer
 
 
+def ensure_media_directories():
+    """Ensure media directories exist"""
+    media_root = default_storage.location
+    dicom_dir = os.path.join(media_root, 'dicom_files')
+    temp_dir = os.path.join(media_root, 'temp')
+    
+    for directory in [media_root, dicom_dir, temp_dir]:
+        if not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+            print(f"Created directory: {directory}")
+
+
 class HomeView(TemplateView):
     """Home page with launch buttons"""
     template_name = 'home.html'
@@ -134,6 +146,9 @@ def create_radiologist(request):
 @require_http_methods(['POST'])
 def upload_dicom_files(request):
     """Handle DICOM file uploads with improved worklist integration"""
+    # Ensure media directories exist
+    ensure_media_directories()
+    
     if 'files' not in request.FILES:
         return JsonResponse({'error': 'No files provided'}, status=400)
     
@@ -143,15 +158,29 @@ def upload_dicom_files(request):
     
     for file in files:
         try:
-            # Save file temporarily
-            file_path = default_storage.save(f'temp/{file.name}', ContentFile(file.read()))
-            full_path = default_storage.path(file_path)
+            # Validate file is a DICOM file
+            if not file.name.lower().endswith(('.dcm', '.dicom')):
+                continue
+            
+            # Save file to proper DICOM directory
+            file_path = default_storage.save(f'dicom_files/{file.name}', ContentFile(file.read()))
             
             # Read DICOM data
-            dicom_data = pydicom.dcmread(full_path)
+            try:
+                dicom_data = pydicom.dcmread(default_storage.path(file_path))
+            except Exception as e:
+                print(f"Error reading DICOM file {file.name}: {e}")
+                # Clean up the saved file
+                default_storage.delete(file_path)
+                continue
             
             # Create/update study with facility association
             study_uid = str(dicom_data.get('StudyInstanceUID', ''))
+            if not study_uid:
+                print(f"No StudyInstanceUID found in {file.name}")
+                default_storage.delete(file_path)
+                continue
+                
             if not study:
                 study, created = DicomStudy.objects.get_or_create(
                     study_instance_uid=study_uid,
@@ -204,6 +233,10 @@ def upload_dicom_files(request):
             
             # Create or get series
             series_uid = str(dicom_data.get('SeriesInstanceUID', ''))
+            if not series_uid:
+                print(f"No SeriesInstanceUID found in {file.name}")
+                continue
+                
             series, created = DicomSeries.objects.get_or_create(
                 study=study,
                 series_instance_uid=series_uid,
@@ -217,6 +250,10 @@ def upload_dicom_files(request):
             
             # Create or get image
             sop_instance_uid = str(dicom_data.get('SOPInstanceUID', ''))
+            if not sop_instance_uid:
+                print(f"No SOPInstanceUID found in {file.name}")
+                continue
+                
             image, created = DicomImage.objects.get_or_create(
                 series=series,
                 sop_instance_uid=sop_instance_uid,
@@ -227,6 +264,12 @@ def upload_dicom_files(request):
                     'columns': getattr(dicom_data, 'Columns', 0),
                 }
             )
+            
+            # Update image metadata if it already exists
+            if not created:
+                image.file_path = file_path
+                image.rows = getattr(dicom_data, 'Rows', 0)
+                image.columns = getattr(dicom_data, 'Columns', 0)
             
             # Extract pixel spacing and other metadata
             pixel_spacing = getattr(dicom_data, 'PixelSpacing', None)
@@ -248,10 +291,198 @@ def upload_dicom_files(request):
             
         except Exception as e:
             print(f"Error processing file {file.name}: {e}")
+            # Clean up any saved file
+            if 'file_path' in locals():
+                try:
+                    default_storage.delete(file_path)
+                except:
+                    pass
             continue
+    
+    if not uploaded_files:
+        return JsonResponse({'error': 'No valid DICOM files were uploaded'}, status=400)
     
     return JsonResponse({
         'message': f'Uploaded {len(uploaded_files)} files successfully',
+        'uploaded_files': uploaded_files,
+        'study_id': study.id if study else None
+    })
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def upload_dicom_folder(request):
+    """Handle DICOM folder uploads"""
+    if 'files' not in request.FILES:
+        return JsonResponse({'error': 'No files provided'}, status=400)
+    
+    files = request.FILES.getlist('files')
+    uploaded_files = []
+    study = None
+    
+    # Group files by study
+    studies = {}
+    
+    for file in files:
+        try:
+            # Validate file is a DICOM file
+            if not file.name.lower().endswith(('.dcm', '.dicom')):
+                continue
+            
+            # Save file to proper DICOM directory
+            file_path = default_storage.save(f'dicom_files/{file.name}', ContentFile(file.read()))
+            
+            # Read DICOM data
+            try:
+                dicom_data = pydicom.dcmread(default_storage.path(file_path))
+            except Exception as e:
+                print(f"Error reading DICOM file {file.name}: {e}")
+                default_storage.delete(file_path)
+                continue
+            
+            # Get study UID
+            study_uid = str(dicom_data.get('StudyInstanceUID', ''))
+            if not study_uid:
+                print(f"No StudyInstanceUID found in {file.name}")
+                default_storage.delete(file_path)
+                continue
+            
+            # Group by study
+            if study_uid not in studies:
+                studies[study_uid] = {
+                    'files': [],
+                    'dicom_data': [],
+                    'file_paths': []
+                }
+            
+            studies[study_uid]['files'].append(file.name)
+            studies[study_uid]['dicom_data'].append(dicom_data)
+            studies[study_uid]['file_paths'].append(file_path)
+            
+        except Exception as e:
+            print(f"Error processing file {file.name}: {e}")
+            if 'file_path' in locals():
+                try:
+                    default_storage.delete(file_path)
+                except:
+                    pass
+            continue
+    
+    # Process each study
+    for study_uid, study_data in studies.items():
+        try:
+            # Create study from first file
+            first_dicom = study_data['dicom_data'][0]
+            
+            study, created = DicomStudy.objects.get_or_create(
+                study_instance_uid=study_uid,
+                defaults={
+                    'patient_name': str(first_dicom.PatientName) if hasattr(first_dicom, 'PatientName') else 'Unknown',
+                    'patient_id': str(first_dicom.PatientID) if hasattr(first_dicom, 'PatientID') else 'Unknown',
+                    'study_date': parse_dicom_date(getattr(first_dicom, 'StudyDate', None)),
+                    'study_time': parse_dicom_time(getattr(first_dicom, 'StudyTime', None)),
+                    'study_description': str(getattr(first_dicom, 'StudyDescription', '')),
+                    'modality': str(first_dicom.Modality) if hasattr(first_dicom, 'Modality') else 'OT',
+                    'institution_name': str(getattr(first_dicom, 'InstitutionName', '')),
+                    'uploaded_by': request.user if request.user.is_authenticated else None,
+                    'facility': request.user.facility_staff.facility if hasattr(request.user, 'facility_staff') else None,
+                    'accession_number': str(getattr(first_dicom, 'AccessionNumber', '')),
+                    'referring_physician': str(getattr(first_dicom, 'ReferringPhysicianName', '')),
+                }
+            )
+            
+            # Create worklist entry if study was created
+            if created:
+                try:
+                    WorklistEntry.objects.create(
+                        patient_name=study.patient_name,
+                        patient_id=study.patient_id,
+                        accession_number=study.accession_number or f"ACC{study.id:06d}",
+                        scheduled_station_ae_title="UPLOAD",
+                        scheduled_procedure_step_start_date=study.study_date or datetime.now().date(),
+                        scheduled_procedure_step_start_time=study.study_time or datetime.now().time(),
+                        modality=study.modality,
+                        scheduled_performing_physician=study.referring_physician or "Unknown",
+                        procedure_description=study.study_description,
+                        facility=study.facility or Facility.objects.first(),
+                        study=study,
+                        status='completed'
+                    )
+                except Exception as e:
+                    print(f"Error creating worklist entry: {e}")
+            
+            # Process all files in this study
+            for i, (dicom_data, file_path) in enumerate(zip(study_data['dicom_data'], study_data['file_paths'])):
+                try:
+                    # Create or get series
+                    series_uid = str(dicom_data.get('SeriesInstanceUID', ''))
+                    if not series_uid:
+                        continue
+                        
+                    series, created = DicomSeries.objects.get_or_create(
+                        study=study,
+                        series_instance_uid=series_uid,
+                        defaults={
+                            'series_number': int(dicom_data.get('SeriesNumber', 0)),
+                            'series_description': str(dicom_data.get('SeriesDescription', '')),
+                            'modality': str(dicom_data.get('Modality', '')),
+                            'body_part_examined': str(dicom_data.get('BodyPartExamined', '')),
+                        }
+                    )
+                    
+                    # Create or get image
+                    sop_instance_uid = str(dicom_data.get('SOPInstanceUID', ''))
+                    if not sop_instance_uid:
+                        continue
+                        
+                    image, created = DicomImage.objects.get_or_create(
+                        series=series,
+                        sop_instance_uid=sop_instance_uid,
+                        defaults={
+                            'instance_number': int(dicom_data.get('InstanceNumber', 0)),
+                            'file_path': file_path,
+                            'rows': getattr(dicom_data, 'Rows', 0),
+                            'columns': getattr(dicom_data, 'Columns', 0),
+                        }
+                    )
+                    
+                    # Update image metadata if it already exists
+                    if not created:
+                        image.file_path = file_path
+                        image.rows = getattr(dicom_data, 'Rows', 0)
+                        image.columns = getattr(dicom_data, 'Columns', 0)
+                    
+                    # Extract pixel spacing and other metadata
+                    pixel_spacing = getattr(dicom_data, 'PixelSpacing', None)
+                    if pixel_spacing and len(pixel_spacing) >= 2:
+                        image.pixel_spacing_x = float(pixel_spacing[0])
+                        image.pixel_spacing_y = float(pixel_spacing[1])
+                    
+                    image.slice_thickness = getattr(dicom_data, 'SliceThickness', None)
+                    image.window_width = getattr(dicom_data, 'WindowWidth', None)
+                    image.window_center = getattr(dicom_data, 'WindowCenter', None)
+                    image.save()
+                    
+                    uploaded_files.append({
+                        'filename': study_data['files'][i],
+                        'study_id': study.id,
+                        'series_id': series.id,
+                        'image_id': image.id
+                    })
+                    
+                except Exception as e:
+                    print(f"Error processing file {study_data['files'][i]}: {e}")
+                    continue
+            
+        except Exception as e:
+            print(f"Error processing study {study_uid}: {e}")
+            continue
+    
+    if not uploaded_files:
+        return JsonResponse({'error': 'No valid DICOM files were uploaded'}, status=400)
+    
+    return JsonResponse({
+        'message': f'Uploaded {len(uploaded_files)} files from {len(studies)} study(ies) successfully',
         'uploaded_files': uploaded_files,
         'study_id': study.id if study else None
     })

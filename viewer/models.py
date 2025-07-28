@@ -113,13 +113,25 @@ class DicomImage(models.Model):
     
     def load_dicom_data(self):
         """Load and return pydicom dataset"""
-        if self.file_path and os.path.exists(self.file_path.path):
-            try:
-                return pydicom.dcmread(self.file_path.path)
-            except Exception as e:
-                print(f"Error loading DICOM: {e}")
+        if not self.file_path:
+            return None
+            
+        try:
+            # Handle both FileField and string paths
+            if hasattr(self.file_path, 'path'):
+                file_path = self.file_path.path
+            else:
+                file_path = str(self.file_path)
+            
+            # Check if file exists
+            if not os.path.exists(file_path):
+                print(f"DICOM file not found: {file_path}")
                 return None
-        return None
+                
+            return pydicom.dcmread(file_path)
+        except Exception as e:
+            print(f"Error loading DICOM from {self.file_path}: {e}")
+            return None
     
     def get_pixel_array(self):
         """Get pixel array from DICOM file"""
@@ -133,43 +145,60 @@ class DicomImage(models.Model):
         if pixel_array is None:
             return None
         
-        # Use provided values or defaults from DICOM
-        ww = window_width if window_width is not None else (self.window_width or 400)
-        wl = window_level if window_level is not None else (self.window_center or 40)
-        
-        # Convert to float for calculations
-        image_data = pixel_array.astype(np.float32)
-        
-        # Apply window/level
-        min_val = wl - ww / 2
-        max_val = wl + ww / 2
-        
-        # Clip and normalize
-        image_data = np.clip(image_data, min_val, max_val)
-        image_data = (image_data - min_val) / (max_val - min_val) * 255
-        
-        if inverted:
-            image_data = 255 - image_data
-        
-        return image_data.astype(np.uint8)
+        try:
+            # Use provided values or defaults from DICOM
+            ww = window_width if window_width is not None else (self.window_width or 400)
+            wl = window_level if window_level is not None else (self.window_center or 40)
+            
+            # Convert to float for calculations
+            image_data = pixel_array.astype(np.float32)
+            
+            # Apply window/level
+            min_val = wl - ww / 2
+            max_val = wl + ww / 2
+            
+            # Clip and normalize
+            image_data = np.clip(image_data, min_val, max_val)
+            
+            # Avoid division by zero
+            if max_val - min_val > 0:
+                image_data = (image_data - min_val) / (max_val - min_val) * 255
+            else:
+                image_data = np.zeros_like(image_data)
+            
+            if inverted:
+                image_data = 255 - image_data
+            
+            return image_data.astype(np.uint8)
+        except Exception as e:
+            print(f"Error applying windowing: {e}")
+            return None
     
     def get_processed_image_base64(self, window_width=None, window_level=None, inverted=False):
         """Get processed image as base64 string"""
-        pixel_array = self.get_pixel_array()
-        if pixel_array is None:
+        try:
+            pixel_array = self.get_pixel_array()
+            if pixel_array is None:
+                print(f"Could not get pixel array for image {self.id}")
+                return None
+            
+            processed_array = self.apply_windowing(pixel_array, window_width, window_level, inverted)
+            if processed_array is None:
+                print(f"Could not apply windowing for image {self.id}")
+                return None
+            
+            # Convert to PIL Image
+            pil_image = Image.fromarray(processed_array, mode='L')
+            
+            # Convert to base64
+            buffer = io.BytesIO()
+            pil_image.save(buffer, format='PNG')
+            image_base64 = base64.b64encode(buffer.getvalue()).decode()
+            
+            return f"data:image/png;base64,{image_base64}"
+        except Exception as e:
+            print(f"Error processing image {self.id}: {e}")
             return None
-        
-        processed_array = self.apply_windowing(pixel_array, window_width, window_level, inverted)
-        
-        # Convert to PIL Image
-        pil_image = Image.fromarray(processed_array, mode='L')
-        
-        # Convert to base64
-        buffer = io.BytesIO()
-        pil_image.save(buffer, format='PNG')
-        image_base64 = base64.b64encode(buffer.getvalue()).decode()
-        
-        return f"data:image/png;base64,{image_base64}"
     
     def save_dicom_metadata(self):
         """Extract and save metadata from DICOM file"""
