@@ -316,9 +316,9 @@ class DicomViewer {
                     }
                 }, 1000);
             } else {
+                // Clone the response to avoid "body stream already read" error
+                const responseClone = response.clone();
                 try {
-                    // Clone the response to avoid "body stream already read" error
-                    const responseClone = response.clone();
                     const errorData = await response.json();
                     throw new Error(errorData.error || 'Upload failed');
                 } catch (parseError) {
@@ -402,9 +402,9 @@ class DicomViewer {
                     }
                 }, 1000);
             } else {
+                // Clone the response to avoid "body stream already read" error
+                const responseClone = response.clone();
                 try {
-                    // Clone the response to avoid "body stream already read" error
-                    const responseClone = response.clone();
                     const errorData = await response.json();
                     throw new Error(errorData.error || 'Upload failed');
                 } catch (parseError) {
