@@ -112,6 +112,26 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 DICOM_UPLOAD_PATH = 'dicom_files/'
 MAX_DICOM_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 
+# File upload settings
+FILE_UPLOAD_HANDLERS = [
+    'django.core.files.uploadhandler.MemoryFileUploadHandler',
+    'django.core.files.uploadhandler.TemporaryFileUploadHandler',
+]
+
+# Maximum file upload size (100MB)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024
+
+# Ensure media directories are created
+import os
+MEDIA_DIR = BASE_DIR / 'media'
+DICOM_DIR = MEDIA_DIR / 'dicom_files'
+TEMP_DIR = MEDIA_DIR / 'temp'
+
+# Create directories if they don't exist
+for directory in [MEDIA_DIR, DICOM_DIR, TEMP_DIR]:
+    directory.mkdir(parents=True, exist_ok=True)
+
 # REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
