@@ -508,6 +508,379 @@ body {
     }
 }
 
+/* Tool Groups and Dropdowns */
+.tool-group {
+    position: relative;
+}
+
+.tool-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background-color: #333;
+    border: 1px solid #555;
+    border-radius: 4px;
+    min-width: 150px;
+    z-index: 1000;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.dropdown-item {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    background: none;
+    border: none;
+    color: white;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.dropdown-item:hover {
+    background-color: #0078d4;
+}
+
+/* HU Statistics */
+.hu-statistics {
+    background-color: #444;
+    padding: 10px;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+.hu-statistics h4 {
+    font-size: 12px;
+    margin-bottom: 8px;
+    color: #ccc;
+}
+
+.hu-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #ccc;
+}
+
+.stat-item label {
+    font-weight: 500;
+}
+
+/* AI Chat Window */
+.ai-chat-window {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 350px;
+    height: 450px;
+    background-color: #333;
+    border: 1px solid #555;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    z-index: 1500;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.ai-chat-window.minimized {
+    height: 45px;
+}
+
+.ai-chat-window.minimized .chat-body {
+    display: none;
+}
+
+.chat-header {
+    background-color: #444;
+    color: white;
+    padding: 10px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #555;
+}
+
+.chat-header h3 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.chat-controls {
+    display: flex;
+    gap: 5px;
+}
+
+.minimize-btn,
+.close-btn {
+    background: none;
+    border: none;
+    color: #ccc;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 2px;
+    transition: background-color 0.2s;
+}
+
+.minimize-btn:hover,
+.close-btn:hover {
+    background-color: #555;
+    color: white;
+}
+
+.chat-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 15px;
+}
+
+.ai-message {
+    background-color: #444;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.message-content {
+    color: #ccc;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.message-content ul {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.message-content li {
+    margin: 4px 0;
+}
+
+.copy-btn-container {
+    margin-top: 10px;
+    text-align: right;
+}
+
+.copy-btn {
+    background-color: #0078d4;
+    color: white;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.copy-btn:hover {
+    background-color: #106ebe;
+}
+
+.chat-input-container {
+    display: flex;
+    padding: 10px;
+    border-top: 1px solid #555;
+    gap: 8px;
+}
+
+#ai-chat-input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background-color: #444;
+    color: white;
+    font-size: 12px;
+}
+
+#ai-chat-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#ai-send-btn {
+    background-color: #0078d4;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+#ai-send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#ai-send-btn:not(:disabled):hover {
+    background-color: #106ebe;
+}
+
+/* 3D Reconstruction Modal */
+.reconstruction-placeholder {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.placeholder-content {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.placeholder-icon {
+    font-size: 64px;
+    color: #666;
+    margin-bottom: 20px;
+}
+
+.feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-top: 30px;
+}
+
+.feature-item {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    text-align: left;
+}
+
+.feature-item h5 {
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+.feature-item h5 i {
+    margin-right: 8px;
+    color: #0078d4;
+}
+
+.feature-item p {
+    color: #666;
+    font-size: 12px;
+    margin: 0;
+}
+
+/* Enhanced Annotations */
+.annotation-enhanced {
+    position: absolute;
+    background-color: rgba(0,0,0,0.8);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: move;
+    border: 1px solid #555;
+    user-select: none;
+}
+
+.annotation-enhanced.dragging {
+    opacity: 0.7;
+    z-index: 1000;
+}
+
+.annotation-enhanced:hover {
+    border-color: #0078d4;
+}
+
+/* Form Enhancements */
+.form-row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.form-group {
+    flex: 1;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: #ccc;
+    font-size: 12px;
+}
+
+.form-select,
+.form-textarea {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background-color: #444;
+    color: white;
+    font-size: 12px;
+}
+
+.form-textarea {
+    resize: vertical;
+    font-family: inherit;
+}
+
+/* Enhanced Measurement List */
+.measurement-item {
+    padding: 6px 0;
+    border-bottom: 1px solid #555;
+    font-size: 11px;
+}
+
+.measurement-item:last-child {
+    border-bottom: none;
+}
+
+.measurement-item.ellipse {
+    background-color: rgba(46, 204, 113, 0.1);
+    padding: 8px;
+    border-radius: 4px;
+    margin: 4px 0;
+}
+
+/* Load DICOM Button Enhancement */
+.top-controls .primary-btn {
+    position: relative;
+}
+
+.top-controls .primary-btn::after {
+    content: "→ Worklist";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #333;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    margin-top: 5px;
+}
+
+.top-controls .primary-btn:hover::after {
+    opacity: 1;
+}
+
 /* Scrollbar Styling */
 ::-webkit-scrollbar {
     width: 8px;

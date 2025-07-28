@@ -27,9 +27,13 @@ class DicomViewer {
         this.currentMeasurement = null;
         // Ellipse (HU) drawing state
         this.currentEllipse = null;
+        this.pendingAnnotation = null;
 
         // Measurement unit (mm or cm)
         this.measurementUnit = 'mm';
+        
+        // UI state
+        this.aiChatMinimized = false;
         this.isDragging = false;
         this.dragStart = null;
         
@@ -113,9 +117,9 @@ class DicomViewer {
             });
         });
         
-        // Load DICOM button
+        // Load DICOM button - redirect to worklist
         document.getElementById('load-dicom-btn').addEventListener('click', () => {
-            this.showUploadModal();
+            window.location.href = '/worklist/';
         });
         
         // Clear measurements
@@ -129,8 +133,78 @@ class DicomViewer {
         this.canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
         this.canvas.addEventListener('wheel', (e) => this.onWheel(e));
         
+        // Tool dropdown events
+        this.setupToolDropdowns();
+        
+        // Enhanced annotation modal
+        this.setupAnnotationModal();
+        
         // Upload modal events
         this.setupUploadModal();
+    }
+    
+    setupToolDropdowns() {
+        // AI dropdown
+        const aiBtn = document.querySelector('[data-tool="ai"]');
+        const aiDropdown = document.getElementById('ai-dropdown');
+        
+        if (aiBtn && aiDropdown) {
+            aiBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                // Close other dropdowns
+                document.getElementById('3d-dropdown').style.display = 'none';
+                // Toggle AI dropdown
+                aiDropdown.style.display = aiDropdown.style.display === 'block' ? 'none' : 'block';
+            });
+            
+            // AI dropdown items
+            aiDropdown.querySelectorAll('.dropdown-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    const aiType = e.target.dataset.aiType;
+                    this.handleAIAction(aiType);
+                    aiDropdown.style.display = 'none';
+                });
+            });
+        }
+        
+        // 3D dropdown
+        const threedbtn = document.querySelector('[data-tool="3d"]');
+        const threedDropdown = document.getElementById('3d-dropdown');
+        
+        if (threedbtn && threedDropdown) {
+            threedbtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                // Close other dropdowns
+                aiDropdown.style.display = 'none';
+                // Toggle 3D dropdown
+                threedDropdown.style.display = threedDropdown.style.display === 'block' ? 'none' : 'block';
+            });
+            
+            // 3D dropdown items
+            threedDropdown.querySelectorAll('.dropdown-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    const reconstructionType = e.target.dataset['3dType'];
+                    this.handle3DReconstruction(reconstructionType);
+                    threedDropdown.style.display = 'none';
+                });
+            });
+        }
+        
+        // Close dropdowns when clicking elsewhere
+        document.addEventListener('click', () => {
+            if (aiDropdown) aiDropdown.style.display = 'none';
+            if (threedDropdown) threedDropdown.style.display = 'none';
+        });
+    }
+    
+    setupAnnotationModal() {
+        const form = document.getElementById('annotation-form');
+        if (form) {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.addEnhancedAnnotation();
+            });
+        }
     }
     
     setupUploadModal() {
@@ -579,11 +653,9 @@ class DicomViewer {
                 end: imageCoords
             };
         } else if (this.activeTool === 'annotate') {
-            const text = prompt('Enter annotation text:');
-            if (text) {
-                const imageCoords = this.canvasToImageCoords(x, y);
-                this.addAnnotation(imageCoords.x, imageCoords.y, text);
-            }
+            const imageCoords = this.canvasToImageCoords(x, y);
+            this.pendingAnnotation = { x: imageCoords.x, y: imageCoords.y };
+            this.openAnnotationModal();
         }
     }
     
@@ -907,6 +979,161 @@ class DicomViewer {
         }
     }
     
+    // AI and 3D Functions
+    handleAIAction(aiType) {
+        console.log('AI Action:', aiType);
+        this.showAIChat();
+        
+        // Add AI-specific message based on type
+        const chatMessages = document.getElementById('chat-messages');
+        let message = '';
+        
+        switch(aiType) {
+            case 'analysis':
+                message = 'Image Analysis: AI analysis feature is not implemented yet. This would analyze the current image for abnormalities and provide insights.';
+                break;
+            case 'report':
+                message = 'Report Generation: AI report generation is not implemented yet. This would help generate radiology reports based on image findings.';
+                break;
+            case 'compare':
+                message = 'Study Comparison: AI comparison feature is not implemented yet. This would compare current study with previous studies.';
+                break;
+        }
+        
+        if (message) {
+            this.addAIMessage(message);
+        }
+    }
+    
+    handle3DReconstruction(reconstructionType) {
+        console.log('3D Reconstruction:', reconstructionType);
+        document.getElementById('3d-modal').style.display = 'flex';
+    }
+    
+    showAIChat() {
+        const chatWindow = document.getElementById('ai-chat-window');
+        chatWindow.style.display = 'flex';
+        this.aiChatMinimized = false;
+        chatWindow.classList.remove('minimized');
+    }
+    
+    addAIMessage(message) {
+        const chatMessages = document.getElementById('chat-messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'ai-message';
+        messageDiv.innerHTML = `
+            <div class="message-content">
+                <p>${message}</p>
+            </div>
+            <div class="copy-btn-container">
+                <button class="copy-btn" onclick="copyAIText(this)">
+                    <i class="fas fa-copy"></i> Copy
+                </button>
+            </div>
+        `;
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    openAnnotationModal() {
+        document.getElementById('annotation-modal').style.display = 'flex';
+    }
+    
+    addEnhancedAnnotation() {
+        if (!this.pendingAnnotation) return;
+        
+        const text = document.getElementById('annotation-text').value;
+        const fontSize = document.getElementById('annotation-font-size').value;
+        const color = document.getElementById('annotation-color').value;
+        
+        if (text.trim()) {
+            const annotation = {
+                image_id: this.currentImage.id,
+                x: this.pendingAnnotation.x,
+                y: this.pendingAnnotation.y,
+                text: text,
+                fontSize: fontSize,
+                color: color
+            };
+            
+            this.saveEnhancedAnnotation(annotation);
+            this.closeAnnotationModal();
+        }
+    }
+    
+    async saveEnhancedAnnotation(annotation) {
+        try {
+            const response = await fetch('/api/annotations/save/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                },
+                body: JSON.stringify(annotation)
+            });
+            
+            if (response.ok) {
+                this.annotations.push(annotation);
+                this.updateDisplay();
+            }
+        } catch (error) {
+            console.error('Error saving annotation:', error);
+        }
+    }
+    
+    closeAnnotationModal() {
+        document.getElementById('annotation-modal').style.display = 'none';
+        document.getElementById('annotation-text').value = '';
+        this.pendingAnnotation = null;
+    }
+    
+    updateMeasurementsList() {
+        const list = document.getElementById('measurements-list');
+        list.innerHTML = '';
+        
+        let hasEllipseSelected = false;
+        
+        this.measurements.forEach((measurement, index) => {
+            const item = document.createElement('div');
+            item.className = `measurement-item ${measurement.type === 'ellipse' ? 'ellipse' : ''}`;
+            
+            let displayText;
+            if (measurement.type === 'ellipse') {
+                displayText = `HU: ${measurement.value.toFixed(1)} (${measurement.notes || ''})`;
+                hasEllipseSelected = true;
+                
+                // Update HU statistics display
+                this.updateHUStatistics(measurement);
+            } else {
+                displayText = `${measurement.value.toFixed(1)} ${measurement.unit}`;
+            }
+            
+            item.textContent = `Measurement ${index + 1}: ${displayText}`;
+            list.appendChild(item);
+        });
+        
+        // Show/hide HU statistics panel
+        const huStats = document.getElementById('hu-statistics');
+        if (hasEllipseSelected) {
+            huStats.style.display = 'block';
+        } else {
+            huStats.style.display = 'none';
+        }
+    }
+    
+    updateHUStatistics(measurement) {
+        if (measurement.type !== 'ellipse') return;
+        
+        document.getElementById('hu-mean').textContent = measurement.value.toFixed(1);
+        document.getElementById('hu-min').textContent = measurement.min_value?.toFixed(1) || '-';
+        document.getElementById('hu-max').textContent = measurement.max_value?.toFixed(1) || '-';
+        document.getElementById('hu-std').textContent = measurement.std_dev?.toFixed(1) || '-';
+        
+        // Extract pixel count from notes if available
+        const pixelMatch = measurement.notes?.match(/Pixels: (\d+)/);
+        document.getElementById('hu-pixels').textContent = pixelMatch ? pixelMatch[1] : '-';
+    }
+
     // Utility functions
     getCSRFToken() {
         return document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
@@ -919,7 +1146,52 @@ class DicomViewer {
     }
 }
 
+// Global functions for HTML event handlers
+function minimizeAIChat() {
+    const chatWindow = document.getElementById('ai-chat-window');
+    chatWindow.classList.toggle('minimized');
+}
+
+function closeAIChat() {
+    document.getElementById('ai-chat-window').style.display = 'none';
+}
+
+function copyAIText(button) {
+    const messageContent = button.closest('.ai-message').querySelector('.message-content');
+    const text = messageContent.textContent;
+    
+    navigator.clipboard.writeText(text).then(() => {
+        button.innerHTML = '<i class="fas fa-check"></i> Copied';
+        setTimeout(() => {
+            button.innerHTML = '<i class="fas fa-copy"></i> Copy';
+        }, 2000);
+    }).catch(() => {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        button.innerHTML = '<i class="fas fa-check"></i> Copied';
+        setTimeout(() => {
+            button.innerHTML = '<i class="fas fa-copy"></i> Copy';
+        }, 2000);
+    });
+}
+
+function close3DModal() {
+    document.getElementById('3d-modal').style.display = 'none';
+}
+
+function closeAnnotationModal() {
+    if (window.dicomViewer) {
+        window.dicomViewer.closeAnnotationModal();
+    }
+}
+
 // Initialize the viewer when the page loads
 document.addEventListener('DOMContentLoaded', () => {
-    new DicomViewer();
+    window.dicomViewer = new DicomViewer();
 });
