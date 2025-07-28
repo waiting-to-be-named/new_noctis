@@ -21,4 +21,5 @@ urlpatterns = [
     path('api/images/<int:image_id>/measurements/', views.get_measurements, name='get_measurements'),
     path('api/images/<int:image_id>/annotations/', views.get_annotations, name='get_annotations'),
     path('api/images/<int:image_id>/clear-measurements/', views.clear_measurements, name='clear_measurements'),
+    path('api/measurements/hu/', views.measure_hu, name='measure_hu'),
 ]

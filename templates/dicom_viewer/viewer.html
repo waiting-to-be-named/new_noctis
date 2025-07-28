@@ -29,6 +29,10 @@
                     <i class="fas fa-ruler"></i>
                     <span>Measure</span>
                 </button>
+                <button class="tool-btn" data-tool="ellipse" title="Ellipse HU">
+                    <i class="fas fa-circle-notch"></i>
+                    <span>Ellipse</span>
+                </button>
                 <button class="tool-btn" data-tool="annotate" title="Annotate">
                     <i class="fas fa-edit"></i>
                     <span>Annotate</span>
@@ -181,6 +185,13 @@
                 <!-- Measurements Section -->
                 <div class="panel-section">
                     <h3 class="section-title">Measurements</h3>
+                    <div class="control-group" style="margin-bottom:8px;">
+                        <label for="measurement-unit">Unit:</label>
+                        <select id="measurement-unit" class="form-select small" style="width:80px;">
+                            <option value="mm">mm</option>
+                            <option value="cm">cm</option>
+                        </select>
+                    </div>
                     <button id="clear-measurements" class="secondary-btn">Clear All</button>
                     <div id="measurements-list" class="measurements-list"></div>
                 </div>

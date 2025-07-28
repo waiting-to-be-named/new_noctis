@@ -25,6 +25,11 @@ class DicomViewer {
         this.measurements = [];
         this.annotations = [];
         this.currentMeasurement = null;
+        // Ellipse (HU) drawing state
+        this.currentEllipse = null;
+
+        // Measurement unit (mm or cm)
+        this.measurementUnit = 'mm';
         this.isDragging = false;
         this.dragStart = null;
         
@@ -91,6 +96,14 @@ class DicomViewer {
             document.getElementById('zoom-value').textContent = e.target.value + '%';
             this.updateDisplay();
         });
+
+        // Measurement unit selector
+        const unitSelect = document.getElementById('measurement-unit');
+        if (unitSelect) {
+            unitSelect.addEventListener('change', (e) => {
+                this.measurementUnit = e.target.value;
+            });
+        }
         
         // Preset buttons
         document.querySelectorAll('.preset-btn').forEach(btn => {
@@ -367,7 +380,32 @@ class DicomViewer {
         
         this.measurements.forEach(measurement => {
             const coords = measurement.coordinates;
-            if (coords.length >= 2) {
+            if (measurement.type === 'ellipse' && measurement.coordinates) {
+                const c = Array.isArray(measurement.coordinates) ? measurement.coordinates[0] : measurement.coordinates;
+                const start = this.imageToCanvasCoords(c.x0, c.y0);
+                const end = this.imageToCanvasCoords(c.x1, c.y1);
+                const width = end.x - start.x;
+                const height = end.y - start.y;
+                const centerX = start.x + width / 2;
+                const centerY = start.y + height / 2;
+
+                this.ctx.save();
+                this.ctx.strokeStyle = 'lime';
+                this.ctx.setLineDash([4, 4]);
+                this.ctx.beginPath();
+                this.ctx.ellipse(centerX, centerY, Math.abs(width) / 2, Math.abs(height) / 2, 0, 0, Math.PI * 2);
+                this.ctx.stroke();
+                this.ctx.restore();
+
+                // Display HU value
+                const text = `${measurement.value.toFixed(1)} HU`;
+                const textMetrics = this.ctx.measureText(text);
+                this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                this.ctx.fillRect(centerX - textMetrics.width/2 - 4, centerY - 8, textMetrics.width + 8, 16);
+                this.ctx.fillStyle = 'lime';
+                this.ctx.fillText(text, centerX - textMetrics.width/2, centerY + 4);
+            } else if (coords && coords.length >= 2) {
+                // existing line measurement drawing
                 const start = this.imageToCanvasCoords(coords[0].x, coords[0].y);
                 const end = this.imageToCanvasCoords(coords[1].x, coords[1].y);
                 
@@ -401,6 +439,20 @@ class DicomViewer {
             this.ctx.beginPath();
             this.ctx.moveTo(start.x, start.y);
             this.ctx.lineTo(end.x, end.y);
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
+        }
+        if (this.currentEllipse) {
+            const start = this.imageToCanvasCoords(this.currentEllipse.start.x, this.currentEllipse.start.y);
+            const end = this.imageToCanvasCoords(this.currentEllipse.end.x, this.currentEllipse.end.y);
+            const width = end.x - start.x;
+            const height = end.y - start.y;
+            const centerX = start.x + width / 2;
+            const centerY = start.y + height / 2;
+            this.ctx.setLineDash([5,5]);
+            this.ctx.strokeStyle = 'yellow';
+            this.ctx.beginPath();
+            this.ctx.ellipse(centerX, centerY, Math.abs(width)/2, Math.abs(height)/2, 0, 0, Math.PI*2);
             this.ctx.stroke();
             this.ctx.setLineDash([]);
         }
@@ -520,6 +572,12 @@ class DicomViewer {
                 start: imageCoords,
                 end: imageCoords
             };
+        } else if (this.activeTool === 'ellipse') {
+            const imageCoords = this.canvasToImageCoords(x, y);
+            this.currentEllipse = {
+                start: imageCoords,
+                end: imageCoords
+            };
         } else if (this.activeTool === 'annotate') {
             const text = prompt('Enter annotation text:');
             if (text) {
@@ -569,6 +627,10 @@ class DicomViewer {
             const imageCoords = this.canvasToImageCoords(x, y);
             this.currentMeasurement.end = imageCoords;
             this.updateDisplay();
+        } else if (this.activeTool === 'ellipse' && this.currentEllipse) {
+            const imageCoords = this.canvasToImageCoords(x, y);
+            this.currentEllipse.end = imageCoords;
+            this.updateDisplay();
         }
     }
     
@@ -582,6 +644,14 @@ class DicomViewer {
             this.currentMeasurement.end = imageCoords;
             this.addMeasurement(this.currentMeasurement);
             this.currentMeasurement = null;
+        } else if (this.activeTool === 'ellipse' && this.currentEllipse) {
+            const rect = this.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const imageCoords = this.canvasToImageCoords(x, y);
+            this.currentEllipse.end = imageCoords;
+            this.addEllipseHU(this.currentEllipse);
+            this.currentEllipse = null;
         }
         
         this.isDragging = false;
@@ -670,7 +740,15 @@ class DicomViewer {
         const metadata = this.currentImage.metadata;
         if (metadata.pixel_spacing_x && metadata.pixel_spacing_y) {
             const avgSpacing = (metadata.pixel_spacing_x + metadata.pixel_spacing_y) / 2;
-            value = distance * avgSpacing;
+            value = distance * avgSpacing; // in mm
+            unit = 'mm';
+        }
+
+        // Apply unit preference
+        if (this.measurementUnit === 'cm') {
+            value = value / 10.0;
+            unit = 'cm';
+        } else if (this.measurementUnit === 'mm') {
             unit = 'mm';
         }
         
@@ -759,7 +837,13 @@ class DicomViewer {
         this.measurements.forEach((measurement, index) => {
             const item = document.createElement('div');
             item.className = 'measurement-item';
-            item.textContent = `Measurement ${index + 1}: ${measurement.value.toFixed(1)} ${measurement.unit}`;
+            let displayText;
+            if (measurement.type === 'ellipse') {
+                displayText = `HU: ${measurement.value.toFixed(1)} (${measurement.notes || ''})`;
+            } else {
+                displayText = `${measurement.value.toFixed(1)} ${measurement.unit}`;
+            }
+            item.textContent = `Measurement ${index + 1}: ${displayText}`;
             list.appendChild(item);
         });
     }
@@ -783,6 +867,43 @@ class DicomViewer {
             }
         } catch (error) {
             console.error('Error clearing measurements:', error);
+        }
+    }
+    
+    async addEllipseHU(ellipseData) {
+        if (!this.currentImage) return;
+        const payload = {
+            image_id: this.currentImage.id,
+            x0: ellipseData.start.x,
+            y0: ellipseData.start.y,
+            x1: ellipseData.end.x,
+            y1: ellipseData.end.y
+        };
+        try {
+            const response = await fetch('/api/measurements/hu/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                },
+                body: JSON.stringify(payload)
+            });
+            if (response.ok) {
+                const result = await response.json();
+                const measurement = {
+                    image_id: this.currentImage.id,
+                    type: 'ellipse',
+                    coordinates: [payload], // store bounding box
+                    value: result.mean_hu,
+                    unit: 'HU',
+                    notes: `Min: ${result.min_hu.toFixed(1)} Max: ${result.max_hu.toFixed(1)}`
+                };
+                this.measurements.push(measurement);
+                this.updateMeasurementsList();
+                this.updateDisplay();
+            }
+        } catch (error) {
+            console.error('Error measuring HU:', error);
         }
     }
     
