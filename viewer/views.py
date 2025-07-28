@@ -281,6 +281,49 @@ def clear_measurements(request, image_id):
     return JsonResponse({'success': True})
 
 
+# New endpoint to compute mean Hounsfield Units inside an ellipse
+@api_view(['GET'])
+def get_ellipse_hu(request, image_id):
+    """Calculate mean Hounsfield Unit value inside an ellipse defined in image coordinates"""
+    image = get_object_or_404(DicomImage, id=image_id)
+
+    # Get coordinates
+    try:
+        x1 = float(request.GET.get('x1'))
+        y1 = float(request.GET.get('y1'))
+        x2 = float(request.GET.get('x2'))
+        y2 = float(request.GET.get('y2'))
+    except (TypeError, ValueError):
+        return Response({'error': 'Invalid coordinates'}, status=status.HTTP_400_BAD_REQUEST)
+
+    pixel_array = image.get_pixel_array()
+    if pixel_array is None:
+        return Response({'error': 'Unable to load image data'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # Convert to HU if slope/intercept present
+    dicom_data = image.load_dicom_data()
+    slope = getattr(dicom_data, 'RescaleSlope', 1)
+    intercept = getattr(dicom_data, 'RescaleIntercept', 0)
+    hu_array = pixel_array * slope + intercept
+
+    # Build ellipse mask
+    h, w = hu_array.shape
+    center_x = (x1 + x2) / 2.0
+    center_y = (y1 + y2) / 2.0
+    axis_a = abs(x2 - x1) / 2.0
+    axis_b = abs(y2 - y1) / 2.0
+
+    yy, xx = np.ogrid[:h, :w]
+    mask = (((xx - center_x) / axis_a) ** 2 + ((yy - center_y) / axis_b) ** 2) <= 1
+
+    if not np.any(mask):
+        return Response({'error': 'Invalid ellipse area'}, status=status.HTTP_400_BAD_REQUEST)
+
+    mean_hu = float(np.mean(hu_array[mask]))
+
+    return Response({'mean_hu': mean_hu})
+
+
 def parse_dicom_date(date_str):
     """Parse DICOM date string to Python date"""
     if not date_str:
