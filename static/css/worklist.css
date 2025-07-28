@@ -1,0 +1,324 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.worklist-container {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background: #1a1a1a;
+    border-bottom: 2px solid #00ff00;
+    flex-shrink: 0;
+}
+
+.header h1 {
+    font-size: 24px;
+    color: #00ff00;
+}
+
+.upload-section {
+    padding: 15px 20px;
+    background: #1a1a1a;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+.upload-container {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.upload-zone {
+    flex: 1;
+    border: 2px dashed #00ff00;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: rgba(0, 255, 0, 0.05);
+}
+
+.upload-zone:hover {
+    background: rgba(0, 255, 0, 0.1);
+    border-color: #00cc00;
+}
+
+.upload-zone.dragover {
+    background: rgba(0, 255, 0, 0.2);
+    border-color: #00ff00;
+}
+
+.filters {
+    display: flex;
+    gap: 15px;
+    padding: 15px 20px;
+    background: #1a1a1a;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+.form-control, .form-select {
+    padding: 8px 12px;
+    background: #333;
+    border: 1px solid #555;
+    border-radius: 4px;
+    color: #fff;
+    font-size: 14px;
+}
+
+.form-control:focus, .form-select:focus {
+    outline: none;
+    border-color: #00ff00;
+    box-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
+}
+
+.worklist-table-container {
+    flex: 1;
+    overflow: auto;
+    background: #1a1a1a;
+}
+
+.worklist-table {
+    width: 100%;
+    height: 100%;
+}
+
+.worklist-table table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 100%;
+}
+
+.worklist-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.worklist-table th {
+    background: #0d0d0d;
+    color: #00ff00;
+    padding: 15px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid #00ff00;
+}
+
+.worklist-table tr {
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.worklist-table tbody tr:hover {
+    background: rgba(0, 255, 0, 0.1);
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+}
+
+.worklist-table td {
+    padding: 15px;
+    border-bottom: 1px solid #333;
+    vertical-align: middle;
+}
+
+.patient-row.selected {
+    background: rgba(0, 255, 0, 0.2);
+    border-left: 4px solid #00ff00;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-view {
+    background: #00ff00;
+    color: #000;
+}
+
+.btn-view:hover {
+    background: #00cc00;
+    box-shadow: 0 0 8px rgba(0, 255, 0, 0.5);
+}
+
+.btn-upload {
+    background: #0066cc;
+    color: #fff;
+    padding: 10px 20px;
+    font-size: 14px;
+}
+
+.btn-upload:hover {
+    background: #0052a3;
+}
+
+.btn-clinical {
+    background: #0066cc;
+    color: #fff;
+}
+
+.btn-report {
+    background: #ff9900;
+    color: #fff;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.status-scheduled {
+    background: #666;
+    color: #fff;
+}
+
+.status-in_progress {
+    background: #ff9900;
+    color: #fff;
+}
+
+.status-completed {
+    background: #00ff00;
+    color: #000;
+}
+
+.notification-badge {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #ff0066;
+    color: #fff;
+    padding: 10px 15px;
+    border-radius: 8px;
+    animation: pulse 2s infinite;
+    z-index: 1001;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.clinical-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+}
+
+.clinical-modal-content {
+    position: relative;
+    background: #1a1a1a;
+    margin: 5% auto;
+    padding: 20px;
+    width: 80%;
+    max-width: 600px;
+    border-radius: 8px;
+    border: 2px solid #00ff00;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 15px;
+}
+
+#clinical-info-text {
+    width: 100%;
+    background: #333;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 10px;
+    font-family: inherit;
+    resize: vertical;
+}
+
+.upload-progress {
+    display: none;
+    margin-top: 10px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #333;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #00ff00;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.file-info {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #ccc;
+}
+
+.pagination {
+    padding: 15px 20px;
+    background: #1a1a1a;
+    border-top: 1px solid #333;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.page-links a {
+    color: #00ff00;
+    text-decoration: none;
+    margin: 0 5px;
+}
+
+.page-links a:hover {
+    text-decoration: underline;
+}
+
+.current {
+    color: #fff;
+    margin: 0 10px;
+}
