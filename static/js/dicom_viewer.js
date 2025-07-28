@@ -28,6 +28,10 @@ class DicomViewer {
         // Ellipse (HU) drawing state
         this.currentEllipse = null;
 
+        // --- Enhancement: enable annotation dragging ---
+        this.draggingAnnotationIndex = null; // index of annotation currently being dragged
+        this.annotationDragOffset = { dx: 0, dy: 0 }; // offset between mouse and annotation origin
+
         // Measurement unit (mm or cm)
         this.measurementUnit = 'mm';
         this.isDragging = false;
@@ -460,18 +464,14 @@ class DicomViewer {
     
     drawAnnotations() {
         if (!this.currentImage) return;
-        
-        this.ctx.fillStyle = 'yellow';
-        this.ctx.font = '12px Arial';
-        
+        // Use bigger font for better readability
+        this.ctx.font = '16px Arial';
         this.annotations.forEach(annotation => {
             const pos = this.imageToCanvasCoords(annotation.x, annotation.y);
-            
-            // Background for text
             const textMetrics = this.ctx.measureText(annotation.text);
+            // Draw semi-transparent background
             this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-            this.ctx.fillRect(pos.x - 2, pos.y - 14, textMetrics.width + 4, 16);
-            
+            this.ctx.fillRect(pos.x - 4, pos.y - 18, textMetrics.width + 8, 22);
             this.ctx.fillStyle = 'yellow';
             this.ctx.fillText(annotation.text, pos.x, pos.y);
         });
@@ -562,7 +562,17 @@ class DicomViewer {
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
-        
+
+        // Check if user clicked on an existing annotation → start drag
+        const hitIndex = this.hitTestAnnotation(x, y);
+        if (hitIndex !== null) {
+            this.draggingAnnotationIndex = hitIndex;
+            const annCanvasPos = this.imageToCanvasCoords(this.annotations[hitIndex].x, this.annotations[hitIndex].y);
+            this.annotationDragOffset = { dx: x - annCanvasPos.x, dy: y - annCanvasPos.y };
+            this.isDragging = true;
+            return;
+        }
+
         this.isDragging = true;
         this.dragStart = { x, y };
         
@@ -588,6 +598,18 @@ class DicomViewer {
     }
     
     onMouseMove(e) {
+        // Handle annotation dragging if in progress
+        if (this.draggingAnnotationIndex !== null) {
+            const rect = this.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left - this.annotationDragOffset.dx;
+            const y = e.clientY - rect.top - this.annotationDragOffset.dy;
+            const imageCoords = this.canvasToImageCoords(x, y);
+            const ann = this.annotations[this.draggingAnnotationIndex];
+            ann.x = imageCoords.x;
+            ann.y = imageCoords.y;
+            this.updateDisplay();
+            return;
+        }
         if (!this.isDragging || !this.dragStart) return;
         
         const rect = this.canvas.getBoundingClientRect();
@@ -635,6 +657,13 @@ class DicomViewer {
     }
     
     onMouseUp(e) {
+        if (this.draggingAnnotationIndex !== null) {
+            // Finish annotation drag
+            this.draggingAnnotationIndex = null;
+            this.isDragging = false;
+            this.updateDisplay();
+            return;
+        }
         if (this.activeTool === 'measure' && this.currentMeasurement) {
             const rect = this.canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
@@ -916,6 +945,23 @@ class DicomViewer {
         if (this.currentImage) {
             this.updateDisplay();
         }
+    }
+
+    // Detect if a canvas coordinate intersects an annotation label
+    hitTestAnnotation(canvasX, canvasY) {
+        this.ctx.font = '16px Arial';
+        for (let i = this.annotations.length - 1; i >= 0; i--) {
+            const ann = this.annotations[i];
+            const pos = this.imageToCanvasCoords(ann.x, ann.y);
+            const w = this.ctx.measureText(ann.text).width + 8;
+            const h = 22; // background height
+            const left = pos.x - 4;
+            const top = pos.y - 18;
+            if (canvasX >= left && canvasX <= left + w && canvasY >= top && canvasY <= top + h) {
+                return i;
+            }
+        }
+        return null;
     }
 }
 
