@@ -21,4 +21,9 @@ urlpatterns = [
     path('api/images/<int:image_id>/measurements/', views.get_measurements, name='get_measurements'),
     path('api/images/<int:image_id>/annotations/', views.get_annotations, name='get_annotations'),
     path('api/images/<int:image_id>/clear-measurements/', views.clear_measurements, name='clear_measurements'),
+    
+    # AI-powered features
+    path('api/images/<int:image_id>/ai-analyze/', views.ai_analyze_image, name='ai_analyze_image'),
+    path('api/images/<int:image_id>/ai-window-suggest/', views.ai_suggest_window_level, name='ai_suggest_window_level'),
+    path('api/images/<int:image_id>/ai-enhance/', views.ai_enhance_image, name='ai_enhance_image'),
 ]

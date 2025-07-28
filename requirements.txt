@@ -1,0 +1,35 @@
+Django>=5.2.0
+djangorestframework>=3.14.0
+pydicom>=2.3.0
+Pillow>=9.0.0
+numpy>=1.21.0
+python-dateutil>=2.8.0
+
+# Database and caching
+psycopg2-binary>=2.9.0
+redis>=4.5.0
+django-redis>=5.2.0
+
+# Image processing and AI
+opencv-python>=4.7.0
+scikit-image>=0.20.0
+scipy>=1.10.0
+
+# Additional DICOM support
+pynetdicom>=2.0.0
+gdcm-python>=3.0.0
+
+# Performance and monitoring
+django-extensions>=3.2.0
+django-debug-toolbar>=4.0.0
+
+# Security and deployment
+python-decouple>=3.8
+dj-database-url>=2.0.0
+gunicorn>=20.1.0
+whitenoise>=6.4.0
+
+# Testing
+pytest>=7.3.0
+pytest-django>=4.5.0
+coverage>=7.2.0
