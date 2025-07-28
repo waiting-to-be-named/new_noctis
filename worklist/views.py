@@ -92,7 +92,7 @@ def view_study_from_worklist(request, entry_id):
     
     if entry.study:
         # Redirect to viewer with study ID
-        return redirect('viewer:viewer', study_id=entry.study.id)
+        return redirect('viewer:viewer_with_study', study_id=entry.study.id)
     else:
         return JsonResponse({'error': 'No images available for this entry'}, status=404)
 

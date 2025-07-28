@@ -185,7 +185,7 @@
             </div>
         </div>
         
-        <a href="/" class="launch-btn" onclick="launchViewer(); return false;">
+        <a href="/viewer/" class="launch-btn" onclick="launchViewer(); return false;">
             <i class="fas fa-rocket"></i> Launch DICOM Viewer
         </a>
         
@@ -216,7 +216,7 @@
     <script>
         function launchViewer() {
             // Launch viewer in new window for better experience
-            window.open('/', 'DICOM_Viewer', 'width=' + screen.width + ',height=' + screen.height + ',fullscreen=yes');
+            window.open('/viewer/', 'DICOM_Viewer', 'width=' + screen.width + ',height=' + screen.height + ',fullscreen=yes');
         }
         
         // Add hover effects to cards
