@@ -309,11 +309,15 @@ class DicomViewer {
                 }, 1000);
             } else {
                 try {
+                    // Clone the response to avoid "body stream already read" error
+                    const responseClone = response.clone();
                     const errorData = await response.json();
                     throw new Error(errorData.error || 'Upload failed');
                 } catch (parseError) {
                     console.error('Failed to parse error response:', parseError);
-                    console.error('Response text:', await response.text());
+                    // Use the cloned response to read the text
+                    const responseText = await responseClone.text();
+                    console.error('Response text:', responseText);
                     throw new Error(`Server error (${response.status}). Please try again.`);
                 }
             }
@@ -391,11 +395,15 @@ class DicomViewer {
                 }, 1000);
             } else {
                 try {
+                    // Clone the response to avoid "body stream already read" error
+                    const responseClone = response.clone();
                     const errorData = await response.json();
                     throw new Error(errorData.error || 'Upload failed');
                 } catch (parseError) {
                     console.error('Failed to parse error response:', parseError);
-                    console.error('Response text:', await response.text());
+                    // Use the cloned response to read the text
+                    const responseText = await responseClone.text();
+                    console.error('Response text:', responseText);
                     throw new Error(`Server error (${response.status}). Please try again.`);
                 }
             }
