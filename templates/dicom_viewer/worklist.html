@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM Worklist</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/dicom_viewer.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .worklist-container {
+            background-color: #f5f5f5;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .worklist-header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .worklist-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .worklist-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .facility-filter {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .facility-filter select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+        }
+        
+        .search-box {
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .search-box input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .notification-badge {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .notification-count {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: #ff4444;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .worklist-table {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .worklist-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .worklist-table th {
+            background: #4CAF50;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        .worklist-table td {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .worklist-table tr:hover {
+            background-color: #e8f5e8;
+        }
+        
+        .patient-row {
+            transition: background-color 0.2s;
+        }
+        
+        .patient-row:hover {
+            background-color: #e8f5e8 !important;
+        }
+        
+        .patient-name {
+            font-weight: 600;
+            color: #2E7D32;
+        }
+        
+        .patient-id {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .study-info {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .study-date {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .study-modality {
+            background: #4CAF50;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            display: inline-block;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .btn-view {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .btn-view:hover {
+            background: #1976D2;
+        }
+        
+        .btn-clinical {
+            background: #FF9800;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .btn-clinical:hover {
+            background: #F57C00;
+        }
+        
+        .btn-report {
+            background: #9C27B0;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .btn-report:hover {
+            background: #7B1FA2;
+        }
+        
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .status-new {
+            background: #E3F2FD;
+            color: #1976D2;
+        }
+        
+        .status-processed {
+            background: #E8F5E8;
+            color: #2E7D32;
+        }
+        
+        .status-reported {
+            background: #FFF3E0;
+            color: #F57C00;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+        
+        .empty-state i {
+            font-size: 48px;
+            color: #ddd;
+            margin-bottom: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .worklist-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .worklist-table {
+                overflow-x: auto;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="worklist-container">
+        <div class="worklist-header">
+            <div class="worklist-title">
+                <i class="fas fa-list"></i>
+                DICOM Worklist
+            </div>
+            
+            <div class="worklist-controls">
+                <div class="facility-filter">
+                    <label for="facility-select">Facility:</label>
+                    <select id="facility-select">
+                        <option value="">All Facilities</option>
+                        {% for facility in facilities %}
+                        <option value="{{ facility.id }}">{{ facility.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="Search patients...">
+                </div>
+                
+                <div class="notification-badge">
+                    <button id="notifications-btn" class="btn-view">
+                        <i class="fas fa-bell"></i>
+                        Notifications
+                    </button>
+                    <span id="notification-count" class="notification-count" style="display: none;">0</span>
+                </div>
+                
+                <a href="{% url 'dicom_viewer:viewer' %}" class="btn-view">
+                    <i class="fas fa-eye"></i>
+                    Open Viewer
+                </a>
+            </div>
+        </div>
+        
+        <div class="worklist-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Patient Information</th>
+                        <th>Study Information</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="worklist-tbody">
+                    {% for study in studies %}
+                    <tr class="patient-row" data-study-id="{{ study.id }}">
+                        <td>
+                            <div class="patient-name">{{ study.patient_name }}</div>
+                            <div class="patient-id">ID: {{ study.patient_id }}</div>
+                        </td>
+                        <td>
+                            <div class="study-info">
+                                <div class="study-date">{{ study.study_date|date:"M d, Y" }}</div>
+                                <div class="study-modality">{{ study.modality }}</div>
+                                <div>{{ study.study_description|default:"No description" }}</div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if study.is_processed %}
+                                <span class="status-badge status-processed">Processed</span>
+                            {% else %}
+                                <span class="status-badge status-new">New</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                <a href="{% url 'dicom_viewer:viewer' %}?study_id={{ study.id }}" class="btn-view">
+                                    <i class="fas fa-eye"></i>
+                                    View
+                                </a>
+                                <button class="btn-clinical" onclick="openClinicalInfo({{ study.id }})">
+                                    <i class="fas fa-user-md"></i>
+                                    Clinical
+                                </button>
+                                {% if user.is_authenticated and user.groups.all %}
+                                <a href="{% url 'dicom_viewer:report' %}?study_id={{ study.id }}" class="btn-report">
+                                    <i class="fas fa-file-medical"></i>
+                                    Report
+                                </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4">
+                            <div class="empty-state">
+                                <i class="fas fa-inbox"></i>
+                                <h3>No studies found</h3>
+                                <p>No DICOM studies are available in the worklist.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Clinical Information Modal -->
+    <div id="clinical-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Clinical Information</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="clinical-form">
+                    <div class="form-group">
+                        <label for="chief-complaint">Chief Complaint:</label>
+                        <textarea id="chief-complaint" name="chief_complaint" rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="clinical-history">Clinical History:</label>
+                        <textarea id="clinical-history" name="clinical_history" rows="4"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="physical-examination">Physical Examination:</label>
+                        <textarea id="physical-examination" name="physical_examination" rows="4"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="clinical-diagnosis">Clinical Diagnosis:</label>
+                        <textarea id="clinical-diagnosis" name="clinical_diagnosis" rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="referring-physician">Referring Physician:</label>
+                        <input type="text" id="referring-physician" name="referring_physician">
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-view">Save Clinical Info</button>
+                        <button type="button" class="btn-secondary" onclick="closeClinicalModal()">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Notifications Modal -->
+    <div id="notifications-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Notifications</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="notifications-list">
+                    <!-- Notifications will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentStudyId = null;
+        
+        // Load notifications on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadNotifications();
+            setupEventListeners();
+        });
+        
+        function setupEventListeners() {
+            // Facility filter
+            document.getElementById('facility-select').addEventListener('change', function() {
+                filterWorklist();
+            });
+            
+            // Search functionality
+            document.getElementById('search-input').addEventListener('input', function() {
+                filterWorklist();
+            });
+            
+            // Notifications button
+            document.getElementById('notifications-btn').addEventListener('click', function() {
+                openNotificationsModal();
+            });
+            
+            // Modal close buttons
+            document.querySelectorAll('.modal-close').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    this.closest('.modal').style.display = 'none';
+                });
+            });
+        }
+        
+        function filterWorklist() {
+            const facilityFilter = document.getElementById('facility-select').value;
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            const rows = document.querySelectorAll('.patient-row');
+            
+            rows.forEach(row => {
+                const patientName = row.querySelector('.patient-name').textContent.toLowerCase();
+                const patientId = row.querySelector('.patient-id').textContent.toLowerCase();
+                const studyDesc = row.querySelector('.study-info div:last-child').textContent.toLowerCase();
+                
+                const matchesSearch = patientName.includes(searchTerm) || 
+                                   patientId.includes(searchTerm) || 
+                                   studyDesc.includes(searchTerm);
+                
+                row.style.display = matchesSearch ? 'table-row' : 'none';
+            });
+        }
+        
+        function openClinicalInfo(studyId) {
+            currentStudyId = studyId;
+            const modal = document.getElementById('clinical-modal');
+            
+            // Load existing clinical information
+            fetch(`/viewer/api/studies/${studyId}/clinical-info/`)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('chief-complaint').value = data.chief_complaint || '';
+                    document.getElementById('clinical-history').value = data.clinical_history || '';
+                    document.getElementById('physical-examination').value = data.physical_examination || '';
+                    document.getElementById('clinical-diagnosis').value = data.clinical_diagnosis || '';
+                    document.getElementById('referring-physician').value = data.referring_physician || '';
+                    modal.style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Error loading clinical info:', error);
+                    modal.style.display = 'block';
+                });
+        }
+        
+        function closeClinicalModal() {
+            document.getElementById('clinical-modal').style.display = 'none';
+            currentStudyId = null;
+        }
+        
+        document.getElementById('clinical-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            if (!currentStudyId) return;
+            
+            const formData = {
+                chief_complaint: document.getElementById('chief-complaint').value,
+                clinical_history: document.getElementById('clinical-history').value,
+                physical_examination: document.getElementById('physical-examination').value,
+                clinical_diagnosis: document.getElementById('clinical-diagnosis').value,
+                referring_physician: document.getElementById('referring-physician').value,
+            };
+            
+            fetch(`/viewer/api/studies/${currentStudyId}/clinical-info/save/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken(),
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    closeClinicalModal();
+                    alert('Clinical information saved successfully!');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving clinical info:', error);
+                alert('Error saving clinical information.');
+            });
+        });
+        
+        function loadNotifications() {
+            fetch('/viewer/api/notifications/')
+                .then(response => response.json())
+                .then(data => {
+                    const count = data.notifications.length;
+                    const countElement = document.getElementById('notification-count');
+                    
+                    if (count > 0) {
+                        countElement.textContent = count;
+                        countElement.style.display = 'flex';
+                    } else {
+                        countElement.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading notifications:', error);
+                });
+        }
+        
+        function openNotificationsModal() {
+            const modal = document.getElementById('notifications-modal');
+            const listElement = document.getElementById('notifications-list');
+            
+            fetch('/viewer/api/notifications/')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.notifications.length === 0) {
+                        listElement.innerHTML = '<p>No new notifications</p>';
+                    } else {
+                        listElement.innerHTML = data.notifications.map(notification => `
+                            <div class="notification-item" style="padding: 10px; border-bottom: 1px solid #eee;">
+                                <h4>${notification.title}</h4>
+                                <p>${notification.message}</p>
+                                <small>${new Date(notification.created_at).toLocaleString()}</small>
+                                ${notification.study_id ? `<button onclick="viewStudy(${notification.study_id})" class="btn-view" style="margin-top: 5px;">View Study</button>` : ''}
+                                <button onclick="markNotificationRead(${notification.id})" class="btn-secondary" style="margin-top: 5px;">Mark Read</button>
+                            </div>
+                        `).join('');
+                    }
+                    modal.style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Error loading notifications:', error);
+                    listElement.innerHTML = '<p>Error loading notifications</p>';
+                    modal.style.display = 'block';
+                });
+        }
+        
+        function markNotificationRead(notificationId) {
+            fetch(`/viewer/api/notifications/${notificationId}/read/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCSRFToken(),
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadNotifications();
+                    openNotificationsModal(); // Refresh the modal
+                }
+            })
+            .catch(error => {
+                console.error('Error marking notification read:', error);
+            });
+        }
+        
+        function viewStudy(studyId) {
+            window.open(`/viewer/?study_id=${studyId}`, '_blank');
+        }
+        
+        function getCSRFToken() {
+            return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                   document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] || '';
+        }
+    </script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 # dicom_viewer/views.py
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -7,6 +7,8 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.contrib.auth.decorators import login_required
 from django.views.generic import TemplateView
+from django.contrib.auth.models import User
+from django.db.models import Q
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -15,8 +17,16 @@ import os
 import pydicom
 from datetime import datetime
 import numpy as np
-from .models import DicomStudy, DicomSeries, DicomImage, Measurement, Annotation
+from .models import (
+    DicomStudy, DicomSeries, DicomImage, Measurement, Annotation,
+    Facility, ClinicalInformation, Report, Notification
+)
 from .serializers import DicomStudySerializer, DicomImageSerializer
+
+
+class LauncherView(TemplateView):
+    """Launcher page for the DICOM viewer"""
+    template_name = 'dicom_viewer/launcher.html'
 
 
 class DicomViewerView(TemplateView):
@@ -26,6 +36,42 @@ class DicomViewerView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['studies'] = DicomStudy.objects.all()[:10]  # Recent studies
+        return context
+
+
+class WorklistView(TemplateView):
+    """Worklist view for viewing patient studies"""
+    template_name = 'dicom_viewer/worklist.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        
+        # Filter studies based on user role
+        if user.is_superuser or user.groups.filter(name__in=['radiologist', 'admin']).exists():
+            # Admin/radiologist can see all studies
+            studies = DicomStudy.objects.all()
+        else:
+            # Regular users can only see their facility's studies
+            if hasattr(user, 'profile') and user.profile.facility:
+                studies = DicomStudy.objects.filter(facility=user.profile.facility)
+            else:
+                studies = DicomStudy.objects.none()
+        
+        context['studies'] = studies
+        context['facilities'] = Facility.objects.all()
+        return context
+
+
+class ReportView(TemplateView):
+    """Report writing view"""
+    template_name = 'dicom_viewer/report.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        study_id = self.request.GET.get('study_id')
+        if study_id:
+            context['study'] = get_object_or_404(DicomStudy, id=study_id)
         return context
 
 
@@ -103,6 +149,18 @@ def upload_dicom_files(request):
         except Exception as e:
             return JsonResponse({'error': f'Error processing {file.name}: {str(e)}'}, status=400)
     
+    # Create notification for new upload
+    if study and request.user.is_authenticated:
+        radiologists = User.objects.filter(groups__name='radiologist')
+        for radiologist in radiologists:
+            Notification.objects.create(
+                recipient=radiologist,
+                notification_type='new_upload',
+                title='New DICOM Upload',
+                message=f'New study uploaded for patient {study.patient_name}',
+                study=study
+            )
+    
     return JsonResponse({
         'success': True,
         'study_id': study.id if study else None,
@@ -112,37 +170,42 @@ def upload_dicom_files(request):
 
 @api_view(['GET'])
 def get_studies(request):
-    """Get list of DICOM studies"""
-    studies = DicomStudy.objects.all()
+    """Get list of studies for worklist"""
+    user = request.user
+    facility_id = request.GET.get('facility_id')
+    
+    if user.is_superuser or user.groups.filter(name__in=['radiologist', 'admin']).exists():
+        studies = DicomStudy.objects.all()
+    else:
+        if hasattr(user, 'profile') and user.profile.facility:
+            studies = DicomStudy.objects.filter(facility=user.profile.facility)
+        else:
+            studies = DicomStudy.objects.none()
+    
+    if facility_id:
+        studies = studies.filter(facility_id=facility_id)
+    
     serializer = DicomStudySerializer(studies, many=True)
     return Response(serializer.data)
 
 
 @api_view(['GET'])
 def get_study_images(request, study_id):
-    """Get all images for a study"""
+    """Get images for a specific study"""
     study = get_object_or_404(DicomStudy, id=study_id)
-    images = DicomImage.objects.filter(series__study=study).order_by('series__series_number', 'instance_number')
+    images = []
     
-    image_data = []
-    for image in images:
-        image_data.append({
-            'id': image.id,
-            'instance_number': image.instance_number,
-            'series_number': image.series.series_number,
-            'series_description': image.series.series_description,
-            'rows': image.rows,
-            'columns': image.columns,
-            'pixel_spacing_x': image.pixel_spacing_x,
-            'pixel_spacing_y': image.pixel_spacing_y,
-            'window_width': image.window_width,
-            'window_center': image.window_center,
-        })
+    for series in study.series.all():
+        for image in series.images.all():
+            images.append({
+                'id': image.id,
+                'series_number': series.series_number,
+                'instance_number': image.instance_number,
+                'description': series.series_description,
+                'modality': series.modality,
+            })
     
-    return Response({
-        'study': DicomStudySerializer(study).data,
-        'images': image_data
-    })
+    return Response({'images': images})
 
 
 @api_view(['GET'])
@@ -150,30 +213,29 @@ def get_image_data(request, image_id):
     """Get processed image data"""
     image = get_object_or_404(DicomImage, id=image_id)
     
-    # Get parameters from request
-    window_width = request.GET.get('window_width')
-    window_level = request.GET.get('window_level')  
+    # Get window/level parameters
+    window_width = request.GET.get('ww', image.window_width or 400)
+    window_level = request.GET.get('wl', image.window_center or 40)
     inverted = request.GET.get('inverted', 'false').lower() == 'true'
     
-    # Convert parameters
-    if window_width:
-        window_width = float(window_width)
-    if window_level:
-        window_level = float(window_level)
-    
     # Get processed image
-    image_base64 = image.get_processed_image_base64(window_width, window_level, inverted)
+    image_data = image.get_processed_image_base64(
+        window_width=float(window_width),
+        window_level=float(window_level),
+        inverted=inverted
+    )
     
-    if not image_base64:
-        return Response({'error': 'Could not process image'}, status=400)
+    if not image_data:
+        return Response({'error': 'Failed to process image'}, status=400)
     
     return Response({
-        'image_data': image_base64,
+        'image_data': image_data,
         'metadata': {
             'rows': image.rows,
             'columns': image.columns,
             'pixel_spacing_x': image.pixel_spacing_x,
             'pixel_spacing_y': image.pixel_spacing_y,
+            'slice_thickness': image.slice_thickness,
             'window_width': image.window_width,
             'window_center': image.window_center,
         }
@@ -184,52 +246,69 @@ def get_image_data(request, image_id):
 @api_view(['POST'])
 def save_measurement(request):
     """Save a measurement"""
-    try:
-        data = json.loads(request.body)
-        image = get_object_or_404(DicomImage, id=data['image_id'])
-        
-        measurement = Measurement.objects.create(
-            image=image,
-            measurement_type=data.get('type', 'line'),
-            coordinates=data['coordinates'],
-            value=data['value'],
-            unit=data.get('unit', 'px'),
-            notes=data.get('notes', ''),
-            created_by=request.user if request.user.is_authenticated else None,
-        )
-        
-        return JsonResponse({
-            'success': True,
-            'measurement_id': measurement.id
-        })
-        
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+    data = json.loads(request.body)
+    image_id = data.get('image_id')
+    measurement_type = data.get('type')
+    coordinates = data.get('coordinates')
+    value = data.get('value')
+    unit = data.get('unit', 'px')
+    hounsfield_units = data.get('hounsfield_units')
+    notes = data.get('notes', '')
+    
+    image = get_object_or_404(DicomImage, id=image_id)
+    
+    measurement = Measurement.objects.create(
+        image=image,
+        measurement_type=measurement_type,
+        coordinates=coordinates,
+        value=value,
+        unit=unit,
+        hounsfield_units=hounsfield_units,
+        notes=notes,
+        created_by=request.user if request.user.is_authenticated else None
+    )
+    
+    return Response({
+        'id': measurement.id,
+        'type': measurement.measurement_type,
+        'value': measurement.value,
+        'unit': measurement.unit,
+        'hounsfield_units': measurement.hounsfield_units
+    })
 
 
 @csrf_exempt  
 @api_view(['POST'])
 def save_annotation(request):
     """Save an annotation"""
-    try:
-        data = json.loads(request.body)
-        image = get_object_or_404(DicomImage, id=data['image_id'])
-        
-        annotation = Annotation.objects.create(
-            image=image,
-            x_coordinate=data['x'],
-            y_coordinate=data['y'],
-            text=data['text'],
-            created_by=request.user if request.user.is_authenticated else None,
-        )
-        
-        return JsonResponse({
-            'success': True,
-            'annotation_id': annotation.id
-        })
-        
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+    data = json.loads(request.body)
+    image_id = data.get('image_id')
+    x = data.get('x')
+    y = data.get('y')
+    text = data.get('text')
+    font_size = data.get('font_size', 14)
+    color = data.get('color', '#FF0000')
+    
+    image = get_object_or_404(DicomImage, id=image_id)
+    
+    annotation = Annotation.objects.create(
+        image=image,
+        x_coordinate=x,
+        y_coordinate=y,
+        text=text,
+        font_size=font_size,
+        color=color,
+        created_by=request.user if request.user.is_authenticated else None
+    )
+    
+    return Response({
+        'id': annotation.id,
+        'x': annotation.x_coordinate,
+        'y': annotation.y_coordinate,
+        'text': annotation.text,
+        'font_size': annotation.font_size,
+        'color': annotation.color
+    })
 
 
 @api_view(['GET'])
@@ -238,18 +317,19 @@ def get_measurements(request, image_id):
     image = get_object_or_404(DicomImage, id=image_id)
     measurements = image.measurements.all()
     
-    measurement_data = []
+    data = []
     for measurement in measurements:
-        measurement_data.append({
+        data.append({
             'id': measurement.id,
             'type': measurement.measurement_type,
             'coordinates': measurement.coordinates,
             'value': measurement.value,
             'unit': measurement.unit,
-            'notes': measurement.notes,
+            'hounsfield_units': measurement.hounsfield_units,
+            'notes': measurement.notes
         })
     
-    return Response(measurement_data)
+    return Response({'measurements': data})
 
 
 @api_view(['GET'])
@@ -258,16 +338,18 @@ def get_annotations(request, image_id):
     image = get_object_or_404(DicomImage, id=image_id)
     annotations = image.annotations.all()
     
-    annotation_data = []
+    data = []
     for annotation in annotations:
-        annotation_data.append({
+        data.append({
             'id': annotation.id,
             'x': annotation.x_coordinate,
             'y': annotation.y_coordinate,
             'text': annotation.text,
+            'font_size': annotation.font_size,
+            'color': annotation.color
         })
     
-    return Response(annotation_data)
+    return Response({'annotations': data})
 
 
 @csrf_exempt
@@ -276,85 +358,206 @@ def clear_measurements(request, image_id):
     """Clear all measurements for an image"""
     image = get_object_or_404(DicomImage, id=image_id)
     image.measurements.all().delete()
-    image.annotations.all().delete()
-    
-    return JsonResponse({'success': True})
+    return Response({'success': True})
 
 
 @csrf_exempt
 @api_view(['POST'])
 def measure_hu(request):
-    """Calculate average Hounsfield Units inside an ellipse region"""
-    try:
-        data = json.loads(request.body)
-        image = get_object_or_404(DicomImage, id=data['image_id'])
-        x0 = float(data['x0'])
-        y0 = float(data['y0'])
-        x1 = float(data['x1'])
-        y1 = float(data['y1'])
+    """Measure Hounsfield units in an ellipse region"""
+    data = json.loads(request.body)
+    image_id = data.get('image_id')
+    center_x = data.get('center_x')
+    center_y = data.get('center_y')
+    radius_x = data.get('radius_x')
+    radius_y = data.get('radius_y')
+    
+    image = get_object_or_404(DicomImage, id=image_id)
+    pixel_array = image.get_pixel_array()
+    
+    if pixel_array is None:
+        return Response({'error': 'Failed to load pixel data'}, status=400)
+    
+    # Create ellipse mask
+    y, x = np.ogrid[:pixel_array.shape[0], :pixel_array.shape[1]]
+    
+    # Normalize coordinates
+    center_x_norm = center_x / image.columns
+    center_y_norm = center_y / image.rows
+    radius_x_norm = radius_x / image.columns
+    radius_y_norm = radius_y / image.rows
+    
+    # Create mask
+    mask = ((x - center_x_norm) ** 2 / radius_x_norm ** 2 + 
+            (y - center_y_norm) ** 2 / radius_y_norm ** 2) <= 1
+    
+    # Get pixel values in ellipse
+    ellipse_pixels = pixel_array[mask]
+    
+    if len(ellipse_pixels) == 0:
+        return Response({'error': 'No pixels found in ellipse'}, status=400)
+    
+    # Calculate statistics
+    mean_hu = float(np.mean(ellipse_pixels))
+    min_hu = float(np.min(ellipse_pixels))
+    max_hu = float(np.max(ellipse_pixels))
+    std_hu = float(np.std(ellipse_pixels))
+    
+    # Save measurement
+    measurement = Measurement.objects.create(
+        image=image,
+        measurement_type='ellipse',
+        coordinates={
+            'center_x': center_x,
+            'center_y': center_y,
+            'radius_x': radius_x,
+            'radius_y': radius_y
+        },
+        value=mean_hu,
+        unit='HU',
+        hounsfield_units=mean_hu,
+        notes=f'Mean: {mean_hu:.1f} HU, Min: {min_hu:.1f} HU, Max: {max_hu:.1f} HU, Std: {std_hu:.1f} HU',
+        created_by=request.user if request.user.is_authenticated else None
+    )
+    
+    return Response({
+        'id': measurement.id,
+        'mean_hu': mean_hu,
+        'min_hu': min_hu,
+        'max_hu': max_hu,
+        'std_hu': std_hu,
+        'pixel_count': len(ellipse_pixels)
+    })
 
-        dicom_data = image.load_dicom_data()
-        if dicom_data is None or not hasattr(dicom_data, 'pixel_array'):
-            return JsonResponse({'error': 'Unable to load DICOM pixel data'}, status=400)
 
-        pixel_array = dicom_data.pixel_array.astype(np.float32)
+@api_view(['GET'])
+def get_clinical_info(request, study_id):
+    """Get clinical information for a study"""
+    study = get_object_or_404(DicomStudy, id=study_id)
+    clinical_info, created = ClinicalInformation.objects.get_or_create(study=study)
+    
+    return Response({
+        'chief_complaint': clinical_info.chief_complaint,
+        'clinical_history': clinical_info.clinical_history,
+        'physical_examination': clinical_info.physical_examination,
+        'clinical_diagnosis': clinical_info.clinical_diagnosis,
+        'referring_physician': clinical_info.referring_physician,
+    })
 
-        # Apply rescale slope/intercept for CT to convert to HU
-        rescale_slope = float(getattr(dicom_data, 'RescaleSlope', 1))
-        rescale_intercept = float(getattr(dicom_data, 'RescaleIntercept', 0))
-        pixel_array = pixel_array * rescale_slope + rescale_intercept
 
-        # Create mask for ellipse within bounding box
-        rows, cols = pixel_array.shape
-        x_min = int(max(min(x0, x1), 0))
-        x_max = int(min(max(x0, x1), cols - 1))
-        y_min = int(max(min(y0, y1), 0))
-        y_max = int(min(max(y0, y1), rows - 1))
+@csrf_exempt
+@api_view(['POST'])
+def save_clinical_info(request, study_id):
+    """Save clinical information for a study"""
+    study = get_object_or_404(DicomStudy, id=study_id)
+    data = json.loads(request.body)
+    
+    clinical_info, created = ClinicalInformation.objects.get_or_create(study=study)
+    clinical_info.chief_complaint = data.get('chief_complaint', '')
+    clinical_info.clinical_history = data.get('clinical_history', '')
+    clinical_info.physical_examination = data.get('physical_examination', '')
+    clinical_info.clinical_diagnosis = data.get('clinical_diagnosis', '')
+    clinical_info.referring_physician = data.get('referring_physician', '')
+    clinical_info.created_by = request.user if request.user.is_authenticated else None
+    clinical_info.save()
+    
+    return Response({'success': True})
 
-        if x_max <= x_min or y_max <= y_min:
-            return JsonResponse({'error': 'Invalid ellipse bounds'}, status=400)
 
-        # Ellipse parameters
-        xc = (x_min + x_max) / 2.0
-        yc = (y_min + y_max) / 2.0
-        a = (x_max - x_min) / 2.0  # semi-major axis
-        b = (y_max - y_min) / 2.0  # semi-minor axis
+@api_view(['GET'])
+def get_report(request, study_id):
+    """Get report for a study"""
+    study = get_object_or_404(DicomStudy, id=study_id)
+    report, created = Report.objects.get_or_create(study=study)
+    
+    return Response({
+        'title': report.title,
+        'findings': report.findings,
+        'impression': report.impression,
+        'recommendations': report.recommendations,
+        'status': report.status,
+    })
 
-        yy, xx = np.ogrid[y_min:y_max + 1, x_min:x_max + 1]
-        ellipse_mask = (((xx - xc) / a) ** 2 + ((yy - yc) / b) ** 2) <= 1.0
 
-        region_pixels = pixel_array[y_min:y_max + 1, x_min:x_max + 1][ellipse_mask]
-        if region_pixels.size == 0:
-            return JsonResponse({'error': 'No pixels inside region'}, status=400)
+@csrf_exempt
+@api_view(['POST'])
+def save_report(request, study_id):
+    """Save report for a study"""
+    study = get_object_or_404(DicomStudy, id=study_id)
+    data = json.loads(request.body)
+    
+    report, created = Report.objects.get_or_create(study=study)
+    report.title = data.get('title', 'Radiology Report')
+    report.findings = data.get('findings', '')
+    report.impression = data.get('impression', '')
+    report.recommendations = data.get('recommendations', '')
+    report.status = data.get('status', 'draft')
+    report.created_by = request.user if request.user.is_authenticated else None
+    report.save()
+    
+    return Response({'success': True})
 
-        mean_hu = float(np.mean(region_pixels))
-        min_hu = float(np.min(region_pixels))
-        max_hu = float(np.max(region_pixels))
 
-        # Save measurement
-        measurement = Measurement.objects.create(
-            image=image,
-            measurement_type='ellipse',
-            coordinates={'x0': x0, 'y0': y0, 'x1': x1, 'y1': y1},
-            value=mean_hu,
-            unit='HU',
-            notes=f"Min: {min_hu:.1f}, Max: {max_hu:.1f}",
-            created_by=request.user if request.user.is_authenticated else None,
-        )
-
-        return JsonResponse({
-            'success': True,
-            'measurement_id': measurement.id,
-            'mean_hu': mean_hu,
-            'min_hu': min_hu,
-            'max_hu': max_hu,
+@api_view(['GET'])
+def get_notifications(request):
+    """Get notifications for current user"""
+    if not request.user.is_authenticated:
+        return Response({'notifications': []})
+    
+    notifications = Notification.objects.filter(recipient=request.user, is_read=False)
+    
+    data = []
+    for notification in notifications:
+        data.append({
+            'id': notification.id,
+            'type': notification.notification_type,
+            'title': notification.title,
+            'message': notification.message,
+            'study_id': notification.study.id if notification.study else None,
+            'created_at': notification.created_at.isoformat(),
         })
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+    
+    return Response({'notifications': data})
+
+
+@csrf_exempt
+@api_view(['POST'])
+def mark_notification_read(request, notification_id):
+    """Mark notification as read"""
+    notification = get_object_or_404(Notification, id=notification_id, recipient=request.user)
+    notification.is_read = True
+    notification.save()
+    return Response({'success': True})
+
+
+@api_view(['GET'])
+def get_3d_reconstruction_types(request):
+    """Get available 3D reconstruction types"""
+    return Response({
+        'reconstruction_types': [
+            {'id': 'mpr', 'name': 'MPR (Multi-Planar Reconstruction)'},
+            {'id': '3d_bone', 'name': '3D Bone Reconstruction'},
+            {'id': 'angio', 'name': 'Angio Reconstruction'},
+            {'id': 'virtual_surgery', 'name': 'Virtual Surgery Planning'},
+        ]
+    })
+
+
+@api_view(['GET'])
+def get_ai_analysis_types(request):
+    """Get available AI analysis types"""
+    return Response({
+        'ai_types': [
+            {'id': 'lung_nodule', 'name': 'Lung Nodule Detection'},
+            {'id': 'brain_lesion', 'name': 'Brain Lesion Detection'},
+            {'id': 'bone_fracture', 'name': 'Bone Fracture Detection'},
+            {'id': 'tumor_segmentation', 'name': 'Tumor Segmentation'},
+        ]
+    })
 
 
 def parse_dicom_date(date_str):
-    """Parse DICOM date string to Python date"""
+    """Parse DICOM date string"""
     if not date_str:
         return None
     try:
@@ -364,14 +567,10 @@ def parse_dicom_date(date_str):
 
 
 def parse_dicom_time(time_str):
-    """Parse DICOM time string to Python time"""
+    """Parse DICOM time string"""
     if not time_str:
         return None
     try:
-        time_str = str(time_str).split('.')[0]  # Remove microseconds
-        if len(time_str) == 6:
-            return datetime.strptime(time_str, '%H%M%S').time()
-        elif len(time_str) == 4:
-            return datetime.strptime(time_str, '%H%M').time()
+        return datetime.strptime(str(time_str), '%H%M%S').time()
     except:
         return None
