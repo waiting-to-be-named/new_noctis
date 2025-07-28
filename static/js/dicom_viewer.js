@@ -10,6 +10,7 @@ class DicomViewer {
         this.currentImages = [];
         this.currentImageIndex = 0;
         this.currentImage = null;
+        this.dicomData = null; // Store raw DICOM data
         
         // Display parameters
         this.windowWidth = 400;
@@ -24,9 +25,14 @@ class DicomViewer {
         this.activeTool = 'windowing';
         this.measurements = [];
         this.annotations = [];
+        this.ellipseROIs = [];
         this.currentMeasurement = null;
+        this.currentEllipse = null;
         this.isDragging = false;
         this.dragStart = null;
+        this.selectedAnnotation = null;
+        this.measurementUnit = 'px';
+        this.pixelSpacing = { x: 1, y: 1 }; // mm per pixel
         
         // Window presets
         this.windowPresets = {
@@ -35,6 +41,14 @@ class DicomViewer {
             'soft': { ww: 400, wl: 40 },
             'brain': { ww: 100, wl: 50 }
         };
+        
+        // AI Analysis
+        this.aiHighlights = [];
+        this.aiAnalysisResults = null;
+        
+        // 3D Reconstruction
+        this.reconstructionType = 'mpr';
+        this.volumeData = null;
         
         this.init();
     }
@@ -102,7 +116,7 @@ class DicomViewer {
         
         // Load DICOM button
         document.getElementById('load-dicom-btn').addEventListener('click', () => {
-            this.showUploadModal();
+            document.getElementById('upload-modal').style.display = 'block';
         });
         
         // Clear measurements
@@ -111,13 +125,33 @@ class DicomViewer {
         });
         
         // Canvas mouse events
-        this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
-        this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
-        this.canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
-        this.canvas.addEventListener('wheel', (e) => this.onWheel(e));
+        this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
+        this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+        this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+        this.canvas.addEventListener('wheel', (e) => this.handleWheel(e));
+        this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+        
+        // Touch events for mobile
+        this.canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e));
+        this.canvas.addEventListener('touchmove', (e) => this.handleTouchMove(e));
+        this.canvas.addEventListener('touchend', (e) => this.handleTouchEnd(e));
         
         // Upload modal events
         this.setupUploadModal();
+        
+        // Backend studies dropdown
+        document.getElementById('backend-studies').addEventListener('change', (e) => {
+            if (e.target.value) {
+                this.loadStudy(e.target.value);
+            }
+        });
+        
+        // AI chat input
+        document.getElementById('ai-chat-input')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.sendAIMessage();
+            }
+        });
     }
     
     setupUploadModal() {
@@ -462,9 +496,9 @@ class DicomViewer {
             this.crosshair = !this.crosshair;
             this.updateDisplay();
         } else if (tool === 'ai') {
-            alert('AI analysis feature is not implemented yet.');
+            this.showAIAnalysis();
         } else if (tool === '3d') {
-            alert('3D reconstruction feature is not implemented yet.');
+            this.show3DReconstruction();
         } else {
             this.activeTool = tool;
         }
@@ -477,6 +511,10 @@ class DicomViewer {
         if (!['reset', 'invert', 'crosshair', 'ai', '3d'].includes(tool)) {
             document.querySelector(`[data-tool="${tool}"]`).classList.add('active');
         }
+        
+        // Show/hide Hounsfield section for ellipse tool
+        document.getElementById('hounsfield-section').style.display = 
+            tool === 'ellipse' ? 'block' : 'none';
     }
     
     applyPreset(preset) {
@@ -506,7 +544,7 @@ class DicomViewer {
     }
     
     // Mouse Events
-    onMouseDown(e) {
+    handleMouseDown(e) {
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
@@ -529,7 +567,7 @@ class DicomViewer {
         }
     }
     
-    onMouseMove(e) {
+    handleMouseMove(e) {
         if (!this.isDragging || !this.dragStart) return;
         
         const rect = this.canvas.getBoundingClientRect();
@@ -572,7 +610,7 @@ class DicomViewer {
         }
     }
     
-    onMouseUp(e) {
+    handleMouseUp(e) {
         if (this.activeTool === 'measure' && this.currentMeasurement) {
             const rect = this.canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
@@ -588,7 +626,7 @@ class DicomViewer {
         this.dragStart = null;
     }
     
-    onWheel(e) {
+    handleWheel(e) {
         e.preventDefault();
         
         if (e.ctrlKey) {
@@ -796,9 +834,201 @@ class DicomViewer {
             this.updateDisplay();
         }
     }
+
+    // AI Analysis
+    async showAIAnalysis() {
+        const aiWindow = document.getElementById('ai-analysis-window');
+        aiWindow.style.display = 'block';
+        
+        // Perform AI analysis
+        await this.performAIAnalysis();
+    }
+    
+    async performAIAnalysis() {
+        const resultsDiv = document.getElementById('ai-results');
+        resultsDiv.innerHTML = '<div class="loading">Analyzing image...</div>';
+        
+        try {
+            // Simulate AI analysis (replace with actual AI API call)
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Mock results
+            this.aiAnalysisResults = {
+                findings: [
+                    { type: 'nodule', confidence: 0.92, location: { x: 150, y: 200, width: 30, height: 30 } },
+                    { type: 'consolidation', confidence: 0.85, location: { x: 300, y: 150, width: 80, height: 60 } }
+                ],
+                summary: 'Two potential abnormalities detected. Nodule in upper right lobe (92% confidence) and consolidation in lower left lobe (85% confidence).'
+            };
+            
+            // Display results
+            resultsDiv.innerHTML = `
+                <h5>AI Analysis Results</h5>
+                <p>${this.aiAnalysisResults.summary}</p>
+                <ul>
+                    ${this.aiAnalysisResults.findings.map(finding => `
+                        <li>${finding.type} - ${Math.round(finding.confidence * 100)}% confidence</li>
+                    `).join('')}
+                </ul>
+            `;
+            
+            // Add highlights to image
+            this.aiHighlights = this.aiAnalysisResults.findings.map(finding => ({
+                ...finding.location,
+                label: finding.type,
+                color: finding.confidence > 0.9 ? '#ff0000' : '#ffaa00'
+            }));
+            
+            this.updateDisplay();
+            
+        } catch (error) {
+            resultsDiv.innerHTML = '<div class="error">Error performing AI analysis</div>';
+        }
+    }
+    
+    sendAIMessage() {
+        const input = document.getElementById('ai-chat-input');
+        const message = input.value.trim();
+        if (!message) return;
+        
+        const messagesDiv = document.getElementById('ai-chat-messages');
+        
+        // Add user message
+        messagesDiv.innerHTML += `
+            <div class="chat-message user-message">
+                <strong>You:</strong> ${message}
+            </div>
+        `;
+        
+        // Simulate AI response
+        setTimeout(() => {
+            messagesDiv.innerHTML += `
+                <div class="chat-message ai-message">
+                    <strong>AI:</strong> Based on my analysis, ${message.toLowerCase().includes('nodule') ? 
+                    'the nodule appears to be approximately 8mm in diameter with smooth borders.' : 
+                    'I can provide more details about specific findings. What would you like to know?'}
+                </div>
+            `;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }, 1000);
+        
+        input.value = '';
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+    
+    // 3D Reconstruction
+    show3DReconstruction() {
+        const panel = document.getElementById('reconstruction-panel');
+        panel.style.display = 'block';
+        
+        // Initialize 3D reconstruction
+        this.init3DReconstruction();
+    }
+    
+    init3DReconstruction() {
+        // This would typically use Three.js or similar for actual 3D rendering
+        // For now, we'll create a placeholder
+        const canvas = document.getElementById('3d-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = 400;
+        
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = '#fff';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('3D Reconstruction Placeholder', canvas.width / 2, canvas.height / 2);
+        ctx.fillText(`Mode: ${this.reconstructionType}`, canvas.width / 2, canvas.height / 2 + 30);
+    }
+    
+    changeReconstructionType() {
+        this.reconstructionType = document.getElementById('reconstruction-type').value;
+        this.init3DReconstruction();
+    }
+    
+    // Touch event handlers
+    handleTouchStart(e) {
+        const touch = e.touches[0];
+        const rect = this.canvas.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+        
+        this.handleMouseDown({ clientX: touch.clientX, clientY: touch.clientY });
+    }
+    
+    handleTouchMove(e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        this.handleMouseMove({ 
+            clientX: touch.clientX, 
+            clientY: touch.clientY,
+            buttons: 1 
+        });
+    }
+    
+    handleTouchEnd(e) {
+        this.handleMouseUp(e);
+    }
+    
+    // File handling
+    async handleFileSelect(e) {
+        const files = e.target?.files || e.dataTransfer?.files;
+        if (!files || files.length === 0) return;
+        
+        const formData = new FormData();
+        for (let file of files) {
+            formData.append('files', file);
+        }
+        
+        // Show progress
+        document.getElementById('upload-progress').style.display = 'block';
+        
+        try {
+            const response = await fetch('/api/upload/', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                // Close modal and load the uploaded study
+                document.getElementById('upload-modal').style.display = 'none';
+                await this.loadStudy(result.study_id);
+                
+                // Refresh studies dropdown
+                await this.loadBackendStudies();
+            } else {
+                alert('Error uploading files: ' + result.error);
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            alert('Error uploading files');
+        } finally {
+            document.getElementById('upload-progress').style.display = 'none';
+        }
+    }
 }
 
-// Initialize the viewer when the page loads
+// Initialize viewer
+let viewer;
 document.addEventListener('DOMContentLoaded', () => {
-    new DicomViewer();
+    viewer = new DicomViewer();
+    window.viewer = viewer; // Make it globally accessible
 });
+
+// Global functions for inline event handlers
+function sendAIMessage() {
+    viewer.sendAIMessage();
+}
+
+function changeReconstructionType() {
+    viewer.changeReconstructionType();
+}
+
+function updateMeasurementUnit() {
+    viewer.updateMeasurementUnit();
+}

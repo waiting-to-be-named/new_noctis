@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM Worklist</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/worklist.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="worklist-container">
+        <!-- Header -->
+        <div class="worklist-header">
+            <h1>DICOM Worklist</h1>
+            <div class="header-actions">
+                <div class="user-info">
+                    <span class="user-name">{{ user.get_full_name|default:user.username }}</span>
+                    <span class="user-role">{{ user.profile.get_role_display|default:"User" }}</span>
+                    {% if user.profile.facility %}
+                        <span class="user-facility">{{ user.profile.facility.name }}</span>
+                    {% endif %}
+                </div>
+                <div class="notification-badge" id="notification-badge">
+                    <i class="fas fa-bell"></i>
+                    <span class="badge-count" style="display: none;">0</span>
+                </div>
+                <button class="btn-logout" onclick="location.href='{% url 'logout' %}'">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </button>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="worklist-filters">
+            <div class="filter-group">
+                <label>Date Range:</label>
+                <input type="date" id="date-from" class="filter-input">
+                <span>to</span>
+                <input type="date" id="date-to" class="filter-input">
+            </div>
+            <div class="filter-group">
+                <label>Modality:</label>
+                <select id="modality-filter" class="filter-select">
+                    <option value="">All</option>
+                    <option value="CT">CT</option>
+                    <option value="MR">MR</option>
+                    <option value="CR">CR</option>
+                    <option value="DX">DX</option>
+                    <option value="US">US</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Status:</label>
+                <select id="status-filter" class="filter-select">
+                    <option value="">All</option>
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="verified">Verified</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Urgency:</label>
+                <select id="urgency-filter" class="filter-select">
+                    <option value="">All</option>
+                    <option value="stat">STAT</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="routine">Routine</option>
+                </select>
+            </div>
+            <button class="btn-filter" onclick="applyFilters()">
+                <i class="fas fa-filter"></i> Apply Filters
+            </button>
+        </div>
+
+        <!-- Patient List -->
+        <div class="worklist-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Patient Name</th>
+                        <th>Patient ID</th>
+                        <th>Study Date</th>
+                        <th>Modality</th>
+                        <th>Description</th>
+                        <th>Urgency</th>
+                        <th>Status</th>
+                        <th>Facility</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="patient-list">
+                    <!-- Patient rows will be dynamically inserted here -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination">
+            <button class="btn-page" onclick="changePage(-1)">
+                <i class="fas fa-chevron-left"></i> Previous
+            </button>
+            <span class="page-info">Page <span id="current-page">1</span> of <span id="total-pages">1</span></span>
+            <button class="btn-page" onclick="changePage(1)">
+                Next <i class="fas fa-chevron-right"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Clinical Information Modal -->
+    <div id="clinical-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Clinical Information</h3>
+                <button class="modal-close" onclick="closeClinicalModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="clinical-form">
+                    <input type="hidden" id="study-id" name="study_id">
+                    <div class="form-group">
+                        <label>Clinical History:</label>
+                        <textarea id="clinical-history" name="clinical_history" rows="4" class="form-textarea"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Indication:</label>
+                        <textarea id="indication" name="indication" rows="3" class="form-textarea"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Referring Physician:</label>
+                        <input type="text" id="referring-physician" name="referring_physician" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Urgency:</label>
+                        <select id="urgency" name="urgency" class="form-select">
+                            <option value="routine">Routine</option>
+                            <option value="urgent">Urgent</option>
+                            <option value="stat">STAT</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeClinicalModal()">Cancel</button>
+                <button class="btn-primary" onclick="saveClinicalInfo()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Modal -->
+    <div id="report-modal" class="modal" style="display: none;">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>Radiology Report</h3>
+                <button class="modal-close" onclick="closeReportModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="report-header" id="report-header">
+                    <!-- Facility letterhead will be inserted here -->
+                </div>
+                <form id="report-form">
+                    <input type="hidden" id="report-study-id" name="study_id">
+                    <div class="report-patient-info" id="report-patient-info">
+                        <!-- Patient information will be inserted here -->
+                    </div>
+                    <div class="form-group">
+                        <label>Findings:</label>
+                        <textarea id="findings" name="findings" rows="8" class="form-textarea"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Impression:</label>
+                        <textarea id="impression" name="impression" rows="4" class="form-textarea"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Recommendations:</label>
+                        <textarea id="recommendations" name="recommendations" rows="3" class="form-textarea"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="saveReportDraft()">Save Draft</button>
+                <button class="btn-primary" onclick="finalizeReport()">Finalize Report</button>
+                <button class="btn-print" onclick="printReport()">
+                    <i class="fas fa-print"></i> Print
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Panel -->
+    <div id="notification-panel" class="notification-panel" style="display: none;">
+        <div class="panel-header">
+            <h4>Notifications</h4>
+            <button class="btn-close" onclick="closeNotifications()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="panel-body" id="notification-list">
+            <!-- Notifications will be inserted here -->
+        </div>
+    </div>
+
+    <script src="{% static 'js/worklist.js' %}"></script>
+</body>
+</html>

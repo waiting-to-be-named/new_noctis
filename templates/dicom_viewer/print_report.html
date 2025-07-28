@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radiology Report - {{ study.patient_name }}</title>
+    <style>
+        @media print {
+            body {
+                margin: 0;
+                padding: 20mm;
+            }
+            .no-print {
+                display: none;
+            }
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: white;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 20px;
+        }
+        
+        .header img {
+            max-width: 200px;
+            margin-bottom: 10px;
+        }
+        
+        .header h1 {
+            margin: 10px 0;
+            font-size: 24px;
+        }
+        
+        .header p {
+            margin: 5px 0;
+            color: #666;
+        }
+        
+        .patient-info {
+            background: #f5f5f5;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        
+        .patient-info h2 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            color: #333;
+        }
+        
+        .info-row {
+            display: flex;
+            margin-bottom: 5px;
+        }
+        
+        .info-label {
+            font-weight: bold;
+            width: 150px;
+        }
+        
+        .report-section {
+            margin-bottom: 25px;
+        }
+        
+        .report-section h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+        }
+        
+        .report-section p {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+        
+        .signature {
+            margin-top: 50px;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }
+        
+        .signature-line {
+            margin-top: 40px;
+            border-bottom: 1px solid #333;
+            width: 300px;
+        }
+        
+        .print-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .print-button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <button class="print-button no-print" onclick="window.print()">Print Report</button>
+    
+    <div class="header">
+        {% if facility and facility.letterhead_logo %}
+            <img src="{{ facility.letterhead_logo.url }}" alt="{{ facility.name }}">
+        {% endif %}
+        <h1>{{ facility.name|default:"Medical Imaging Center" }}</h1>
+        {% if facility %}
+            <p>{{ facility.address }}</p>
+            <p>Phone: {{ facility.phone }} | Email: {{ facility.email }}</p>
+        {% endif %}
+    </div>
+    
+    <div class="patient-info">
+        <h2>Patient Information</h2>
+        <div class="info-row">
+            <span class="info-label">Patient Name:</span>
+            <span>{{ study.patient_name }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Patient ID:</span>
+            <span>{{ study.patient_id }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Study Date:</span>
+            <span>{{ study.study_date|date:"F d, Y" }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Modality:</span>
+            <span>{{ study.modality }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Study Description:</span>
+            <span>{{ study.study_description|default:"-" }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Referring Physician:</span>
+            <span>{{ study.referring_physician|default:"-" }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Accession Number:</span>
+            <span>{{ study.accession_number|default:"-" }}</span>
+        </div>
+    </div>
+    
+    {% if study.clinical_history or study.indication %}
+    <div class="report-section">
+        <h3>Clinical Information</h3>
+        {% if study.clinical_history %}
+            <div class="info-row">
+                <span class="info-label">Clinical History:</span>
+            </div>
+            <p>{{ study.clinical_history }}</p>
+        {% endif %}
+        {% if study.indication %}
+            <div class="info-row" style="margin-top: 10px;">
+                <span class="info-label">Indication:</span>
+            </div>
+            <p>{{ study.indication }}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+    
+    <div class="report-section">
+        <h3>Findings</h3>
+        <p>{{ report.findings }}</p>
+    </div>
+    
+    <div class="report-section">
+        <h3>Impression</h3>
+        <p>{{ report.impression }}</p>
+    </div>
+    
+    {% if report.recommendations %}
+    <div class="report-section">
+        <h3>Recommendations</h3>
+        <p>{{ report.recommendations }}</p>
+    </div>
+    {% endif %}
+    
+    <div class="signature">
+        <p><strong>Reported by:</strong></p>
+        <p>{{ report.radiologist.get_full_name|default:report.radiologist.username }}</p>
+        {% if report.radiologist.profile.license_number %}
+            <p>License #: {{ report.radiologist.profile.license_number }}</p>
+        {% endif %}
+        <p>Date: {{ report.finalized_at|date:"F d, Y H:i" }}</p>
+        
+        {% if report.verified_by %}
+            <div style="margin-top: 20px;">
+                <p><strong>Verified by:</strong></p>
+                <p>{{ report.verified_by.get_full_name|default:report.verified_by.username }}</p>
+                <p>Date: {{ report.updated_at|date:"F d, Y H:i" }}</p>
+            </div>
+        {% endif %}
+        
+        <div class="signature-line"></div>
+        <p style="margin-top: 10px;">Signature</p>
+    </div>
+    
+    <div style="margin-top: 40px; text-align: center; color: #666; font-size: 12px;">
+        <p>This report is confidential and intended solely for the use of the individual or entity to whom it is addressed.</p>
+        <p>Report ID: {{ report.id }} | Version: {{ report.version }}</p>
+    </div>
+</body>
+</html>

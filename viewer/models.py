@@ -9,6 +9,44 @@ from PIL import Image
 import numpy as np
 import io
 import base64
+from django.utils import timezone
+
+
+class Facility(models.Model):
+    """Model to represent medical facilities"""
+    name = models.CharField(max_length=200)
+    code = models.CharField(max_length=50, unique=True)
+    address = models.TextField(blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    email = models.EmailField(blank=True)
+    letterhead_logo = models.ImageField(upload_to='facility_logos/', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name_plural = "Facilities"
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+
+
+class UserProfile(models.Model):
+    """Extended user profile for role management"""
+    USER_ROLES = [
+        ('radiologist', 'Radiologist'),
+        ('admin', 'Administrator'),
+        ('technician', 'Technician'),
+        ('referring_physician', 'Referring Physician'),
+    ]
+    
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    role = models.CharField(max_length=20, choices=USER_ROLES, default='technician')
+    facility = models.ForeignKey(Facility, on_delete=models.SET_NULL, null=True, blank=True)
+    license_number = models.CharField(max_length=50, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.role}"
 
 
 class DicomStudy(models.Model):
@@ -23,6 +61,26 @@ class DicomStudy(models.Model):
     institution_name = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    facility = models.ForeignKey(Facility, on_delete=models.SET_NULL, null=True, blank=True)
+    accession_number = models.CharField(max_length=50, blank=True)
+    referring_physician = models.CharField(max_length=200, blank=True)
+    
+    # Clinical information
+    clinical_history = models.TextField(blank=True)
+    indication = models.TextField(blank=True)
+    urgency = models.CharField(max_length=20, choices=[
+        ('routine', 'Routine'),
+        ('urgent', 'Urgent'),
+        ('stat', 'STAT'),
+    ], default='routine')
+    
+    # Report status
+    report_status = models.CharField(max_length=20, choices=[
+        ('pending', 'Pending'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('verified', 'Verified'),
+    ], default='pending')
     
     class Meta:
         ordering = ['-created_at']
@@ -209,3 +267,80 @@ class Annotation(models.Model):
     
     def __str__(self):
         return f"Annotation: {self.text[:50]}"
+
+
+class Report(models.Model):
+    """Model for radiology reports"""
+    study = models.ForeignKey(DicomStudy, on_delete=models.CASCADE, related_name='reports')
+    radiologist = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reports_created')
+    findings = models.TextField()
+    impression = models.TextField()
+    recommendations = models.TextField(blank=True)
+    
+    # Report metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    finalized_at = models.DateTimeField(null=True, blank=True)
+    verified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reports_verified')
+    
+    # Report status
+    status = models.CharField(max_length=20, choices=[
+        ('draft', 'Draft'),
+        ('finalized', 'Finalized'),
+        ('verified', 'Verified'),
+        ('amended', 'Amended'),
+    ], default='draft')
+    
+    # Version control
+    version = models.IntegerField(default=1)
+    previous_version = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Report for {self.study.patient_name} - {self.created_at.date()}"
+    
+    def finalize(self):
+        """Mark report as finalized"""
+        self.status = 'finalized'
+        self.finalized_at = timezone.now()
+        self.save()
+
+
+class Notification(models.Model):
+    """Model for system notifications"""
+    NOTIFICATION_TYPES = [
+        ('new_study', 'New Study Available'),
+        ('report_completed', 'Report Completed'),
+        ('urgent_study', 'Urgent Study'),
+        ('report_verified', 'Report Verified'),
+    ]
+    
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    study = models.ForeignKey(DicomStudy, on_delete=models.CASCADE, null=True, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.notification_type} - {self.recipient.username}"
+
+
+class MeasurementPreset(models.Model):
+    """Model for measurement presets"""
+    name = models.CharField(max_length=100)
+    modality = models.CharField(max_length=10)
+    body_part = models.CharField(max_length=50)
+    measurement_type = models.CharField(max_length=20)
+    normal_range_min = models.FloatField(null=True, blank=True)
+    normal_range_max = models.FloatField(null=True, blank=True)
+    unit = models.CharField(max_length=10, default='mm')
+    
+    def __str__(self):
+        return f"{self.name} ({self.modality})"

@@ -1,0 +1,641 @@
+/* Worklist Styles */
+:root {
+    --bg-primary: #2c2c2c;
+    --bg-secondary: #3a3a3a;
+    --bg-tertiary: #4a4a4a;
+    --text-primary: #ffffff;
+    --text-secondary: #b0b0b0;
+    --accent-green: #4CAF50;
+    --accent-green-light: #6FD672;
+    --accent-red: #f44336;
+    --accent-yellow: #ff9800;
+    --border-color: #555555;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+}
+
+.worklist-container {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header */
+.worklist-header {
+    background-color: var(--bg-secondary);
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.worklist-header h1 {
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: var(--accent-green);
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+}
+
+.user-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    font-size: 0.875rem;
+}
+
+.user-name {
+    font-weight: 500;
+}
+
+.user-role {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+}
+
+.user-facility {
+    color: var(--accent-green);
+    font-size: 0.75rem;
+}
+
+.notification-badge {
+    position: relative;
+    cursor: pointer;
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+    transition: color 0.3s;
+}
+
+.notification-badge:hover {
+    color: var(--text-primary);
+}
+
+.badge-count {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background-color: var(--accent-red);
+    color: white;
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 20px;
+    text-align: center;
+}
+
+.btn-logout {
+    background-color: transparent;
+    border: 1px solid var(--accent-red);
+    color: var(--accent-red);
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.3s;
+}
+
+.btn-logout:hover {
+    background-color: var(--accent-red);
+    color: white;
+}
+
+/* Filters */
+.worklist-filters {
+    background-color: var(--bg-secondary);
+    padding: 1rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.filter-group label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.filter-input,
+.filter-select {
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.875rem;
+}
+
+.filter-select {
+    min-width: 120px;
+}
+
+.btn-filter {
+    background-color: var(--accent-green);
+    border: none;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: background-color 0.3s;
+}
+
+.btn-filter:hover {
+    background-color: var(--accent-green-light);
+}
+
+/* Table */
+.worklist-table {
+    flex: 1;
+    overflow-y: auto;
+    background-color: var(--bg-primary);
+}
+
+.worklist-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.worklist-table thead {
+    position: sticky;
+    top: 0;
+    background-color: var(--bg-secondary);
+    z-index: 10;
+}
+
+.worklist-table th {
+    padding: 1rem;
+    text-align: left;
+    font-weight: 500;
+    color: var(--text-secondary);
+    border-bottom: 2px solid var(--border-color);
+    font-size: 0.875rem;
+}
+
+.worklist-table td {
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.875rem;
+}
+
+.worklist-table tbody tr {
+    background-color: var(--bg-secondary);
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+.worklist-table tbody tr:hover {
+    background-color: var(--bg-tertiary);
+    border-left: 4px solid var(--accent-green);
+}
+
+.worklist-table tbody tr.selected {
+    background-color: rgba(76, 175, 80, 0.1);
+    border-left: 4px solid var(--accent-green);
+}
+
+/* Status badges */
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.status-pending {
+    background-color: rgba(255, 152, 0, 0.2);
+    color: var(--accent-yellow);
+}
+
+.status-in-progress {
+    background-color: rgba(33, 150, 243, 0.2);
+    color: #2196F3;
+}
+
+.status-completed {
+    background-color: rgba(76, 175, 80, 0.2);
+    color: var(--accent-green);
+}
+
+.status-verified {
+    background-color: rgba(156, 39, 176, 0.2);
+    color: #9C27B0;
+}
+
+/* Urgency badges */
+.urgency-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.urgency-stat {
+    background-color: rgba(244, 67, 54, 0.2);
+    color: var(--accent-red);
+    animation: pulse 2s infinite;
+}
+
+.urgency-urgent {
+    background-color: rgba(255, 152, 0, 0.2);
+    color: var(--accent-yellow);
+}
+
+.urgency-routine {
+    background-color: rgba(76, 175, 80, 0.2);
+    color: var(--accent-green);
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(244, 67, 54, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(244, 67, 54, 0);
+    }
+}
+
+/* Action buttons */
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-action {
+    background-color: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 0.375rem 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    transition: all 0.3s;
+}
+
+.btn-action:hover {
+    border-color: var(--accent-green);
+    color: var(--accent-green);
+}
+
+.btn-view {
+    background-color: var(--accent-green);
+    border-color: var(--accent-green);
+    color: white;
+}
+
+.btn-view:hover {
+    background-color: var(--accent-green-light);
+    border-color: var(--accent-green-light);
+}
+
+/* Pagination */
+.pagination {
+    background-color: var(--bg-secondary);
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 2rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.btn-page {
+    background-color: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.3s;
+}
+
+.btn-page:hover:not(:disabled) {
+    border-color: var(--accent-green);
+    color: var(--accent-green);
+}
+
+.btn-page:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.page-info {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+/* Modals */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: var(--bg-secondary);
+    border-radius: 8px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-large {
+    max-width: 900px;
+}
+
+.modal-header {
+    background-color: var(--bg-tertiary);
+    padding: 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h3 {
+    font-size: 1.25rem;
+    font-weight: 500;
+}
+
+.modal-close {
+    background-color: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: color 0.3s;
+}
+
+.modal-close:hover {
+    color: var(--text-primary);
+}
+
+.modal-body {
+    padding: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.modal-footer {
+    background-color: var(--bg-tertiary);
+    padding: 1rem 1.5rem;
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+/* Form elements */
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.form-input,
+.form-select,
+.form-textarea {
+    width: 100%;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 0.75rem;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    transition: border-color 0.3s;
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+    outline: none;
+    border-color: var(--accent-green);
+}
+
+.form-textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+/* Buttons */
+.btn-primary {
+    background-color: var(--accent-green);
+    border: none;
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: background-color 0.3s;
+}
+
+.btn-primary:hover {
+    background-color: var(--accent-green-light);
+}
+
+.btn-secondary {
+    background-color: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.3s;
+}
+
+.btn-secondary:hover {
+    border-color: var(--text-primary);
+}
+
+.btn-print {
+    background-color: transparent;
+    border: 1px solid var(--accent-green);
+    color: var(--accent-green);
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.3s;
+}
+
+.btn-print:hover {
+    background-color: var(--accent-green);
+    color: white;
+}
+
+/* Report styles */
+.report-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.report-header img {
+    max-width: 200px;
+    margin-bottom: 1rem;
+}
+
+.report-patient-info {
+    background-color: var(--bg-tertiary);
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1.5rem;
+    font-size: 0.875rem;
+}
+
+.report-patient-info div {
+    margin-bottom: 0.5rem;
+}
+
+.report-patient-info strong {
+    color: var(--accent-green);
+    margin-right: 0.5rem;
+}
+
+/* Notification panel */
+.notification-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 400px;
+    height: 100vh;
+    background-color: var(--bg-secondary);
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.3s;
+}
+
+.notification-panel.show {
+    transform: translateX(0);
+}
+
+.panel-header {
+    background-color: var(--bg-tertiary);
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.notification-item {
+    background-color: var(--bg-tertiary);
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    border-left: 4px solid transparent;
+}
+
+.notification-item:hover {
+    transform: translateX(5px);
+}
+
+.notification-item.unread {
+    border-left-color: var(--accent-green);
+}
+
+.notification-item .notification-type {
+    font-size: 0.75rem;
+    color: var(--accent-green);
+    margin-bottom: 0.25rem;
+}
+
+.notification-item .notification-title {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.notification-item .notification-message {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.notification-item .notification-time {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* Print styles */
+@media print {
+    body {
+        background-color: white;
+        color: black;
+    }
+    
+    .modal-header,
+    .modal-footer {
+        display: none;
+    }
+    
+    .modal-content {
+        box-shadow: none;
+        max-width: 100%;
+        background-color: white;
+    }
+    
+    .report-header img {
+        max-width: 150px;
+    }
+    
+    .form-textarea {
+        border: none;
+        background-color: transparent;
+    }
+}

@@ -29,6 +29,10 @@
                     <i class="fas fa-ruler"></i>
                     <span>Measure</span>
                 </button>
+                <button class="tool-btn" data-tool="ellipse" title="Ellipse ROI">
+                    <i class="fas fa-circle"></i>
+                    <span>Ellipse</span>
+                </button>
                 <button class="tool-btn" data-tool="annotate" title="Annotate">
                     <i class="fas fa-edit"></i>
                     <span>Annotate</span>
@@ -61,12 +65,12 @@
             <!-- Top Bar -->
             <div class="top-bar">
                 <div class="top-controls">
-                    <button id="load-dicom-btn" class="primary-btn">
+                    <button id="load-dicom-btn" class="primary-btn" onclick="redirectToWorklist()">
                         <i class="fas fa-upload"></i>
-                        Load DICOM Files
+                        Load DICOM from System
                     </button>
                     <select id="backend-studies" class="form-select">
-                        <option value="">Select DICOM from System</option>
+                        <option value="">Select DICOM Study</option>
                     </select>
                     <div class="patient-info" id="patient-info">
                         Patient: - | Study Date: - | Modality: -
@@ -94,6 +98,57 @@
                 <div id="crosshair" class="crosshair" style="display: none;">
                     <div class="crosshair-h"></div>
                     <div class="crosshair-v"></div>
+                </div>
+
+                <!-- Draggable Annotations -->
+                <div id="annotations-container" class="annotations-container"></div>
+
+                <!-- AI Analysis Window -->
+                <div id="ai-analysis-window" class="ai-analysis-window" style="display: none;">
+                    <div class="ai-window-header">
+                        <h4>AI Analysis</h4>
+                        <button class="ai-window-close" onclick="closeAIWindow()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="ai-window-body">
+                        <div id="ai-results" class="ai-results"></div>
+                        <div class="ai-chat">
+                            <div id="ai-chat-messages" class="ai-chat-messages"></div>
+                            <div class="ai-chat-input">
+                                <input type="text" id="ai-chat-input" placeholder="Ask about the analysis...">
+                                <button onclick="sendAIMessage()">
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3D Reconstruction Panel -->
+                <div id="reconstruction-panel" class="reconstruction-panel" style="display: none;">
+                    <div class="panel-header">
+                        <h4>3D Reconstruction</h4>
+                        <button class="panel-close" onclick="close3DPanel()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="panel-body">
+                        <select id="reconstruction-type" class="form-select" onchange="changeReconstructionType()">
+                            <option value="mpr">MPR (Multiplanar Reconstruction)</option>
+                            <option value="3d-bone">3D Bone</option>
+                            <option value="angio">Angio Reconstruction</option>
+                            <option value="virtual-surgery">Virtual Surgery</option>
+                        </select>
+                        <div id="reconstruction-viewport" class="reconstruction-viewport">
+                            <canvas id="3d-canvas"></canvas>
+                        </div>
+                        <div class="reconstruction-controls">
+                            <button class="btn-control" onclick="resetView()">Reset View</button>
+                            <button class="btn-control" onclick="saveView()">Save View</button>
+                            <button class="btn-control" onclick="exportSTL()">Export STL</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -181,8 +236,43 @@
                 <!-- Measurements Section -->
                 <div class="panel-section">
                     <h3 class="section-title">Measurements</h3>
+                    <div class="measurement-controls">
+                        <label>Unit:</label>
+                        <select id="measurement-unit" class="form-select" onchange="updateMeasurementUnit()">
+                            <option value="px">Pixels</option>
+                            <option value="mm">Millimeters</option>
+                            <option value="cm">Centimeters</option>
+                        </select>
+                    </div>
                     <button id="clear-measurements" class="secondary-btn">Clear All</button>
                     <div id="measurements-list" class="measurements-list"></div>
+                </div>
+
+                <!-- Hounsfield Units Section -->
+                <div class="panel-section" id="hounsfield-section" style="display: none;">
+                    <h3 class="section-title">Hounsfield Units</h3>
+                    <div id="hounsfield-info" class="hounsfield-info">
+                        <div class="info-item">
+                            <label>Mean HU:</label>
+                            <span id="hu-mean">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>Min HU:</label>
+                            <span id="hu-min">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>Max HU:</label>
+                            <span id="hu-max">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>Std Dev:</label>
+                            <span id="hu-std">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>Area:</label>
+                            <span id="roi-area">-</span>
+                        </div>
+                    </div>
                 </div>
 
             </div>
@@ -216,5 +306,33 @@
     <input type="file" id="hidden-file-input" multiple accept=".dcm,.dicom" style="display: none;">
 
     <script src="{% static 'js/dicom_viewer.js' %}"></script>
+    <script>
+        // Redirect to worklist when clicking Load DICOM from System
+        function redirectToWorklist() {
+            window.location.href = '/worklist/';
+        }
+
+        // Close AI window
+        function closeAIWindow() {
+            document.getElementById('ai-analysis-window').style.display = 'none';
+        }
+
+        // Close 3D panel
+        function close3DPanel() {
+            document.getElementById('reconstruction-panel').style.display = 'none';
+        }
+
+        // Check if study_id is in URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const studyId = urlParams.get('study_id');
+        if (studyId) {
+            // Load the study automatically
+            window.addEventListener('DOMContentLoaded', function() {
+                if (window.viewer) {
+                    window.viewer.loadStudyById(studyId);
+                }
+            });
+        }
+    </script>
 </body>
 </html>
