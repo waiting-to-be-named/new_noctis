@@ -17,6 +17,7 @@ from datetime import datetime
 import numpy as np
 from .models import DicomStudy, DicomSeries, DicomImage, Measurement, Annotation
 from .serializers import DicomStudySerializer, DicomImageSerializer
+from .ai_models import analyze_dicom_image, MedicalImageAnalyzer
 
 
 class DicomViewerView(TemplateView):
@@ -279,6 +280,91 @@ def clear_measurements(request, image_id):
     image.annotations.all().delete()
     
     return JsonResponse({'success': True})
+
+
+@api_view(['POST'])
+def ai_analyze_image(request, image_id):
+    """AI-powered image analysis"""
+    try:
+        analysis_type = request.data.get('analysis_type', 'basic')
+        result = analyze_dicom_image(image_id, analysis_type)
+        
+        if 'error' in result:
+            return Response({'error': result['error']}, status=400)
+        
+        return Response({
+            'success': True,
+            'analysis_type': analysis_type,
+            'results': result
+        })
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
+
+
+@api_view(['GET'])
+def ai_suggest_window_level(request, image_id):
+    """Get AI-suggested window/level settings"""
+    try:
+        image = get_object_or_404(DicomImage, id=image_id)
+        pixel_array = image.get_pixel_array()
+        
+        if pixel_array is None:
+            return Response({'error': 'Could not load pixel data'}, status=400)
+        
+        analyzer = MedicalImageAnalyzer()
+        suggestions = analyzer.suggest_window_level(pixel_array, image.series.modality)
+        
+        return Response({
+            'success': True,
+            'modality': image.series.modality,
+            'suggestions': suggestions
+        })
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
+
+
+@api_view(['POST'])
+def ai_enhance_image(request, image_id):
+    """Apply AI-based image enhancement"""
+    try:
+        enhancement_type = request.data.get('enhancement_type', 'contrast')
+        image = get_object_or_404(DicomImage, id=image_id)
+        pixel_array = image.get_pixel_array()
+        
+        if pixel_array is None:
+            return Response({'error': 'Could not load pixel data'}, status=400)
+        
+        analyzer = MedicalImageAnalyzer()
+        
+        if enhancement_type == 'contrast':
+            enhanced = analyzer.enhance_contrast(pixel_array)
+        elif enhancement_type == 'denoise':
+            enhanced = analyzer.denoise_image(pixel_array)
+        elif enhancement_type == 'edges':
+            enhanced = analyzer.detect_edges(pixel_array)
+        else:
+            return Response({'error': 'Invalid enhancement type'}, status=400)
+        
+        # Convert enhanced image to base64 for display
+        from PIL import Image
+        import io
+        import base64
+        
+        pil_image = Image.fromarray(enhanced, mode='L')
+        buffer = io.BytesIO()
+        pil_image.save(buffer, format='PNG')
+        enhanced_base64 = base64.b64encode(buffer.getvalue()).decode()
+        
+        return Response({
+            'success': True,
+            'enhancement_type': enhancement_type,
+            'enhanced_image': f"data:image/png;base64,{enhanced_base64}"
+        })
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
 
 
 def parse_dicom_date(date_str):
