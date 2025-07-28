@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM Viewer - Medical Imaging System</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/dicom_viewer.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .launcher-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 800px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .logo-section {
+            margin-bottom: 40px;
+        }
+
+        .system-logo {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .system-logo i {
+            font-size: 40px;
+            color: white;
+        }
+
+        .system-title {
+            font-size: 32px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .system-subtitle {
+            font-size: 18px;
+            color: #718096;
+            margin-bottom: 40px;
+        }
+
+        .user-welcome {
+            background: #f7fafc;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 40px;
+            border-left: 4px solid #667eea;
+        }
+
+        .user-name {
+            font-size: 20px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .user-role {
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        .user-facility {
+            color: #718096;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .launcher-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .launcher-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 15px;
+            padding: 30px 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .launcher-card:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .launcher-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .card-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 15px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            font-size: 24px;
+            color: white;
+        }
+
+        .worklist-icon {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        }
+
+        .viewer-icon {
+            background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+        }
+
+        .upload-icon {
+            background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+        }
+
+        .card-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .card-description {
+            color: #718096;
+            line-height: 1.5;
+        }
+
+        .stats-section {
+            background: #f7fafc;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: 700;
+            color: #667eea;
+            display: block;
+        }
+
+        .stat-label {
+            color: #718096;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .footer-info {
+            border-top: 1px solid #e2e8f0;
+            padding-top: 20px;
+            color: #718096;
+            font-size: 14px;
+        }
+
+        .access-restricted {
+            opacity: 0.6;
+            pointer-events: none;
+            position: relative;
+        }
+
+        .access-restricted::after {
+            content: 'Access Restricted';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="launcher-container">
+        <!-- System Logo and Title -->
+        <div class="logo-section">
+            <div class="system-logo">
+                <i class="fas fa-user-md"></i>
+            </div>
+            <h1 class="system-title">DICOM Medical Viewer</h1>
+            <p class="system-subtitle">Advanced Medical Imaging System</p>
+        </div>
+
+        <!-- User Welcome -->
+        <div class="user-welcome">
+            <div class="user-name">Welcome, {{ user.get_full_name|default:user.username }}</div>
+            <div class="user-role">
+                {% if user_profile.role == 'radiologist' %}
+                    <i class="fas fa-stethoscope"></i> Radiologist
+                {% elif user_profile.role == 'admin' %}
+                    <i class="fas fa-user-shield"></i> Administrator
+                {% elif user_profile.role == 'facility' %}
+                    <i class="fas fa-hospital"></i> Facility User
+                {% else %}
+                    <i class="fas fa-user"></i> User
+                {% endif %}
+            </div>
+            {% if user_profile.facility %}
+                <div class="user-facility">{{ user_profile.facility.name }}</div>
+            {% endif %}
+        </div>
+
+        <!-- Quick Stats -->
+        {% if can_access_all_facilities or user_profile.role in 'radiologist,admin' %}
+            <div class="stats-section">
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-number" id="total-studies">--</span>
+                        <div class="stat-label">Total Studies</div>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number" id="pending-reports">--</span>
+                        <div class="stat-label">Pending Reports</div>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number" id="today-studies">--</span>
+                        <div class="stat-label">Today's Studies</div>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number" id="facilities-count">--</span>
+                        <div class="stat-label">Active Facilities</div>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- Launcher Grid -->
+        <div class="launcher-grid">
+            <!-- Patient Worklist -->
+            <a href="{% url 'viewer:worklist' %}" class="launcher-card">
+                <div class="card-icon worklist-icon">
+                    <i class="fas fa-list-ul"></i>
+                </div>
+                <div class="card-title">Patient Worklist</div>
+                <div class="card-description">
+                    View and manage patient studies, add clinical information, and write reports.
+                </div>
+            </a>
+
+            <!-- DICOM Viewer -->
+            <a href="{% url 'viewer:viewer' %}" class="launcher-card">
+                <div class="card-icon viewer-icon">
+                    <i class="fas fa-eye"></i>
+                </div>
+                <div class="card-title">DICOM Viewer</div>
+                <div class="card-description">
+                    Advanced medical image viewer with measurement tools, 3D visualization, and AI analysis.
+                </div>
+            </a>
+
+            <!-- Upload DICOM -->
+            <div class="launcher-card" onclick="showUploadModal()">
+                <div class="card-icon upload-icon">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                </div>
+                <div class="card-title">Upload Studies</div>
+                <div class="card-description">
+                    Upload new DICOM studies to the system for analysis and reporting.
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer-info">
+            <p>
+                <i class="fas fa-shield-alt"></i>
+                This system complies with HIPAA regulations and medical imaging standards.
+            </p>
+            <p>Last login: {{ user.last_login|date:"F d, Y g:i A"|default:"First time login" }}</p>
+        </div>
+    </div>
+
+    <!-- Upload Modal -->
+    <div id="upload-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: white; border-radius: 15px; padding: 30px; max-width: 500px; width: 90%;">
+            <h3 style="margin-top: 0; color: #2d3748;">Upload DICOM Files</h3>
+            <div id="upload-area" style="border: 2px dashed #ccc; border-radius: 10px; padding: 40px; text-align: center; cursor: pointer; margin-bottom: 20px;">
+                <i class="fas fa-cloud-upload-alt" style="font-size: 48px; color: #ccc; margin-bottom: 15px;"></i>
+                <p>Drag and drop DICOM files here or click to browse</p>
+                <input type="file" id="file-input" multiple accept=".dcm" style="display: none;">
+            </div>
+            <div id="upload-progress" style="display: none; margin-bottom: 20px;">
+                <div style="background: #f0f0f0; border-radius: 10px; overflow: hidden;">
+                    <div id="progress-bar" style="background: #667eea; height: 10px; width: 0%; transition: width 0.3s;"></div>
+                </div>
+                <p id="progress-text" style="text-align: center; margin-top: 10px;">Uploading...</p>
+            </div>
+            <div style="text-align: right;">
+                <button onclick="closeUploadModal()" style="background: #e2e8f0; border: none; padding: 10px 20px; border-radius: 5px; margin-right: 10px; cursor: pointer;">Cancel</button>
+                <button id="upload-btn" onclick="uploadFiles()" style="background: #667eea; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;" disabled>Upload</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Load stats on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStats();
+            setupUploadHandler();
+        });
+
+        function loadStats() {
+            {% if can_access_all_facilities or user_profile.role in 'radiologist,admin' %}
+                fetch('/api/stats/')
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById('total-studies').textContent = data.total_studies || 0;
+                        document.getElementById('pending-reports').textContent = data.pending_reports || 0;
+                        document.getElementById('today-studies').textContent = data.today_studies || 0;
+                        document.getElementById('facilities-count').textContent = data.facilities_count || 0;
+                    })
+                    .catch(error => console.error('Error loading stats:', error));
+            {% endif %}
+        }
+
+        function showUploadModal() {
+            document.getElementById('upload-modal').style.display = 'flex';
+        }
+
+        function closeUploadModal() {
+            document.getElementById('upload-modal').style.display = 'none';
+            document.getElementById('file-input').value = '';
+            document.getElementById('upload-btn').disabled = true;
+            document.getElementById('upload-progress').style.display = 'none';
+        }
+
+        function setupUploadHandler() {
+            const uploadArea = document.getElementById('upload-area');
+            const fileInput = document.getElementById('file-input');
+            const uploadBtn = document.getElementById('upload-btn');
+
+            uploadArea.addEventListener('click', () => fileInput.click());
+
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.style.borderColor = '#667eea';
+                uploadArea.style.backgroundColor = '#f7fafc';
+            });
+
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.style.borderColor = '#ccc';
+                uploadArea.style.backgroundColor = 'transparent';
+            });
+
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.style.borderColor = '#ccc';
+                uploadArea.style.backgroundColor = 'transparent';
+                
+                const files = Array.from(e.dataTransfer.files);
+                handleFileSelection(files);
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                const files = Array.from(e.target.files);
+                handleFileSelection(files);
+            });
+        }
+
+        function handleFileSelection(files) {
+            const dicomFiles = files.filter(file => file.name.toLowerCase().endsWith('.dcm'));
+            
+            if (dicomFiles.length > 0) {
+                document.getElementById('upload-btn').disabled = false;
+                document.getElementById('upload-area').innerHTML = `
+                    <i class="fas fa-check-circle" style="font-size: 48px; color: #48bb78; margin-bottom: 15px;"></i>
+                    <p>${dicomFiles.length} DICOM file(s) selected</p>
+                `;
+            } else {
+                alert('Please select valid DICOM files (.dcm)');
+            }
+        }
+
+        function uploadFiles() {
+            const fileInput = document.getElementById('file-input');
+            const files = fileInput.files;
+            
+            if (files.length === 0) return;
+
+            const formData = new FormData();
+            Array.from(files).forEach(file => {
+                formData.append('files', file);
+            });
+
+            document.getElementById('upload-progress').style.display = 'block';
+            document.getElementById('upload-btn').disabled = true;
+
+            fetch('/api/upload/', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('progress-bar').style.width = '100%';
+                
+                if (data.success) {
+                    document.getElementById('progress-text').textContent = 'Upload complete!';
+                    setTimeout(() => {
+                        closeUploadModal();
+                        if (data.study_id) {
+                            window.location.href = `/viewer/?study_id=${data.study_id}`;
+                        } else {
+                            window.location.href = '/worklist/';
+                        }
+                    }, 1000);
+                } else {
+                    document.getElementById('progress-text').textContent = 'Upload failed: ' + data.error;
+                }
+            })
+            .catch(error => {
+                console.error('Upload error:', error);
+                document.getElementById('progress-text').textContent = 'Upload failed';
+            });
+        }
+
+        // CSRF Token
+        function getCSRFToken() {
+            return document.querySelector('[name=csrfmiddlewaretoken]').value;
+        }
+    </script>
+
+    <!-- CSRF Token -->
+    {% csrf_token %}
+</body>
+</html>

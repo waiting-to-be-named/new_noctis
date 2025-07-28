@@ -3,12 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Django DICOM Viewer</title>
+    <title>Advanced DICOM Viewer</title>
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/dicom_viewer.css' %}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
+    <!-- Notification Area -->
+    <div id="notification-area" class="notification-area"></div>
+
+    <!-- User Info Bar -->
+    <div class="user-info-bar">
+        <div class="user-details">
+            <span class="user-name">{{ user.get_full_name|default:user.username }}</span>
+            <span class="user-role">{{ user.profile.role|capfirst }}</span>
+            <span class="facility-name">{{ user.profile.facility.name|default:"No Facility" }}</span>
+        </div>
+        <div class="nav-buttons">
+            <button id="worklist-btn" class="nav-btn">
+                <i class="fas fa-list"></i>
+                Worklist
+            </button>
+            <button id="logout-btn" class="nav-btn">
+                <i class="fas fa-sign-out-alt"></i>
+                Logout
+            </button>
+        </div>
+    </div>
+
     <div id="dicom-viewer" class="dicom-viewer">
         <!-- Left Toolbar -->
         <div class="toolbar">
@@ -29,6 +51,10 @@
                     <i class="fas fa-ruler"></i>
                     <span>Measure</span>
                 </button>
+                <button class="tool-btn" data-tool="ellipse" title="Ellipse Measure">
+                    <i class="fas fa-circle"></i>
+                    <span>Ellipse</span>
+                </button>
                 <button class="tool-btn" data-tool="annotate" title="Annotate">
                     <i class="fas fa-edit"></i>
                     <span>Annotate</span>
@@ -38,7 +64,7 @@
                     <span>Crosshair</span>
                 </button>
                 <button class="tool-btn" data-tool="invert" title="Invert">
-                    <i class="fas fa-circle"></i>
+                    <i class="fas fa-adjust"></i>
                     <span>Invert</span>
                 </button>
                 <button class="tool-btn" data-tool="reset" title="Reset">
@@ -53,6 +79,17 @@
                     <i class="fas fa-cube"></i>
                     <span>3D</span>
                 </button>
+            </div>
+
+            <!-- Measurement Units -->
+            <div class="measurement-controls">
+                <label for="measurement-unit">Unit:</label>
+                <select id="measurement-unit" class="tool-select">
+                    <option value="mm">mm</option>
+                    <option value="cm">cm</option>
+                    <option value="px">pixels</option>
+                    <option value="HU">HU</option>
+                </select>
             </div>
         </div>
 
@@ -74,26 +111,46 @@
                 </div>
             </div>
 
-            <!-- Viewport -->
-            <div class="viewport">
-                <canvas id="dicom-canvas" class="dicom-canvas"></canvas>
-                
-                <!-- Overlay Labels -->
-                <div class="overlay-labels">
-                    <div class="wl-info" id="wl-info">
-                        WW: 400<br>
-                        WL: 40<br>
-                        Slice: 1/1
+            <!-- Viewport Container -->
+            <div class="viewport-container">
+                <!-- Main Viewport -->
+                <div class="viewport">
+                    <canvas id="dicom-canvas" class="dicom-canvas"></canvas>
+                    
+                    <!-- Overlay Labels -->
+                    <div class="overlay-labels">
+                        <div class="wl-info" id="wl-info">
+                            WW: 400<br>
+                            WL: 40<br>
+                            Slice: 1/1
+                        </div>
+                        <div class="zoom-info" id="zoom-info">
+                            Zoom: 100%
+                        </div>
                     </div>
-                    <div class="zoom-info" id="zoom-info">
-                        Zoom: 100%
+
+                    <!-- Crosshair -->
+                    <div id="crosshair" class="crosshair" style="display: none;">
+                        <div class="crosshair-h"></div>
+                        <div class="crosshair-v"></div>
                     </div>
                 </div>
 
-                <!-- Crosshair -->
-                <div id="crosshair" class="crosshair" style="display: none;">
-                    <div class="crosshair-h"></div>
-                    <div class="crosshair-v"></div>
+                <!-- 3D Viewport (Initially Hidden) -->
+                <div id="viewport-3d" class="viewport-3d" style="display: none;">
+                    <div class="viewport-3d-controls">
+                        <select id="reconstruction-type" class="form-select">
+                            <option value="mpr">MPR</option>
+                            <option value="3d-bone">3D Bone</option>
+                            <option value="angio">Angiography</option>
+                            <option value="virtual-surgery">Virtual Surgery</option>
+                        </select>
+                        <button id="close-3d" class="secondary-btn">
+                            <i class="fas fa-times"></i>
+                            Close 3D
+                        </button>
+                    </div>
+                    <div id="threejs-container" class="threejs-container"></div>
                 </div>
             </div>
         </div>
@@ -185,6 +242,162 @@
                     <div id="measurements-list" class="measurements-list"></div>
                 </div>
 
+                <!-- Clinical Information (if user has access) -->
+                {% if user.profile.role in 'radiologist,admin' %}
+                <div class="panel-section">
+                    <h3 class="section-title">Clinical Information</h3>
+                    <button id="edit-clinical-info" class="secondary-btn">Edit Clinical Info</button>
+                    <div id="clinical-info-display" class="clinical-info-display"></div>
+                </div>
+                {% endif %}
+
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Chat Panel -->
+    <div id="ai-chat-panel" class="ai-chat-panel" style="display: none;">
+        <div class="ai-chat-header">
+            <h3>AI Analysis</h3>
+            <button id="close-ai-chat" class="close-btn">&times;</button>
+        </div>
+        <div class="ai-chat-content">
+            <div id="ai-chat-messages" class="ai-chat-messages"></div>
+            <div class="ai-chat-input">
+                <input type="text" id="ai-chat-input-field" placeholder="Ask AI about the image...">
+                <button id="send-ai-message" class="primary-btn">Send</button>
+            </div>
+            <div class="ai-highlighted-regions" id="ai-highlighted-regions"></div>
+        </div>
+    </div>
+
+    <!-- Worklist Modal -->
+    <div id="worklist-modal" class="modal" style="display: none;">
+        <div class="modal-content worklist-modal-content">
+            <div class="modal-header">
+                <h3>Patient Worklist</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="worklist-controls">
+                    <input type="text" id="patient-search" placeholder="Search patients..." class="search-input">
+                    <select id="facility-filter" class="form-select">
+                        <option value="">All Facilities</option>
+                    </select>
+                </div>
+                <div id="worklist-table-container" class="worklist-table-container">
+                    <table id="worklist-table" class="worklist-table">
+                        <thead>
+                            <tr>
+                                <th>Patient Name</th>
+                                <th>Patient ID</th>
+                                <th>Study Date</th>
+                                <th>Modality</th>
+                                <th>Facility</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="worklist-tbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clinical Information Modal -->
+    <div id="clinical-info-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Clinical Information</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="clinical-info-form">
+                    <div class="form-group">
+                        <label for="clinical-history">Clinical History:</label>
+                        <textarea id="clinical-history" name="clinical_history" class="form-textarea"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="indication">Indication:</label>
+                        <textarea id="indication" name="indication" class="form-textarea"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="patient-age">Age:</label>
+                            <input type="text" id="patient-age" name="patient_age" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label for="patient-sex">Sex:</label>
+                            <select id="patient-sex" name="patient_sex" class="form-select">
+                                <option value="">Select</option>
+                                <option value="M">Male</option>
+                                <option value="F">Female</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="referring-physician">Referring Physician:</label>
+                        <input type="text" id="referring-physician" name="referring_physician" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="allergies">Allergies:</label>
+                        <textarea id="allergies" name="allergies" class="form-textarea"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="medications">Medications:</label>
+                        <textarea id="medications" name="medications" class="form-textarea"></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="primary-btn">Save</button>
+                        <button type="button" class="secondary-btn modal-close">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Modal -->
+    <div id="report-modal" class="modal" style="display: none;">
+        <div class="modal-content report-modal-content">
+            <div class="modal-header">
+                <h3>Radiology Report</h3>
+                <div class="report-actions">
+                    <button id="print-report" class="secondary-btn">
+                        <i class="fas fa-print"></i>
+                        Print
+                    </button>
+                    <button class="modal-close">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <form id="report-form">
+                    <div class="form-group">
+                        <label for="findings">Findings:</label>
+                        <textarea id="findings" name="findings" class="form-textarea large"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="impression">Impression:</label>
+                        <textarea id="impression" name="impression" class="form-textarea"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="recommendations">Recommendations:</label>
+                        <textarea id="recommendations" name="recommendations" class="form-textarea"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="report-status">Status:</label>
+                        <select id="report-status" name="status" class="form-select">
+                            <option value="draft">Draft</option>
+                            <option value="pending">Pending Review</option>
+                            <option value="final">Final</option>
+                        </select>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="primary-btn">Save Report</button>
+                        <button type="button" class="secondary-btn modal-close">Cancel</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -215,6 +428,55 @@
     <!-- Hidden file input for DICOM upload -->
     <input type="file" id="hidden-file-input" multiple accept=".dcm,.dicom" style="display: none;">
 
+    <!-- Annotation Edit Modal -->
+    <div id="annotation-modal" class="modal" style="display: none;">
+        <div class="modal-content annotation-modal-content">
+            <div class="modal-header">
+                <h3>Edit Annotation</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="annotation-form">
+                    <div class="form-group">
+                        <label for="annotation-text">Annotation Text:</label>
+                        <textarea id="annotation-text" name="text" class="form-textarea"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="annotation-font-size">Font Size:</label>
+                            <select id="annotation-font-size" name="font_size" class="form-select">
+                                <option value="10">10px</option>
+                                <option value="12" selected>12px</option>
+                                <option value="14">14px</option>
+                                <option value="16">16px</option>
+                                <option value="18">18px</option>
+                                <option value="20">20px</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="annotation-enlarged" name="is_enlarged">
+                                Enlarged
+                            </label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="primary-btn">Save Annotation</button>
+                        <button type="button" class="secondary-btn modal-close">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Include Three.js for 3D visualization -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/controls/OrbitControls.js"></script>
+    
     <script src="{% static 'js/dicom_viewer.js' %}"></script>
+    <script src="{% static 'js/worklist.js' %}"></script>
+    <script src="{% static 'js/ai_analysis.js' %}"></script>
+    <script src="{% static 'js/3d_reconstruction.js' %}"></script>
+    <script src="{% static 'js/notifications.js' %}"></script>
 </body>
 </html>

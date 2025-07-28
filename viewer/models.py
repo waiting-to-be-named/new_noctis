@@ -11,16 +11,66 @@ import io
 import base64
 
 
+class Facility(models.Model):
+    """Model to represent healthcare facilities"""
+    name = models.CharField(max_length=200)
+    address = models.TextField(blank=True)
+    contact_phone = models.CharField(max_length=20, blank=True)
+    contact_email = models.EmailField(blank=True)
+    letterhead_logo = models.ImageField(upload_to='facility_logos/', blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return self.name
+
+
+class UserProfile(models.Model):
+    """Extended user profile with role and facility"""
+    ROLE_CHOICES = [
+        ('radiologist', 'Radiologist'),
+        ('admin', 'Administrator'),
+        ('technician', 'Technician'),
+        ('facility', 'Facility User'),
+    ]
+    
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='facility')
+    facility = models.ForeignKey(Facility, on_delete=models.CASCADE, null=True, blank=True)
+    license_number = models.CharField(max_length=50, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.user.get_full_name()} ({self.role})"
+    
+    def can_view_all_facilities(self):
+        return self.role in ['radiologist', 'admin']
+
+
 class DicomStudy(models.Model):
     """Model to represent a DICOM study"""
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('in_review', 'In Review'),
+        ('reported', 'Reported'),
+        ('archived', 'Archived'),
+    ]
+    
     study_instance_uid = models.CharField(max_length=100, unique=True)
     patient_name = models.CharField(max_length=200)
     patient_id = models.CharField(max_length=100)
+    patient_birth_date = models.DateField(null=True, blank=True)
+    patient_sex = models.CharField(max_length=1, choices=[('M', 'Male'), ('F', 'Female'), ('U', 'Unknown')], default='U')
     study_date = models.DateField(null=True, blank=True)
     study_time = models.TimeField(null=True, blank=True)
+    accession_number = models.CharField(max_length=50, blank=True)
     study_description = models.TextField(blank=True)
     modality = models.CharField(max_length=10)
     institution_name = models.CharField(max_length=200, blank=True)
+    facility = models.ForeignKey(Facility, on_delete=models.CASCADE, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    last_viewed = models.DateTimeField(null=True, blank=True)
+    last_viewed_by = models.ForeignKey(User, related_name='viewed_studies', on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     
@@ -39,9 +89,12 @@ class DicomStudy(models.Model):
         return DicomImage.objects.filter(series__study=self).count()
 
 
+
+
+
 class DicomSeries(models.Model):
     """Model to represent a DICOM series"""
-    study = models.ForeignKey(DicomStudy, related_name='series', on_delete=models.CASCADE)
+    study = models.ForeignKey(DicomStudy, related_name='dicomseries_set', on_delete=models.CASCADE)
     series_instance_uid = models.CharField(max_length=100)
     series_number = models.IntegerField(default=0)
     series_description = models.CharField(max_length=200, blank=True)
@@ -58,24 +111,25 @@ class DicomSeries(models.Model):
     
     @property
     def image_count(self):
-        return self.images.count()
+        return self.dicomimage_set.count()
 
 
 class DicomImage(models.Model):
     """Model to represent individual DICOM images"""
-    series = models.ForeignKey(DicomSeries, related_name='images', on_delete=models.CASCADE)
+    series = models.ForeignKey(DicomSeries, related_name='dicomimage_set', on_delete=models.CASCADE)
     sop_instance_uid = models.CharField(max_length=100)
     instance_number = models.IntegerField(default=0)
-    file_path = models.FileField(upload_to='dicom_files/')
+    file_path = models.CharField(max_length=500)  # Changed to CharField to store file path
     
     # Image properties
     rows = models.IntegerField(default=0)
     columns = models.IntegerField(default=0)
-    pixel_spacing_x = models.FloatField(null=True, blank=True)
-    pixel_spacing_y = models.FloatField(null=True, blank=True)
+    image_position = models.CharField(max_length=200, blank=True)  # Store as comma-separated string
+    image_orientation = models.CharField(max_length=200, blank=True)  # Store as comma-separated string
+    pixel_spacing = models.CharField(max_length=100, blank=True)  # Store as comma-separated string
     slice_thickness = models.FloatField(null=True, blank=True)
-    window_width = models.FloatField(null=True, blank=True)
-    window_center = models.FloatField(null=True, blank=True)
+    window_width = models.IntegerField(null=True, blank=True)
+    window_center = models.IntegerField(null=True, blank=True)
     
     # Cached processed image
     processed_image_cache = models.TextField(blank=True)  # Base64 encoded image
@@ -91,9 +145,9 @@ class DicomImage(models.Model):
     
     def load_dicom_data(self):
         """Load and return pydicom dataset"""
-        if self.file_path and os.path.exists(self.file_path.path):
+        if self.file_path and os.path.exists(self.file_path):
             try:
-                return pydicom.dcmread(self.file_path.path)
+                return pydicom.dcmread(self.file_path)
             except Exception as e:
                 print(f"Error loading DICOM: {e}")
                 return None
@@ -105,6 +159,25 @@ class DicomImage(models.Model):
         if dicom_data and hasattr(dicom_data, 'pixel_array'):
             return dicom_data.pixel_array
         return None
+    
+    def get_hounsfield_units(self, pixel_array=None):
+        """Get Hounsfield Units from pixel data"""
+        if pixel_array is None:
+            pixel_array = self.get_pixel_array()
+        
+        if pixel_array is None:
+            return None
+        
+        dicom_data = self.load_dicom_data()
+        if not dicom_data:
+            return pixel_array
+        
+        # Apply rescale slope and intercept to get HU values
+        slope = getattr(dicom_data, 'RescaleSlope', 1)
+        intercept = getattr(dicom_data, 'RescaleIntercept', 0)
+        
+        hu_values = pixel_array * slope + intercept
+        return hu_values
     
     def apply_windowing(self, pixel_array, window_width=None, window_level=None, inverted=False):
         """Apply window/level to pixel array"""
@@ -177,16 +250,24 @@ class Measurement(models.Model):
         ('line', 'Line Measurement'),
         ('angle', 'Angle Measurement'),
         ('area', 'Area Measurement'),
+        ('ellipse', 'Ellipse Measurement'),
+    ]
+    
+    UNIT_CHOICES = [
+        ('px', 'Pixels'),
+        ('mm', 'Millimeters'),
+        ('cm', 'Centimeters'),
+        ('HU', 'Hounsfield Units'),
     ]
     
     image = models.ForeignKey(DicomImage, related_name='measurements', on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     measurement_type = models.CharField(max_length=10, choices=MEASUREMENT_TYPES, default='line')
-    coordinates = models.JSONField()  # Store coordinates as JSON
+    coordinates = models.TextField()  # Store coordinates as JSON string
     value = models.FloatField()  # Measurement value (distance, angle, area)
-    unit = models.CharField(max_length=10, default='px')  # px, mm, cm
-    notes = models.TextField(blank=True)
+    unit = models.CharField(max_length=10, choices=UNIT_CHOICES, default='px')
+    metadata = models.TextField(blank=True)  # Store additional metadata as JSON
     created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     
     class Meta:
         ordering = ['-created_at']
@@ -198,14 +279,96 @@ class Measurement(models.Model):
 class Annotation(models.Model):
     """Model to store user annotations"""
     image = models.ForeignKey(DicomImage, related_name='annotations', on_delete=models.CASCADE)
-    x_coordinate = models.FloatField()
-    y_coordinate = models.FloatField()
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    x_position = models.FloatField()
+    y_position = models.FloatField()
     text = models.TextField()
+    font_size = models.IntegerField(default=16)
+    color = models.CharField(max_length=7, default='#FFD700')  # Hex color
     created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     
     class Meta:
         ordering = ['-created_at']
     
     def __str__(self):
         return f"Annotation: {self.text[:50]}"
+
+
+
+
+
+class ClinicalInfo(models.Model):
+    """Model to store clinical information for studies"""
+    study = models.OneToOneField(DicomStudy, on_delete=models.CASCADE)
+    content = models.TextField()
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"Clinical Info for {self.study.patient_name}"
+
+
+class Report(models.Model):
+    """Model to store radiologist reports"""
+    study = models.OneToOneField(DicomStudy, on_delete=models.CASCADE)
+    content = models.TextField()
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"Report for {self.study.patient_name}"
+
+
+class UploadNotification(models.Model):
+    """Model for upload notifications"""
+    study = models.ForeignKey(DicomStudy, on_delete=models.CASCADE)
+    uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    message = models.TextField()
+    is_seen = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Upload notification: {self.message[:50]}"
+
+
+class AIAnalysis(models.Model):
+    """Model to store AI analysis results"""
+    image = models.ForeignKey(DicomImage, related_name='ai_analyses', on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    analysis_type = models.CharField(max_length=50)  # e.g., 'virtual_surgery', 'hounsfield'
+    input_data = models.TextField()  # Store input parameters as JSON string
+    result = models.TextField()  # Store AI response
+    confidence = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"AI Analysis for {self.image} - {self.analysis_type}"
+
+
+class Notification(models.Model):
+    """Model for system notifications"""
+    NOTIFICATION_TYPES = [
+        ('new_upload', 'New Study Uploaded'),
+        ('report_ready', 'Report Ready'),
+        ('urgent_finding', 'Urgent Finding'),
+        ('system_alert', 'System Alert'),
+    ]
+    
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE)
+    notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    study = models.ForeignKey(DicomStudy, on_delete=models.CASCADE, null=True, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.title} - {self.recipient.username}"

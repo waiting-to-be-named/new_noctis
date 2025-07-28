@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient Worklist - DICOM System</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/dicom_viewer.css' %}">
+    <link rel="stylesheet" href="{% static 'css/worklist.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="worklist-body">
+    <!-- Notification Area -->
+    <div id="notification-area" class="notification-area"></div>
+
+    <!-- Header -->
+    <header class="worklist-header">
+        <div class="header-left">
+            <h1>Patient Worklist</h1>
+            <span class="facility-name">{{ user.profile.facility.name|default:"All Facilities" }}</span>
+        </div>
+        <div class="header-right">
+            <div class="user-info">
+                <span class="user-name">{{ user.get_full_name|default:user.username }}</span>
+                <span class="user-role">{{ user.profile.role|capfirst }}</span>
+            </div>
+            <div class="header-actions">
+                <button id="refresh-worklist" class="header-btn" title="Refresh">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+                <button id="launch-viewer" class="header-btn primary" title="Launch Viewer">
+                    <i class="fas fa-eye"></i>
+                    Viewer
+                </button>
+                <button id="logout" class="header-btn" title="Logout">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="worklist-main">
+        <!-- Filters and Search -->
+        <div class="worklist-filters">
+            <div class="filter-group">
+                <label for="patient-search">
+                    <i class="fas fa-search"></i>
+                    Search:
+                </label>
+                <input type="text" id="patient-search" placeholder="Patient name or ID..." class="filter-input">
+            </div>
+            
+            {% if user.profile.role in 'radiologist,admin' %}
+            <div class="filter-group">
+                <label for="facility-filter">Facility:</label>
+                <select id="facility-filter" class="filter-select">
+                    <option value="">All Facilities</option>
+                </select>
+            </div>
+            {% endif %}
+            
+            <div class="filter-group">
+                <label for="modality-filter">Modality:</label>
+                <select id="modality-filter" class="filter-select">
+                    <option value="">All Modalities</option>
+                    <option value="CT">CT</option>
+                    <option value="MR">MR</option>
+                    <option value="XR">X-Ray</option>
+                    <option value="US">Ultrasound</option>
+                    <option value="NM">Nuclear Medicine</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="status-filter">Status:</label>
+                <select id="status-filter" class="filter-select">
+                    <option value="">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="urgent">Urgent</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="date-filter">Date:</label>
+                <select id="date-filter" class="filter-select">
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                    <option value="all">All Dates</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Statistics -->
+        <div class="worklist-stats">
+            <div class="stat-card">
+                <div class="stat-number" id="total-studies">0</div>
+                <div class="stat-label">Total Studies</div>
+            </div>
+            <div class="stat-card pending">
+                <div class="stat-number" id="pending-studies">0</div>
+                <div class="stat-label">Pending</div>
+            </div>
+            <div class="stat-card urgent">
+                <div class="stat-number" id="urgent-studies">0</div>
+                <div class="stat-label">Urgent</div>
+            </div>
+            <div class="stat-card completed">
+                <div class="stat-number" id="completed-studies">0</div>
+                <div class="stat-label">Completed</div>
+            </div>
+        </div>
+
+        <!-- Patient Table -->
+        <div class="worklist-table-container">
+            <table class="worklist-table">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-sort="patient_name">
+                            Patient Name
+                            <i class="fas fa-sort"></i>
+                        </th>
+                        <th class="sortable" data-sort="patient_id">
+                            Patient ID
+                            <i class="fas fa-sort"></i>
+                        </th>
+                        <th class="sortable" data-sort="study_date">
+                            Study Date
+                            <i class="fas fa-sort"></i>
+                        </th>
+                        <th class="sortable" data-sort="modality">
+                            Modality
+                            <i class="fas fa-sort"></i>
+                        </th>
+                        {% if user.profile.role in 'radiologist,admin' %}
+                        <th class="sortable" data-sort="facility">
+                            Facility
+                            <i class="fas fa-sort"></i>
+                        </th>
+                        {% endif %}
+                        <th class="sortable" data-sort="status">
+                            Status
+                            <i class="fas fa-sort"></i>
+                        </th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="worklist-tbody">
+                    <!-- Dynamic content will be loaded here -->
+                </tbody>
+            </table>
+            
+            <!-- Loading indicator -->
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <i class="fas fa-spinner fa-spin"></i>
+                Loading studies...
+            </div>
+            
+            <!-- Empty state -->
+            <div id="empty-state" class="empty-state" style="display: none;">
+                <i class="fas fa-inbox"></i>
+                <h3>No Studies Found</h3>
+                <p>No studies match your current filters.</p>
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination-container">
+            <div class="pagination-info">
+                Showing <span id="pagination-start">0</span> to <span id="pagination-end">0</span> of <span id="pagination-total">0</span> studies
+            </div>
+            <div class="pagination-controls">
+                <button id="prev-page" class="pagination-btn" disabled>
+                    <i class="fas fa-chevron-left"></i>
+                    Previous
+                </button>
+                <div class="pagination-numbers" id="pagination-numbers">
+                    <!-- Page numbers will be generated here -->
+                </div>
+                <button id="next-page" class="pagination-btn" disabled>
+                    Next
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Clinical Information Modal -->
+    <div id="clinical-info-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Clinical Information</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="clinical-info-form">
+                    <div class="form-group">
+                        <label for="clinical-history">Clinical History:</label>
+                        <textarea id="clinical-history" name="clinical_history" class="form-textarea"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="indication">Indication:</label>
+                        <textarea id="indication" name="indication" class="form-textarea"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="patient-age">Age:</label>
+                            <input type="text" id="patient-age" name="patient_age" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label for="patient-sex">Sex:</label>
+                            <select id="patient-sex" name="patient_sex" class="form-select">
+                                <option value="">Select</option>
+                                <option value="M">Male</option>
+                                <option value="F">Female</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="referring-physician">Referring Physician:</label>
+                        <input type="text" id="referring-physician" name="referring_physician" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="allergies">Allergies:</label>
+                        <textarea id="allergies" name="allergies" class="form-textarea"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="medications">Medications:</label>
+                        <textarea id="medications" name="medications" class="form-textarea"></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="primary-btn">Save</button>
+                        <button type="button" class="secondary-btn modal-close">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Modal -->
+    <div id="report-modal" class="modal" style="display: none;">
+        <div class="modal-content report-modal-content">
+            <div class="modal-header">
+                <h3>Radiology Report</h3>
+                <div class="report-actions">
+                    <button id="print-report" class="secondary-btn">
+                        <i class="fas fa-print"></i>
+                        Print
+                    </button>
+                    <button class="modal-close">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <!-- Facility letterhead will be injected here -->
+                <div id="report-letterhead" class="report-letterhead"></div>
+                
+                <form id="report-form">
+                    <div class="form-group">
+                        <label for="findings">Findings:</label>
+                        <textarea id="findings" name="findings" class="form-textarea large"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="impression">Impression:</label>
+                        <textarea id="impression" name="impression" class="form-textarea"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="recommendations">Recommendations:</label>
+                        <textarea id="recommendations" name="recommendations" class="form-textarea"></textarea>
+                    </div>
+                    {% if user.profile.role in 'radiologist,admin' %}
+                    <div class="form-group">
+                        <label for="report-status">Status:</label>
+                        <select id="report-status" name="status" class="form-select">
+                            <option value="draft">Draft</option>
+                            <option value="pending">Pending Review</option>
+                            <option value="final">Final</option>
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div class="modal-footer">
+                        {% if user.profile.role in 'radiologist,admin' %}
+                        <button type="submit" class="primary-btn">Save Report</button>
+                        {% endif %}
+                        <button type="button" class="secondary-btn modal-close">Close</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'js/worklist.js' %}"></script>
+    <script src="{% static 'js/notifications.js' %}"></script>
+</body>
+</html>

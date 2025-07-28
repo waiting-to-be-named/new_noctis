@@ -1,0 +1,719 @@
+/* Worklist specific styles */
+
+.worklist-body {
+    background: #2a2a2a;
+    color: white;
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow-x: hidden;
+}
+
+/* Worklist Header */
+.worklist-header {
+    background: #1a1a1a;
+    border-bottom: 1px solid #444;
+    padding: 15px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 70px;
+}
+
+.header-left h1 {
+    margin: 0 0 5px 0;
+    font-size: 28px;
+    color: #fff;
+    font-weight: 600;
+}
+
+.header-left .facility-name {
+    color: #0078d4;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 30px;
+}
+
+.user-info {
+    text-align: right;
+}
+
+.user-info .user-name {
+    display: block;
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 2px;
+}
+
+.user-info .user-role {
+    color: #0078d4;
+    font-size: 0.9em;
+    text-transform: uppercase;
+    font-weight: 500;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.header-btn {
+    background: #444;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+    min-width: 40px;
+    height: 40px;
+    justify-content: center;
+}
+
+.header-btn:hover {
+    background: #555;
+    transform: translateY(-1px);
+}
+
+.header-btn.primary {
+    background: #0078d4;
+}
+
+.header-btn.primary:hover {
+    background: #106ebe;
+}
+
+.header-btn i {
+    font-size: 16px;
+}
+
+/* Main Content */
+.worklist-main {
+    padding: 30px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Filters */
+.worklist-filters {
+    background: #333;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 30px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: end;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    min-width: 180px;
+}
+
+.filter-group label {
+    font-size: 13px;
+    color: #ccc;
+    margin-bottom: 5px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.filter-input, .filter-select {
+    background: #444;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 8px 12px;
+    color: white;
+    font-size: 14px;
+    width: 100%;
+    transition: border-color 0.2s;
+}
+
+.filter-input:focus, .filter-select:focus {
+    outline: none;
+    border-color: #0078d4;
+}
+
+.filter-input::placeholder {
+    color: #888;
+}
+
+/* Statistics */
+.worklist-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.stat-card {
+    background: #333;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    border-left: 4px solid #666;
+    transition: transform 0.2s;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+}
+
+.stat-card.pending {
+    border-left-color: #FF9800;
+}
+
+.stat-card.urgent {
+    border-left-color: #f44336;
+}
+
+.stat-card.completed {
+    border-left-color: #4CAF50;
+}
+
+.stat-number {
+    font-size: 32px;
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 5px;
+}
+
+.stat-label {
+    color: #ccc;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Patient Table Container */
+.worklist-table-container {
+    background: #333;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    position: relative;
+    min-height: 400px;
+}
+
+/* Table */
+.worklist-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.worklist-table th {
+    background: #444;
+    color: #fff;
+    padding: 15px;
+    text-align: left;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-bottom: 2px solid #555;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s;
+}
+
+.worklist-table th:hover {
+    background: #4a4a4a;
+}
+
+.worklist-table th.sortable {
+    position: relative;
+    padding-right: 30px;
+}
+
+.worklist-table th.sortable i {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0.5;
+    transition: opacity 0.2s;
+}
+
+.worklist-table th.sortable:hover i {
+    opacity: 1;
+}
+
+.worklist-table th.sorted i {
+    opacity: 1;
+    color: #0078d4;
+}
+
+.worklist-table td {
+    padding: 15px;
+    border-bottom: 1px solid #444;
+    vertical-align: middle;
+}
+
+.worklist-table tbody tr {
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.worklist-table tbody tr:hover {
+    background: #3a3a3a;
+}
+
+.worklist-table tbody tr.selected {
+    background: rgba(0, 120, 212, 0.2);
+    border-left: 4px solid #0078d4;
+}
+
+.worklist-table tbody tr.urgent {
+    border-left: 4px solid #f44336;
+}
+
+.worklist-table tbody tr.pending {
+    border-left: 4px solid #FF9800;
+}
+
+.worklist-table tbody tr.completed {
+    border-left: 4px solid #4CAF50;
+}
+
+.worklist-table tbody tr.in-progress {
+    border-left: 4px solid #2196F3;
+}
+
+/* Action Buttons */
+.action-btn {
+    background: transparent;
+    border: 1px solid #555;
+    color: #ccc;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-right: 8px;
+    margin-bottom: 4px;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.action-btn:hover {
+    background: #555;
+    color: white;
+}
+
+.action-btn.primary {
+    border-color: #0078d4;
+    color: #0078d4;
+}
+
+.action-btn.primary:hover {
+    background: #0078d4;
+    color: white;
+}
+
+.action-btn.success {
+    border-color: #4CAF50;
+    color: #4CAF50;
+}
+
+.action-btn.success:hover {
+    background: #4CAF50;
+    color: white;
+}
+
+.action-btn.warning {
+    border-color: #FF9800;
+    color: #FF9800;
+}
+
+.action-btn.warning:hover {
+    background: #FF9800;
+    color: white;
+}
+
+/* Status Badges */
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-block;
+}
+
+.status-badge.pending {
+    background: rgba(255, 152, 0, 0.2);
+    color: #FF9800;
+    border: 1px solid rgba(255, 152, 0, 0.3);
+}
+
+.status-badge.completed {
+    background: rgba(76, 175, 80, 0.2);
+    color: #4CAF50;
+    border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.status-badge.urgent {
+    background: rgba(244, 67, 54, 0.2);
+    color: #f44336;
+    border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.status-badge.in-progress {
+    background: rgba(33, 150, 243, 0.2);
+    color: #2196F3;
+    border: 1px solid rgba(33, 150, 243, 0.3);
+}
+
+/* Loading and Empty States */
+.loading-indicator {
+    text-align: center;
+    padding: 60px 20px;
+    color: #ccc;
+    font-size: 16px;
+}
+
+.loading-indicator i {
+    font-size: 32px;
+    margin-bottom: 15px;
+    display: block;
+    color: #0078d4;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 80px 20px;
+    color: #666;
+}
+
+.empty-state i {
+    font-size: 64px;
+    margin-bottom: 20px;
+    display: block;
+    color: #555;
+}
+
+.empty-state h3 {
+    color: #ccc;
+    margin-bottom: 10px;
+    font-size: 20px;
+}
+
+.empty-state p {
+    color: #888;
+    font-size: 16px;
+}
+
+/* Pagination */
+.pagination-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 30px;
+    padding: 20px;
+    background: #333;
+    border-radius: 8px;
+}
+
+.pagination-info {
+    color: #ccc;
+    font-size: 14px;
+}
+
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.pagination-btn {
+    background: #444;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background: #555;
+}
+
+.pagination-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pagination-numbers {
+    display: flex;
+    gap: 5px;
+}
+
+.pagination-number {
+    background: transparent;
+    color: #ccc;
+    border: 1px solid #555;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    min-width: 40px;
+    text-align: center;
+}
+
+.pagination-number:hover {
+    background: #444;
+    color: white;
+}
+
+.pagination-number.active {
+    background: #0078d4;
+    color: white;
+    border-color: #0078d4;
+}
+
+/* Patient Details in Table */
+.patient-name {
+    font-weight: 600;
+    color: #fff;
+}
+
+.patient-id {
+    color: #0078d4;
+    font-family: monospace;
+}
+
+.study-date {
+    color: #ccc;
+}
+
+.modality {
+    background: #444;
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+    display: inline-block;
+}
+
+.facility-name-cell {
+    color: #ccc;
+    font-size: 13px;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .worklist-main {
+        padding: 20px;
+    }
+    
+    .worklist-filters {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .worklist-header {
+        flex-direction: column;
+        gap: 15px;
+        padding: 15px 20px;
+        text-align: center;
+    }
+    
+    .header-right {
+        flex-direction: column;
+        gap: 15px;
+        width: 100%;
+    }
+    
+    .header-actions {
+        justify-content: center;
+    }
+    
+    .worklist-main {
+        padding: 15px;
+    }
+    
+    .worklist-filters {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .filter-group {
+        min-width: auto;
+    }
+    
+    .worklist-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+    }
+    
+    .worklist-table-container {
+        overflow-x: auto;
+    }
+    
+    .worklist-table {
+        min-width: 800px;
+    }
+    
+    .pagination-container {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+    
+    .pagination-controls {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .worklist-stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .stat-card {
+        padding: 15px;
+    }
+    
+    .stat-number {
+        font-size: 24px;
+    }
+    
+    .header-btn {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+    
+    .action-btn {
+        padding: 4px 8px;
+        font-size: 11px;
+        margin-right: 4px;
+    }
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+    .worklist-body {
+        background: #1a1a1a;
+    }
+    
+    .worklist-header {
+        background: #111;
+    }
+    
+    .worklist-filters,
+    .pagination-container,
+    .worklist-table-container {
+        background: #222;
+    }
+    
+    .worklist-table th {
+        background: #333;
+    }
+}
+
+/* Print styles for worklist */
+@media print {
+    .worklist-header,
+    .worklist-filters,
+    .pagination-container {
+        display: none;
+    }
+    
+    .worklist-body {
+        background: white;
+        color: black;
+    }
+    
+    .worklist-table-container {
+        background: white;
+        box-shadow: none;
+    }
+    
+    .worklist-table th {
+        background: #f5f5f5;
+        color: black;
+    }
+    
+    .worklist-table td {
+        border-bottom: 1px solid #ddd;
+    }
+    
+    .action-btn {
+        display: none;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .worklist-table th,
+    .filter-input,
+    .filter-select,
+    .header-btn,
+    .action-btn {
+        border: 2px solid currentColor;
+    }
+    
+    .stat-card {
+        border: 1px solid #666;
+    }
+}
+
+/* Focus indicators for accessibility */
+.worklist-table tbody tr:focus,
+.action-btn:focus,
+.header-btn:focus,
+.filter-input:focus,
+.filter-select:focus {
+    outline: 2px solid #0078d4;
+    outline-offset: 2px;
+}
+
+/* Smooth animations */
+.worklist-table tbody tr,
+.action-btn,
+.header-btn,
+.pagination-btn,
+.pagination-number {
+    transition: all 0.2s ease;
+}
+
+/* Skeleton loading animation */
+@keyframes skeleton-loading {
+    0% {
+        background-position: -200px 0;
+    }
+    100% {
+        background-position: calc(200px + 100%) 0;
+    }
+}
+
+.skeleton {
+    background: linear-gradient(90deg, #333 25%, #444 50%, #333 75%);
+    background-size: 200px 100%;
+    animation: skeleton-loading 1.5s infinite;
+}
