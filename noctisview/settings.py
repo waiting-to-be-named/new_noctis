@@ -102,6 +102,11 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Login settings
+LOGIN_REDIRECT_URL = '/worklist/'
+LOGOUT_REDIRECT_URL = '/accounts/login/'
+LOGIN_URL = '/accounts/login/'
+
 # DICOM specific settings
 DICOM_UPLOAD_PATH = 'dicom_files/'
 MAX_DICOM_FILE_SIZE = 100 * 1024 * 1024  # 100MB
