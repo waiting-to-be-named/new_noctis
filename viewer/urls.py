@@ -21,4 +21,15 @@ urlpatterns = [
     path('api/images/<int:image_id>/measurements/', views.get_measurements, name='get_measurements'),
     path('api/images/<int:image_id>/annotations/', views.get_annotations, name='get_annotations'),
     path('api/images/<int:image_id>/clear-measurements/', views.clear_measurements, name='clear_measurements'),
+    
+    # AI Analysis endpoints
+    path('api/images/<int:image_id>/analyze/', views.analyze_image, name='analyze_image'),
+    path('api/images/<int:image_id>/predict/', views.predict_image, name='predict_image'),
+    
+    # Anonymization endpoints
+    path('api/studies/<int:study_id>/anonymize/', views.anonymize_study, name='anonymize_study'),
+    path('api/anonymize/batch/', views.anonymize_batch, name='anonymize_batch'),
+    
+    # Export endpoints
+    path('api/export/images/', views.export_images, name='export_images'),
 ]
