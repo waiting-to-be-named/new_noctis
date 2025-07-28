@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radiology Report - {{ study.patient_name }}</title>
+    <style>
+        body {
+            font-family: 'Times New Roman', serif;
+            font-size: 12pt;
+            line-height: 1.4;
+            margin: 0;
+            padding: 40px;
+            color: #000;
+            background: white;
+        }
+        
+        .letterhead {
+            text-align: center;
+            border-bottom: 2px solid #333;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .facility-logo {
+            max-height: 80px;
+            margin-bottom: 10px;
+        }
+        
+        .facility-name {
+            font-size: 24pt;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        
+        .facility-info {
+            font-size: 10pt;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        .report-title {
+            font-size: 18pt;
+            font-weight: bold;
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .patient-info {
+            display: table;
+            width: 100%;
+            margin-bottom: 30px;
+            border: 1px solid #333;
+            border-collapse: collapse;
+        }
+        
+        .patient-info-row {
+            display: table-row;
+        }
+        
+        .patient-info-cell {
+            display: table-cell;
+            padding: 8px 12px;
+            border: 1px solid #333;
+            vertical-align: top;
+        }
+        
+        .patient-info-label {
+            font-weight: bold;
+            background-color: #f5f5f5;
+            width: 25%;
+        }
+        
+        .study-info {
+            margin-bottom: 30px;
+        }
+        
+        .study-info h3 {
+            font-size: 14pt;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+        }
+        
+        .study-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .study-detail {
+            display: flex;
+            margin-bottom: 8px;
+        }
+        
+        .study-detail-label {
+            font-weight: bold;
+            min-width: 120px;
+            color: #333;
+        }
+        
+        .study-detail-value {
+            color: #666;
+        }
+        
+        .report-content {
+            margin-bottom: 30px;
+        }
+        
+        .report-section {
+            margin-bottom: 25px;
+        }
+        
+        .report-section h4 {
+            font-size: 13pt;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        
+        .report-text {
+            text-align: justify;
+            line-height: 1.6;
+            margin-bottom: 15px;
+            text-indent: 20px;
+        }
+        
+        .impression {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-left: 4px solid #27ae60;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .impression h4 {
+            margin-top: 0;
+            color: #27ae60;
+            border: none;
+            padding: 0;
+            font-size: 13pt;
+        }
+        
+        .report-footer {
+            margin-top: 40px;
+            border-top: 1px solid #ccc;
+            padding-top: 20px;
+        }
+        
+        .signature-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-top: 40px;
+        }
+        
+        .signature-block {
+            text-align: center;
+        }
+        
+        .signature-line {
+            border-bottom: 1px solid #333;
+            height: 40px;
+            margin-bottom: 10px;
+        }
+        
+        .signature-label {
+            font-weight: bold;
+            font-size: 11pt;
+        }
+        
+        .page-footer {
+            position: fixed;
+            bottom: 20px;
+            left: 40px;
+            right: 40px;
+            text-align: center;
+            font-size: 9pt;
+            color: #666;
+            border-top: 1px solid #ccc;
+            padding-top: 10px;
+        }
+        
+        @media print {
+            body {
+                margin: 0;
+                padding: 20px;
+            }
+            
+            .page-footer {
+                position: fixed;
+                bottom: 0;
+            }
+            
+            .report-content {
+                page-break-inside: avoid;
+            }
+            
+            .report-section {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Letterhead -->
+    <div class="letterhead">
+        {% if facility.letterhead_logo %}
+        <img src="{{ facility.letterhead_logo.url }}" alt="{{ facility.name }}" class="facility-logo">
+        {% endif %}
+        <div class="facility-name">
+            {% if facility %}{{ facility.name }}{% else %}NoctisView Medical Center{% endif %}
+        </div>
+        <div class="facility-info">
+            {% if facility %}
+                {% if facility.address %}{{ facility.address }}<br>{% endif %}
+                {% if facility.phone %}Phone: {{ facility.phone }}{% endif %}
+                {% if facility.email %} | Email: {{ facility.email }}{% endif %}
+            {% else %}
+                Advanced Medical Imaging & Diagnostics<br>
+                Phone: (555) 123-4567 | Email: info@noctisview.com
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Report Title -->
+    <div class="report-title">
+        Diagnostic Imaging Report
+    </div>
+
+    <!-- Patient Information -->
+    <div class="patient-info">
+        <div class="patient-info-row">
+            <div class="patient-info-cell patient-info-label">Patient Name:</div>
+            <div class="patient-info-cell">{{ study.patient_name }}</div>
+            <div class="patient-info-cell patient-info-label">Patient ID:</div>
+            <div class="patient-info-cell">{{ study.patient_id }}</div>
+        </div>
+        <div class="patient-info-row">
+            <div class="patient-info-cell patient-info-label">Study Date:</div>
+            <div class="patient-info-cell">{{ study.study_date|date:"F d, Y" }}</div>
+            <div class="patient-info-cell patient-info-label">Study Time:</div>
+            <div class="patient-info-cell">{{ study.study_time|time:"H:i" }}</div>
+        </div>
+        <div class="patient-info-row">
+            <div class="patient-info-cell patient-info-label">Modality:</div>
+            <div class="patient-info-cell">{{ study.modality }}</div>
+            <div class="patient-info-cell patient-info-label">Report Date:</div>
+            <div class="patient-info-cell">{{ report.created_at|date:"F d, Y" }}</div>
+        </div>
+    </div>
+
+    <!-- Study Information -->
+    <div class="study-info">
+        <h3>Study Information</h3>
+        <div class="study-details">
+            <div>
+                <div class="study-detail">
+                    <div class="study-detail-label">Study Description:</div>
+                    <div class="study-detail-value">{{ study.study_description|default:"Not specified" }}</div>
+                </div>
+                <div class="study-detail">
+                    <div class="study-detail-label">Institution:</div>
+                    <div class="study-detail-value">{{ study.institution_name|default:"Not specified" }}</div>
+                </div>
+                {% if study.clinical_history %}
+                <div class="study-detail">
+                    <div class="study-detail-label">Clinical History:</div>
+                    <div class="study-detail-value">{{ study.clinical_history }}</div>
+                </div>
+                {% endif %}
+            </div>
+            <div>
+                <div class="study-detail">
+                    <div class="study-detail-label">Study Instance UID:</div>
+                    <div class="study-detail-value">{{ study.study_instance_uid }}</div>
+                </div>
+                <div class="study-detail">
+                    <div class="study-detail-label">Report Status:</div>
+                    <div class="study-detail-value">{{ report.get_status_display }}</div>
+                </div>
+                {% if study.indication %}
+                <div class="study-detail">
+                    <div class="study-detail-label">Indication:</div>
+                    <div class="study-detail-value">{{ study.indication }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Content -->
+    <div class="report-content">
+        {% if report.report_text %}
+        <div class="report-section">
+            <h4>Findings</h4>
+            <div class="report-text">
+                {{ report.report_text|linebreaks }}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if report.impression %}
+        <div class="impression">
+            <h4>Impression</h4>
+            <div class="report-text">
+                {{ report.impression|linebreaks }}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Report Footer -->
+    <div class="report-footer">
+        <div class="study-detail">
+            <div class="study-detail-label">Report Created By:</div>
+            <div class="study-detail-value">{{ report.created_by.get_full_name|default:report.created_by.username }}</div>
+        </div>
+        <div class="study-detail">
+            <div class="study-detail-label">Report Created:</div>
+            <div class="study-detail-value">{{ report.created_at|date:"F d, Y at H:i" }}</div>
+        </div>
+        {% if report.finalized_by %}
+        <div class="study-detail">
+            <div class="study-detail-label">Finalized By:</div>
+            <div class="study-detail-value">{{ report.finalized_by.get_full_name|default:report.finalized_by.username }}</div>
+        </div>
+        <div class="study-detail">
+            <div class="study-detail-label">Finalized:</div>
+            <div class="study-detail-value">{{ report.finalized_at|date:"F d, Y at H:i" }}</div>
+        </div>
+        {% endif %}
+
+        <!-- Signature Section -->
+        <div class="signature-section">
+            <div class="signature-block">
+                <div class="signature-line"></div>
+                <div class="signature-label">Radiologist Signature</div>
+            </div>
+            <div class="signature-block">
+                <div class="signature-line"></div>
+                <div class="signature-label">Date</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page Footer -->
+    <div class="page-footer">
+        <div>
+            {% if facility %}{{ facility.name }}{% else %}NoctisView Medical Center{% endif %} | 
+            Diagnostic Imaging Report | 
+            Page 1 of 1 | 
+            Generated on {{ "now"|date:"F d, Y at H:i" }}
+        </div>
+        <div style="margin-top: 5px; font-size: 8pt;">
+            This report contains confidential medical information. Unauthorized disclosure is prohibited.
+        </div>
+    </div>
+</body>
+</html>

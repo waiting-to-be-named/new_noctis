@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Django DICOM Viewer</title>
+    <title>NoctisView DICOM Viewer</title>
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/dicom_viewer.css' %}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -29,6 +29,10 @@
                     <i class="fas fa-ruler"></i>
                     <span>Measure</span>
                 </button>
+                <button class="tool-btn" data-tool="ellipse" title="Ellipse/HU Measure">
+                    <i class="fas fa-circle"></i>
+                    <span>Ellipse</span>
+                </button>
                 <button class="tool-btn" data-tool="annotate" title="Annotate">
                     <i class="fas fa-edit"></i>
                     <span>Annotate</span>
@@ -38,7 +42,7 @@
                     <span>Crosshair</span>
                 </button>
                 <button class="tool-btn" data-tool="invert" title="Invert">
-                    <i class="fas fa-circle"></i>
+                    <i class="fas fa-adjust"></i>
                     <span>Invert</span>
                 </button>
                 <button class="tool-btn" data-tool="reset" title="Reset">
@@ -66,8 +70,12 @@
                         Load DICOM Files
                     </button>
                     <select id="backend-studies" class="form-select">
-                        <option value="">Select DICOM from System</option>
+                        <option value="">Load DICOM from System</option>
                     </select>
+                    <button id="worklist-btn" class="primary-btn" onclick="window.location.href='/worklist/'">
+                        <i class="fas fa-list"></i>
+                        Patient Worklist
+                    </button>
                     <div class="patient-info" id="patient-info">
                         Patient: - | Study Date: - | Modality: -
                     </div>
@@ -155,6 +163,39 @@
                     </div>
                 </div>
 
+                <!-- 3D Reconstruction Section -->
+                <div class="panel-section">
+                    <h3 class="section-title">3D Reconstruction</h3>
+                    
+                    <div class="control-group">
+                        <select id="3d-reconstruction-type" class="form-select">
+                            <option value="">Select 3D Type</option>
+                            <option value="mpr">MPR</option>
+                            <option value="3d_bone">3D Bone</option>
+                            <option value="angio">Angio</option>
+                            <option value="virtual_surgery">Virtual Surgery</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Measurements Section -->
+                <div class="panel-section">
+                    <h3 class="section-title">Measurements</h3>
+                    
+                    <div class="control-group">
+                        <label>Unit:</label>
+                        <select id="measurement-unit" class="form-select">
+                            <option value="mm">Millimeters</option>
+                            <option value="cm">Centimeters</option>
+                            <option value="px">Pixels</option>
+                            <option value="hu">Hounsfield Units</option>
+                        </select>
+                    </div>
+                    
+                    <button id="clear-measurements" class="secondary-btn">Clear All</button>
+                    <div id="measurements-list" class="measurements-list"></div>
+                </div>
+
                 <!-- Image Info Section -->
                 <div class="panel-section">
                     <h3 class="section-title">Image Info</h3>
@@ -178,11 +219,16 @@
                     </div>
                 </div>
 
-                <!-- Measurements Section -->
+                <!-- AI Analysis Section -->
                 <div class="panel-section">
-                    <h3 class="section-title">Measurements</h3>
-                    <button id="clear-measurements" class="secondary-btn">Clear All</button>
-                    <div id="measurements-list" class="measurements-list"></div>
+                    <h3 class="section-title">AI Analysis</h3>
+                    <button id="ai-analysis-btn" class="primary-btn">
+                        <i class="fas fa-robot"></i>
+                        Analyze Image
+                    </button>
+                    <button id="toggle-ai-highlights" class="secondary-btn">
+                        Toggle Highlights
+                    </button>
                 </div>
 
             </div>
@@ -212,8 +258,48 @@
         </div>
     </div>
 
-    <!-- Hidden file input for DICOM upload -->
-    <input type="file" id="hidden-file-input" multiple accept=".dcm,.dicom" style="display: none;">
+    <!-- 3D Reconstruction Modal -->
+    <div id="3d-reconstruction-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>3D Reconstruction Options</h3>
+                <button class="modal-close" onclick="this.closest('.modal').style.display='none'">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="reconstruction-options">
+                    <button class="reconstruction-btn" onclick="dicomViewer.trigger3DReconstruction('mpr')">
+                        <i class="fas fa-layer-group"></i>
+                        <span>Multi-Planar Reconstruction (MPR)</span>
+                    </button>
+                    <button class="reconstruction-btn" onclick="dicomViewer.trigger3DReconstruction('3d_bone')">
+                        <i class="fas fa-bone"></i>
+                        <span>3D Bone Reconstruction</span>
+                    </button>
+                    <button class="reconstruction-btn" onclick="dicomViewer.trigger3DReconstruction('angio')">
+                        <i class="fas fa-heartbeat"></i>
+                        <span>Angiography Reconstruction</span>
+                    </button>
+                    <button class="reconstruction-btn" onclick="dicomViewer.trigger3DReconstruction('virtual_surgery')">
+                        <i class="fas fa-cut"></i>
+                        <span>Virtual Surgery Planning</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Results Panel -->
+    <div id="ai-results-panel" class="ai-panel" style="display: none;">
+        <!-- AI results will be populated here -->
+    </div>
+
+    <!-- Notification Area -->
+    <div id="notification-area" class="notification-area" style="display: none;">
+        <!-- Notifications will be populated here -->
+    </div>
+
+    <!-- CSRF Token -->
+    {% csrf_token %}
 
     <script src="{% static 'js/dicom_viewer.js' %}"></script>
 </body>
