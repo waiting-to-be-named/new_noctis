@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM Worklist</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/worklist.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #2a2a2a;
+            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .worklist-container {
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #1a1a1a;
+            border-radius: 8px;
+        }
+        
+        .filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #1a1a1a;
+            border-radius: 8px;
+        }
+        
+        .worklist-table {
+            width: 100%;
+            background: #1a1a1a;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+        
+        .worklist-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .worklist-table th {
+            background: #0d0d0d;
+            color: #00ff00;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #00ff00;
+        }
+        
+        .worklist-table tr {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .worklist-table tr:hover {
+            background: rgba(0, 255, 0, 0.1);
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+        }
+        
+        .worklist-table td {
+            padding: 15px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .patient-row.selected {
+            background: rgba(0, 255, 0, 0.2);
+            border-left: 4px solid #00ff00;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-view {
+            background: #00ff00;
+            color: #000;
+        }
+        
+        .btn-view:hover {
+            background: #00cc00;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+        }
+        
+        .btn-clinical {
+            background: #0066cc;
+            color: #fff;
+        }
+        
+        .btn-report {
+            background: #ff9900;
+            color: #fff;
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status-scheduled {
+            background: #666;
+            color: #fff;
+        }
+        
+        .status-in_progress {
+            background: #ff9900;
+            color: #fff;
+        }
+        
+        .status-completed {
+            background: #00ff00;
+            color: #000;
+        }
+        
+        .notification-badge {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ff0066;
+            color: #fff;
+            padding: 10px 15px;
+            border-radius: 8px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .clinical-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+        }
+        
+        .clinical-modal-content {
+            position: relative;
+            background: #1a1a1a;
+            margin: 5% auto;
+            padding: 20px;
+            width: 80%;
+            max-width: 600px;
+            border-radius: 8px;
+            border: 2px solid #00ff00;
+        }
+    </style>
+</head>
+<body>
+    <div class="worklist-container">
+        <div class="header">
+            <h1><i class="fas fa-list-alt"></i> DICOM Worklist</h1>
+            <div class="header-actions">
+                <button class="btn btn-view" onclick="window.location.href='/'">
+                    <i class="fas fa-images"></i> Open Viewer
+                </button>
+                {% if is_admin or is_radiologist %}
+                <div id="notification-count" class="notification-badge" style="display: none;">
+                    <i class="fas fa-bell"></i> <span>0</span> New Studies
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="filters">
+            <input type="text" id="search" placeholder="Search patient name, ID, or accession..." class="form-control">
+            
+            <select id="status-filter" class="form-select">
+                <option value="">All Status</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+            </select>
+            
+            <select id="modality-filter" class="form-select">
+                <option value="">All Modalities</option>
+                {% for modality in modalities %}
+                <option value="{{ modality }}">{{ modality }}</option>
+                {% endfor %}
+            </select>
+            
+            {% if is_admin or is_radiologist %}
+            <select id="facility-filter" class="form-select">
+                <option value="">All Facilities</option>
+                {% for facility in facilities %}
+                <option value="{{ facility.id }}">{{ facility.name }}</option>
+                {% endfor %}
+            </select>
+            {% endif %}
+        </div>
+        
+        <div class="worklist-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Patient Name</th>
+                        <th>Patient ID</th>
+                        <th>Accession #</th>
+                        <th>Modality</th>
+                        <th>Scheduled Date/Time</th>
+                        <th>Status</th>
+                        <th>Facility</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="worklist-body">
+                    {% for entry in entries %}
+                    <tr class="patient-row" data-entry-id="{{ entry.id }}">
+                        <td>{{ entry.patient_name }}</td>
+                        <td>{{ entry.patient_id }}</td>
+                        <td>{{ entry.accession_number }}</td>
+                        <td>{{ entry.modality }}</td>
+                        <td>{{ entry.scheduled_procedure_step_start_date|date:"Y-m-d" }} {{ entry.scheduled_procedure_step_start_time|time:"H:i" }}</td>
+                        <td>
+                            <span class="status-badge status-{{ entry.status }}">
+                                {{ entry.get_status_display }}
+                            </span>
+                        </td>
+                        <td>{{ entry.facility.name }}</td>
+                        <td>
+                            <div class="action-buttons">
+                                {% if entry.study %}
+                                <button class="btn btn-view" onclick="viewStudy({{ entry.id }})">
+                                    <i class="fas fa-eye"></i> View
+                                </button>
+                                {% endif %}
+                                <button class="btn btn-clinical" onclick="addClinicalInfo({{ entry.id }})">
+                                    <i class="fas fa-file-medical"></i> Clinical
+                                </button>
+                                {% if is_radiologist or is_admin %}
+                                {% if entry.study %}
+                                <button class="btn btn-report" onclick="writeReport({{ entry.study.id }})">
+                                    <i class="fas fa-file-alt"></i> Report
+                                </button>
+                                {% endif %}
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        {% if is_paginated %}
+        <div class="pagination">
+            <span class="page-links">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1">&laquo; first</a>
+                    <a href="?page={{ page_obj.previous_page_number }}">previous</a>
+                {% endif %}
+                
+                <span class="current">
+                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                </span>
+                
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}">next</a>
+                    <a href="?page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
+                {% endif %}
+            </span>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Clinical Info Modal -->
+    <div id="clinical-modal" class="clinical-modal">
+        <div class="clinical-modal-content">
+            <h2>Add Clinical Information</h2>
+            <textarea id="clinical-info-text" rows="10" placeholder="Enter clinical information..."></textarea>
+            <div class="modal-actions">
+                <button onclick="saveClinicalInfo()" class="btn btn-view">Save</button>
+                <button onclick="closeClinicalModal()" class="btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentEntryId = null;
+        
+        // Row selection
+        document.querySelectorAll('.patient-row').forEach(row => {
+            row.addEventListener('click', function() {
+                document.querySelectorAll('.patient-row').forEach(r => r.classList.remove('selected'));
+                this.classList.add('selected');
+            });
+        });
+        
+        // Filter functionality
+        const searchInput = document.getElementById('search');
+        const statusFilter = document.getElementById('status-filter');
+        const modalityFilter = document.getElementById('modality-filter');
+        const facilityFilter = document.getElementById('facility-filter');
+        
+        function applyFilters() {
+            const params = new URLSearchParams();
+            if (searchInput.value) params.set('search', searchInput.value);
+            if (statusFilter.value) params.set('status', statusFilter.value);
+            if (modalityFilter.value) params.set('modality', modalityFilter.value);
+            if (facilityFilter && facilityFilter.value) params.set('facility', facilityFilter.value);
+            
+            window.location.href = '?' + params.toString();
+        }
+        
+        searchInput.addEventListener('input', debounce(applyFilters, 500));
+        statusFilter.addEventListener('change', applyFilters);
+        modalityFilter.addEventListener('change', applyFilters);
+        if (facilityFilter) facilityFilter.addEventListener('change', applyFilters);
+        
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+        
+        function viewStudy(entryId) {
+            window.location.href = `/worklist/entry/${entryId}/view/`;
+        }
+        
+        function addClinicalInfo(entryId) {
+            currentEntryId = entryId;
+            document.getElementById('clinical-modal').style.display = 'block';
+        }
+        
+        function closeClinicalModal() {
+            document.getElementById('clinical-modal').style.display = 'none';
+            document.getElementById('clinical-info-text').value = '';
+            currentEntryId = null;
+        }
+        
+        function saveClinicalInfo() {
+            const clinicalInfo = document.getElementById('clinical-info-text').value;
+            if (!clinicalInfo || !currentEntryId) return;
+            
+            fetch(`/worklist/entry/${currentEntryId}/clinical-info/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({ clinical_info: clinicalInfo })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Clinical information saved successfully');
+                    closeClinicalModal();
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+        
+        function writeReport(studyId) {
+            window.location.href = `/worklist/study/${studyId}/report/`;
+        }
+        
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        
+        // Check for notifications
+        {% if is_admin or is_radiologist %}
+        function checkNotifications() {
+            fetch('/worklist/notifications/')
+                .then(response => response.json())
+                .then(data => {
+                    const badge = document.getElementById('notification-count');
+                    if (data.notifications && data.notifications.length > 0) {
+                        badge.style.display = 'block';
+                        badge.querySelector('span').textContent = data.notifications.length;
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                })
+                .catch(error => console.error('Error checking notifications:', error));
+        }
+        
+        // Check notifications every 30 seconds
+        checkNotifications();
+        setInterval(checkNotifications, 30000);
+        {% endif %}
+    </script>
+</body>
+</html>

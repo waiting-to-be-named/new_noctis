@@ -6,6 +6,7 @@ from django.views.decorators.http import require_http_methods
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.views.generic import TemplateView
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -15,8 +16,16 @@ import os
 import pydicom
 from datetime import datetime
 import numpy as np
-from .models import DicomStudy, DicomSeries, DicomImage, Measurement, Annotation
+from .models import (
+    DicomStudy, DicomSeries, DicomImage, Measurement, Annotation,
+    Facility, Report, WorklistEntry, AIAnalysis, Notification
+)
 from .serializers import DicomStudySerializer, DicomImageSerializer
+
+
+class HomeView(TemplateView):
+    """Home page with launch buttons"""
+    template_name = 'home.html'
 
 
 class DicomViewerView(TemplateView):
@@ -49,22 +58,35 @@ def upload_dicom_files(request):
             # Read DICOM data
             dicom_data = pydicom.dcmread(full_path)
             
-            # Create or get study
+            # Create/update study with facility association
             study_uid = str(dicom_data.get('StudyInstanceUID', ''))
             if not study:
                 study, created = DicomStudy.objects.get_or_create(
                     study_instance_uid=study_uid,
                     defaults={
-                        'patient_name': str(dicom_data.get('PatientName', 'Unknown')),
-                        'patient_id': str(dicom_data.get('PatientID', '')),
-                        'study_date': parse_dicom_date(dicom_data.get('StudyDate')),
-                        'study_time': parse_dicom_time(dicom_data.get('StudyTime')),
-                        'study_description': str(dicom_data.get('StudyDescription', '')),
-                        'modality': str(dicom_data.get('Modality', '')),
-                        'institution_name': str(dicom_data.get('InstitutionName', '')),
+                        'patient_name': str(dicom_data.PatientName) if hasattr(dicom_data, 'PatientName') else 'Unknown',
+                        'patient_id': str(dicom_data.PatientID) if hasattr(dicom_data, 'PatientID') else 'Unknown',
+                        'study_date': parse_dicom_date(getattr(dicom_data, 'StudyDate', None)),
+                        'study_time': parse_dicom_time(getattr(dicom_data, 'StudyTime', None)),
+                        'study_description': str(getattr(dicom_data, 'StudyDescription', '')),
+                        'modality': str(dicom_data.Modality) if hasattr(dicom_data, 'Modality') else 'OT',
+                        'institution_name': str(getattr(dicom_data, 'InstitutionName', '')),
                         'uploaded_by': request.user if request.user.is_authenticated else None,
+                        'facility': request.user.facility_staff.facility if hasattr(request.user, 'facility_staff') else None,
                     }
                 )
+            
+            # If study was created, send notifications to radiologists
+            if created:
+                radiologists = User.objects.filter(groups__name='Radiologists')
+                for radiologist in radiologists:
+                    Notification.objects.create(
+                        recipient=radiologist,
+                        notification_type='new_study',
+                        title=f'New {study.modality} Study',
+                        message=f'New study uploaded for {study.patient_name}',
+                        related_study=study
+                    )
             
             # Create or get series
             series_uid = str(dicom_data.get('SeriesInstanceUID', ''))
@@ -186,46 +208,138 @@ def save_measurement(request):
     """Save a measurement"""
     try:
         data = json.loads(request.body)
-        image = get_object_or_404(DicomImage, id=data['image_id'])
+        image_id = data.get('image_id')
+        measurement_type = data.get('measurement_type')
+        coordinates = data.get('coordinates')
+        value = data.get('value')
+        unit = data.get('unit', 'px')
         
-        measurement = Measurement.objects.create(
-            image=image,
-            measurement_type=data.get('type', 'line'),
-            coordinates=data['coordinates'],
-            value=data['value'],
-            unit=data.get('unit', 'px'),
-            notes=data.get('notes', ''),
-            created_by=request.user if request.user.is_authenticated else None,
-        )
+        # Convert pixel measurements to selected unit
+        image = get_object_or_404(DicomImage, id=image_id)
+        
+        if unit in ['mm', 'cm'] and measurement_type == 'line':
+            # Get pixel spacing
+            pixel_spacing_x = image.pixel_spacing_x or 1.0
+            pixel_spacing_y = image.pixel_spacing_y or 1.0
+            
+            # Convert based on measurement type
+            if measurement_type == 'line':
+                # Calculate actual distance in mm
+                dx = (coordinates['x1'] - coordinates['x0']) * pixel_spacing_x
+                dy = (coordinates['y1'] - coordinates['y0']) * pixel_spacing_y
+                value_mm = np.sqrt(dx**2 + dy**2)
+                
+                if unit == 'cm':
+                    value = value_mm / 10.0
+                else:
+                    value = value_mm
+        
+        # Handle ellipse HU measurements
+        if measurement_type == 'ellipse':
+            # Calculate HU values
+            pixel_array = image.get_pixel_array()
+            dicom_data = image.load_dicom_data()
+            
+            if pixel_array is not None and dicom_data:
+                # Apply rescale for HU
+                rescale_slope = float(getattr(dicom_data, 'RescaleSlope', 1))
+                rescale_intercept = float(getattr(dicom_data, 'RescaleIntercept', 0))
+                pixel_array = pixel_array * rescale_slope + rescale_intercept
+                
+                # Extract ellipse region
+                x0, y0 = coordinates['x0'], coordinates['y0']
+                x1, y1 = coordinates['x1'], coordinates['y1']
+                
+                # Calculate ellipse mask
+                xc = (x0 + x1) / 2.0
+                yc = (y0 + y1) / 2.0
+                a = abs(x1 - x0) / 2.0
+                b = abs(y1 - y0) / 2.0
+                
+                y_min = int(max(min(y0, y1), 0))
+                y_max = int(min(max(y0, y1), pixel_array.shape[0] - 1))
+                x_min = int(max(min(x0, x1), 0))
+                x_max = int(min(max(x0, x1), pixel_array.shape[1] - 1))
+                
+                yy, xx = np.ogrid[y_min:y_max + 1, x_min:x_max + 1]
+                ellipse_mask = (((xx - xc) / a) ** 2 + ((yy - yc) / b) ** 2) <= 1.0
+                
+                region_pixels = pixel_array[y_min:y_max + 1, x_min:x_max + 1][ellipse_mask]
+                
+                if region_pixels.size > 0:
+                    hounsfield_mean = float(np.mean(region_pixels))
+                    hounsfield_min = float(np.min(region_pixels))
+                    hounsfield_max = float(np.max(region_pixels))
+                    hounsfield_std = float(np.std(region_pixels))
+                    
+                    measurement = Measurement.objects.create(
+                        image_id=image_id,
+                        measurement_type=measurement_type,
+                        coordinates=coordinates,
+                        value=hounsfield_mean,
+                        unit='HU',
+                        hounsfield_mean=hounsfield_mean,
+                        hounsfield_min=hounsfield_min,
+                        hounsfield_max=hounsfield_max,
+                        hounsfield_std=hounsfield_std,
+                        notes=data.get('notes', ''),
+                        created_by=request.user if request.user.is_authenticated else None,
+                    )
+                    
+                    return JsonResponse({
+                        'success': True,
+                        'measurement_id': measurement.id,
+                        'hounsfield_mean': hounsfield_mean,
+                        'hounsfield_min': hounsfield_min,
+                        'hounsfield_max': hounsfield_max,
+                        'hounsfield_std': hounsfield_std
+                    })
+        
+        else:
+            # Regular measurement
+            measurement = Measurement.objects.create(
+                image_id=image_id,
+                measurement_type=measurement_type,
+                coordinates=coordinates,
+                value=value,
+                unit=unit,
+                notes=data.get('notes', ''),
+                created_by=request.user if request.user.is_authenticated else None,
+            )
         
         return JsonResponse({
             'success': True,
-            'measurement_id': measurement.id
+            'measurement_id': measurement.id,
+            'value': measurement.value,
+            'unit': measurement.unit
         })
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
 
 
-@csrf_exempt  
-@api_view(['POST'])
+@csrf_exempt
+@require_http_methods(['POST'])
 def save_annotation(request):
-    """Save an annotation"""
+    """Save an annotation with enhanced properties"""
     try:
         data = json.loads(request.body)
-        image = get_object_or_404(DicomImage, id=data['image_id'])
         
         annotation = Annotation.objects.create(
-            image=image,
-            x_coordinate=data['x'],
-            y_coordinate=data['y'],
-            text=data['text'],
+            image_id=data.get('image_id'),
+            x_coordinate=data.get('x'),
+            y_coordinate=data.get('y'),
+            text=data.get('text'),
+            font_size=data.get('font_size', 14),
+            color=data.get('color', '#FFFF00'),
             created_by=request.user if request.user.is_authenticated else None,
         )
         
         return JsonResponse({
             'success': True,
-            'annotation_id': annotation.id
+            'annotation_id': annotation.id,
+            'font_size': annotation.font_size,
+            'color': annotation.color
         })
         
     except Exception as e:
@@ -351,6 +465,141 @@ def measure_hu(request):
         })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
+
+
+@csrf_exempt
+@api_view(['POST'])
+def perform_ai_analysis(request, image_id):
+    """Perform AI analysis on DICOM image"""
+    try:
+        image = get_object_or_404(DicomImage, id=image_id)
+        
+        # Mock AI analysis - in production, this would call actual AI model
+        pixel_array = image.get_pixel_array()
+        if pixel_array is None:
+            return Response({'error': 'Cannot load image data'}, status=400)
+        
+        # Simulate finding regions of interest
+        height, width = pixel_array.shape
+        mock_findings = []
+        
+        # Generate some mock findings
+        for i in range(3):
+            x = np.random.randint(width * 0.2, width * 0.8)
+            y = np.random.randint(height * 0.2, height * 0.8)
+            size = np.random.randint(20, 50)
+            confidence = np.random.uniform(0.7, 0.95)
+            
+            mock_findings.append({
+                'type': np.random.choice(['nodule', 'consolidation', 'opacity']),
+                'location': {'x': int(x), 'y': int(y)},
+                'size': int(size),
+                'confidence': float(confidence)
+            })
+        
+        # Create AI analysis record
+        analysis = AIAnalysis.objects.create(
+            image=image,
+            analysis_type='chest_xray_abnormality_detection',
+            findings=mock_findings,
+            summary=f"Detected {len(mock_findings)} potential abnormalities with high confidence.",
+            confidence_score=0.85,
+            highlighted_regions=[{
+                'x': f['location']['x'],
+                'y': f['location']['y'],
+                'width': f['size'],
+                'height': f['size'],
+                'label': f['type'],
+                'confidence': f['confidence']
+            } for f in mock_findings]
+        )
+        
+        return Response({
+            'analysis_id': analysis.id,
+            'findings': analysis.findings,
+            'summary': analysis.summary,
+            'highlighted_regions': analysis.highlighted_regions,
+            'confidence_score': analysis.confidence_score
+        })
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
+
+
+@csrf_exempt
+@api_view(['GET'])
+def get_3d_reconstruction(request, series_id):
+    """Get 3D reconstruction data for a series"""
+    try:
+        series = get_object_or_404(DicomSeries, id=series_id)
+        reconstruction_type = request.GET.get('type', 'mpr')
+        
+        # Check if series has enough images for 3D
+        if series.image_count < 10:
+            return Response({
+                'error': 'Not enough images for 3D reconstruction'
+            }, status=400)
+        
+        # Mock 3D reconstruction data
+        if reconstruction_type == 'mpr':
+            # Multi-planar reconstruction
+            return Response({
+                'type': 'mpr',
+                'planes': {
+                    'axial': {'available': True, 'slice_count': series.image_count},
+                    'coronal': {'available': True, 'slice_count': 100},
+                    'sagittal': {'available': True, 'slice_count': 100}
+                },
+                'voxel_spacing': [1.0, 1.0, 2.0]
+            })
+            
+        elif reconstruction_type == '3d_bone':
+            # 3D bone reconstruction
+            return Response({
+                'type': '3d_bone',
+                'mesh_data': {
+                    'vertices': 15000,
+                    'faces': 30000,
+                    'threshold': 200  # HU threshold for bone
+                },
+                'rendering_params': {
+                    'opacity': 0.8,
+                    'color': '#F5DEB3'
+                }
+            })
+            
+        elif reconstruction_type == 'angio':
+            # Angiography reconstruction
+            return Response({
+                'type': 'angio',
+                'vessel_tree': {
+                    'main_vessels': 12,
+                    'branches': 45
+                },
+                'contrast_params': {
+                    'window': 600,
+                    'level': 100
+                }
+            })
+            
+        elif reconstruction_type == 'virtual_surgery':
+            # Virtual surgery planning
+            return Response({
+                'type': 'virtual_surgery',
+                'tools': ['cutting_plane', 'measurement', 'annotation'],
+                'anatomical_structures': ['bone', 'soft_tissue', 'vessels'],
+                'planning_data': {
+                    'cutting_planes': [],
+                    'measurements': [],
+                    'annotations': []
+                }
+            })
+            
+        else:
+            return Response({'error': 'Unknown reconstruction type'}, status=400)
+            
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
 
 
 def parse_dicom_date(date_str):
