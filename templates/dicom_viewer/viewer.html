@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Django DICOM Viewer</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/dicom_viewer.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div id="dicom-viewer" class="dicom-viewer">
+        <!-- Left Toolbar -->
+        <div class="toolbar">
+            <div class="tool-buttons">
+                <button class="tool-btn active" data-tool="windowing" title="Window/Level">
+                    <i class="fas fa-adjust"></i>
+                    <span>Window</span>
+                </button>
+                <button class="tool-btn" data-tool="zoom" title="Zoom">
+                    <i class="fas fa-search-plus"></i>
+                    <span>Zoom</span>
+                </button>
+                <button class="tool-btn" data-tool="pan" title="Pan">
+                    <i class="fas fa-hand-paper"></i>
+                    <span>Pan</span>
+                </button>
+                <button class="tool-btn" data-tool="measure" title="Measure">
+                    <i class="fas fa-ruler"></i>
+                    <span>Measure</span>
+                </button>
+                <button class="tool-btn" data-tool="annotate" title="Annotate">
+                    <i class="fas fa-edit"></i>
+                    <span>Annotate</span>
+                </button>
+                <button class="tool-btn" data-tool="crosshair" title="Crosshair">
+                    <i class="fas fa-crosshairs"></i>
+                    <span>Crosshair</span>
+                </button>
+                <button class="tool-btn" data-tool="invert" title="Invert">
+                    <i class="fas fa-circle"></i>
+                    <span>Invert</span>
+                </button>
+                <button class="tool-btn" data-tool="reset" title="Reset">
+                    <i class="fas fa-undo"></i>
+                    <span>Reset</span>
+                </button>
+                <button class="tool-btn" data-tool="ai" title="AI Analysis">
+                    <i class="fas fa-robot"></i>
+                    <span>AI</span>
+                </button>
+                <button class="tool-btn" data-tool="3d" title="3D Reconstruction">
+                    <i class="fas fa-cube"></i>
+                    <span>3D</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Top Bar -->
+            <div class="top-bar">
+                <div class="top-controls">
+                    <button id="load-dicom-btn" class="primary-btn">
+                        <i class="fas fa-upload"></i>
+                        Load DICOM Files
+                    </button>
+                    <select id="backend-studies" class="form-select">
+                        <option value="">Select DICOM from System</option>
+                    </select>
+                    <div class="patient-info" id="patient-info">
+                        Patient: - | Study Date: - | Modality: -
+                    </div>
+                </div>
+            </div>
+
+            <!-- Viewport -->
+            <div class="viewport">
+                <canvas id="dicom-canvas" class="dicom-canvas"></canvas>
+                
+                <!-- Overlay Labels -->
+                <div class="overlay-labels">
+                    <div class="wl-info" id="wl-info">
+                        WW: 400<br>
+                        WL: 40<br>
+                        Slice: 1/1
+                    </div>
+                    <div class="zoom-info" id="zoom-info">
+                        Zoom: 100%
+                    </div>
+                </div>
+
+                <!-- Crosshair -->
+                <div id="crosshair" class="crosshair" style="display: none;">
+                    <div class="crosshair-h"></div>
+                    <div class="crosshair-v"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel -->
+        <div class="right-panel">
+            <div class="panel-content">
+                <!-- Window/Level Section -->
+                <div class="panel-section">
+                    <h3 class="section-title">Window/Level</h3>
+                    
+                    <div class="control-group">
+                        <div class="control-header">
+                            <label>Window Width</label>
+                            <span id="ww-value">400</span>
+                        </div>
+                        <input type="range" id="ww-slider" min="1" max="4000" value="400" class="slider">
+                    </div>
+                    
+                    <div class="control-group">
+                        <div class="control-header">
+                            <label>Window Level</label>
+                            <span id="wl-value">40</span>
+                        </div>
+                        <input type="range" id="wl-slider" min="-1000" max="1000" value="40" class="slider">
+                    </div>
+                    
+                    <div class="preset-buttons">
+                        <button class="preset-btn" data-preset="lung">Lung</button>
+                        <button class="preset-btn" data-preset="bone">Bone</button>
+                        <button class="preset-btn" data-preset="soft">Soft</button>
+                        <button class="preset-btn" data-preset="brain">Brain</button>
+                    </div>
+                </div>
+
+                <!-- Navigation Section -->
+                <div class="panel-section">
+                    <h3 class="section-title">Image Navigation</h3>
+                    
+                    <div class="control-group">
+                        <div class="control-header">
+                            <label>Slice</label>
+                            <span id="slice-value">1</span>
+                        </div>
+                        <input type="range" id="slice-slider" min="0" max="0" value="0" class="slider">
+                    </div>
+                </div>
+
+                <!-- Transform Section -->
+                <div class="panel-section">
+                    <h3 class="section-title">Transform</h3>
+                    
+                    <div class="control-group">
+                        <div class="control-header">
+                            <label>Zoom</label>
+                            <span id="zoom-value">100%</span>
+                        </div>
+                        <input type="range" id="zoom-slider" min="25" max="500" value="100" class="slider">
+                    </div>
+                </div>
+
+                <!-- Image Info Section -->
+                <div class="panel-section">
+                    <h3 class="section-title">Image Info</h3>
+                    <div class="info-list">
+                        <div class="info-item">
+                            <label>Dimensions:</label>
+                            <span id="info-dimensions">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>Pixel Spacing:</label>
+                            <span id="info-pixel-spacing">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>Series:</label>
+                            <span id="info-series">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>Institution:</label>
+                            <span id="info-institution">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Measurements Section -->
+                <div class="panel-section">
+                    <h3 class="section-title">Measurements</h3>
+                    <button id="clear-measurements" class="secondary-btn">Clear All</button>
+                    <div id="measurements-list" class="measurements-list"></div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- File Upload Modal -->
+    <div id="upload-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Upload DICOM Files</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-area" id="upload-area">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <p>Drag and drop DICOM files here or click to select</p>
+                    <input type="file" id="file-input" multiple accept=".dcm,.dicom">
+                </div>
+                <div class="upload-progress" id="upload-progress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <p id="progress-text">Uploading...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file input for DICOM upload -->
+    <input type="file" id="hidden-file-input" multiple accept=".dcm,.dicom" style="display: none;">
+
+    <script src="{% static 'js/dicom_viewer.js' %}"></script>
+</body>
+</html>
