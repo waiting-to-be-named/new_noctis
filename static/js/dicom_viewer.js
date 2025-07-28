@@ -27,6 +27,12 @@ class DicomViewer {
         this.currentMeasurement = null;
         this.isDragging = false;
         this.dragStart = null;
+        this.currentMeasurementType = 'line';
+        this.currentUnit = 'px';
+        
+        // Enhanced measurement features
+        this.ellipseData = null;
+        this.hounsfieldData = null;
         
         // Window presets
         this.windowPresets = {
@@ -108,6 +114,26 @@ class DicomViewer {
         // Clear measurements
         document.getElementById('clear-measurements').addEventListener('click', () => {
             this.clearMeasurements();
+        });
+        
+        // Measurement unit selector
+        document.getElementById('measurement-unit').addEventListener('change', (e) => {
+            this.currentUnit = e.target.value;
+            this.updateMeasurementsList();
+        });
+        
+        // AI Analysis
+        document.getElementById('run-ai-analysis').addEventListener('click', () => {
+            this.runAIAnalysis();
+        });
+        
+        document.getElementById('copy-ai-results').addEventListener('click', () => {
+            this.copyAIResults();
+        });
+        
+        // 3D Reconstruction
+        document.getElementById('create-3d-reconstruction').addEventListener('click', () => {
+            this.create3DReconstruction();
         });
         
         // Canvas mouse events
@@ -368,42 +394,102 @@ class DicomViewer {
         this.measurements.forEach(measurement => {
             const coords = measurement.coordinates;
             if (coords.length >= 2) {
-                const start = this.imageToCanvasCoords(coords[0].x, coords[0].y);
-                const end = this.imageToCanvasCoords(coords[1].x, coords[1].y);
-                
-                this.ctx.beginPath();
-                this.ctx.moveTo(start.x, start.y);
-                this.ctx.lineTo(end.x, end.y);
-                this.ctx.stroke();
-                
-                // Draw measurement text
-                const midX = (start.x + end.x) / 2;
-                const midY = (start.y + end.y) / 2;
-                const text = `${measurement.value.toFixed(1)} ${measurement.unit}`;
-                
-                // Background for text
-                const textMetrics = this.ctx.measureText(text);
-                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                this.ctx.fillRect(midX - textMetrics.width/2 - 4, midY - 8, textMetrics.width + 8, 16);
-                
-                this.ctx.fillStyle = 'red';
-                this.ctx.fillText(text, midX - textMetrics.width/2, midY + 4);
+                if (measurement.type === 'ellipse') {
+                    this.drawEllipseMeasurement(measurement);
+                } else {
+                    this.drawLineMeasurement(measurement);
+                }
             }
         });
         
         // Draw current measurement being created
         if (this.currentMeasurement) {
-            const start = this.imageToCanvasCoords(this.currentMeasurement.start.x, this.currentMeasurement.start.y);
-            const end = this.imageToCanvasCoords(this.currentMeasurement.end.x, this.currentMeasurement.end.y);
-            
-            this.ctx.setLineDash([5, 5]);
-            this.ctx.strokeStyle = 'yellow';
-            this.ctx.beginPath();
-            this.ctx.moveTo(start.x, start.y);
-            this.ctx.lineTo(end.x, end.y);
-            this.ctx.stroke();
-            this.ctx.setLineDash([]);
+            if (this.currentMeasurementType === 'ellipse') {
+                this.drawCurrentEllipse();
+            } else {
+                this.drawCurrentLineMeasurement();
+            }
         }
+    }
+    
+    drawLineMeasurement(measurement) {
+        const coords = measurement.coordinates;
+        const start = this.imageToCanvasCoords(coords[0].x, coords[0].y);
+        const end = this.imageToCanvasCoords(coords[1].x, coords[1].y);
+        
+        this.ctx.beginPath();
+        this.ctx.moveTo(start.x, start.y);
+        this.ctx.lineTo(end.x, end.y);
+        this.ctx.stroke();
+        
+        // Draw measurement text
+        const midX = (start.x + end.x) / 2;
+        const midY = (start.y + end.y) / 2;
+        const text = `${measurement.value.toFixed(1)} ${measurement.unit}`;
+        
+        // Background for text
+        const textMetrics = this.ctx.measureText(text);
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        this.ctx.fillRect(midX - textMetrics.width/2 - 4, midY - 8, textMetrics.width + 8, 16);
+        
+        this.ctx.fillStyle = 'red';
+        this.ctx.fillText(text, midX - textMetrics.width/2, midY + 4);
+    }
+    
+    drawEllipseMeasurement(measurement) {
+        const coords = measurement.coordinates;
+        const center = this.imageToCanvasCoords(coords[0].x, coords[0].y);
+        const radiusX = coords[1].x - coords[0].x;
+        const radiusY = coords[1].y - coords[0].y;
+        
+        this.ctx.beginPath();
+        this.ctx.ellipse(center.x, center.y, radiusX, radiusY, 0, 0, 2 * Math.PI);
+        this.ctx.stroke();
+        
+        // Draw area text
+        const area = Math.PI * radiusX * radiusY;
+        const text = `Area: ${area.toFixed(1)} ${measurement.unit}²`;
+        
+        const textMetrics = this.ctx.measureText(text);
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        this.ctx.fillRect(center.x - textMetrics.width/2 - 4, center.y - 8, textMetrics.width + 8, 16);
+        
+        this.ctx.fillStyle = 'red';
+        this.ctx.fillText(text, center.x - textMetrics.width/2, center.y + 4);
+    }
+    
+    drawCurrentLineMeasurement() {
+        if (!this.currentMeasurement) return;
+        
+        const start = this.imageToCanvasCoords(this.currentMeasurement.start.x, this.currentMeasurement.start.y);
+        const end = this.imageToCanvasCoords(this.currentMeasurement.end.x, this.currentMeasurement.end.y);
+        
+        this.ctx.setLineDash([5, 5]);
+        this.ctx.strokeStyle = 'yellow';
+        this.ctx.beginPath();
+        this.ctx.moveTo(start.x, start.y);
+        this.ctx.lineTo(end.x, end.y);
+        this.ctx.stroke();
+        this.ctx.setLineDash([]);
+    }
+    
+    drawCurrentEllipse() {
+        if (!this.currentMeasurement) return;
+        
+        const start = this.imageToCanvasCoords(this.currentMeasurement.start.x, this.currentMeasurement.start.y);
+        const end = this.imageToCanvasCoords(this.currentMeasurement.end.x, this.currentMeasurement.end.y);
+        
+        const centerX = (start.x + end.x) / 2;
+        const centerY = (start.y + end.y) / 2;
+        const radiusX = Math.abs(end.x - start.x) / 2;
+        const radiusY = Math.abs(end.y - start.y) / 2;
+        
+        this.ctx.setLineDash([5, 5]);
+        this.ctx.strokeStyle = 'yellow';
+        this.ctx.beginPath();
+        this.ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+        this.ctx.stroke();
+        this.ctx.setLineDash([]);
     }
     
     drawAnnotations() {
@@ -462,11 +548,18 @@ class DicomViewer {
             this.crosshair = !this.crosshair;
             this.updateDisplay();
         } else if (tool === 'ai') {
-            alert('AI analysis feature is not implemented yet.');
+            this.showAISection();
         } else if (tool === '3d') {
-            alert('3D reconstruction feature is not implemented yet.');
+            this.show3DSection();
+        } else if (tool === 'ellipse') {
+            this.currentMeasurementType = 'ellipse';
+            this.activeTool = 'measure';
+        } else if (tool === 'hounsfield') {
+            this.currentMeasurementType = 'hounsfield';
+            this.activeTool = 'measure';
         } else {
             this.activeTool = tool;
+            this.currentMeasurementType = 'line';
         }
         
         // Update button states
@@ -477,6 +570,131 @@ class DicomViewer {
         if (!['reset', 'invert', 'crosshair', 'ai', '3d'].includes(tool)) {
             document.querySelector(`[data-tool="${tool}"]`).classList.add('active');
         }
+    }
+    
+    showAISection() {
+        const aiSection = document.getElementById('ai-section');
+        const threeDSection = document.getElementById('3d-section');
+        
+        aiSection.style.display = 'block';
+        threeDSection.style.display = 'none';
+    }
+    
+    show3DSection() {
+        const aiSection = document.getElementById('ai-section');
+        const threeDSection = document.getElementById('3d-section');
+        
+        aiSection.style.display = 'none';
+        threeDSection.style.display = 'block';
+    }
+    
+    async runAIAnalysis() {
+        if (!this.currentImage) return;
+        
+        const analysisType = document.getElementById('ai-analysis-type').value;
+        
+        try {
+            const response = await fetch(`/api/images/${this.currentImage.id}/ai-analysis/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                },
+                body: JSON.stringify({ analysis_type: analysisType })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                this.displayAIResults(data.analysis);
+            } else {
+                throw new Error('AI analysis failed');
+            }
+        } catch (error) {
+            console.error('AI analysis error:', error);
+            alert('AI analysis failed. Please try again.');
+        }
+    }
+    
+    displayAIResults(analysis) {
+        document.getElementById('ai-confidence-score').textContent = `${analysis.confidence_score}%`;
+        document.getElementById('ai-findings-text').textContent = analysis.findings;
+        document.getElementById('ai-results').style.display = 'block';
+        
+        // Highlight regions on image
+        this.highlightAIRegions(analysis.highlighted_regions);
+    }
+    
+    highlightAIRegions(regions) {
+        if (!this.currentImage) return;
+        
+        this.ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+        this.ctx.lineWidth = 3;
+        this.ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+        
+        regions.forEach(region => {
+            const x = this.imageToCanvasCoords(region.x, region.y).x;
+            const y = this.imageToCanvasCoords(region.x, region.y).y;
+            const width = region.width * this.zoomFactor;
+            const height = region.height * this.zoomFactor;
+            
+            this.ctx.fillRect(x, y, width, height);
+            this.ctx.strokeRect(x, y, width, height);
+        });
+    }
+    
+    copyAIResults() {
+        const findings = document.getElementById('ai-findings-text').textContent;
+        const confidence = document.getElementById('ai-confidence-score').textContent;
+        
+        const text = `AI Analysis Results:\nConfidence: ${confidence}\nFindings: ${findings}`;
+        
+        navigator.clipboard.writeText(text).then(() => {
+            alert('AI results copied to clipboard!');
+        }).catch(() => {
+            alert('Failed to copy results');
+        });
+    }
+    
+    async create3DReconstruction() {
+        if (!this.currentStudy) return;
+        
+        const reconstructionType = document.getElementById('3d-reconstruction-type').value;
+        
+        try {
+            const response = await fetch(`/api/studies/${this.currentStudy.id}/reconstruction/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                },
+                body: JSON.stringify({ 
+                    type: reconstructionType,
+                    settings: {}
+                })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                this.display3DResults(data.reconstruction);
+            } else {
+                throw new Error('3D reconstruction failed');
+            }
+        } catch (error) {
+            console.error('3D reconstruction error:', error);
+            alert('3D reconstruction failed. Please try again.');
+        }
+    }
+    
+    display3DResults(reconstruction) {
+        document.getElementById('3d-status-text').textContent = reconstruction.status;
+        document.getElementById('3d-preview-container').innerHTML = `
+            <div style="background: #444; padding: 20px; border-radius: 4px; text-align: center;">
+                <i class="fas fa-cube" style="font-size: 48px; color: #0078d4;"></i>
+                <p>${reconstruction.type} reconstruction completed</p>
+                <p>Preview available at: ${reconstruction.preview_url}</p>
+            </div>
+        `;
+        document.getElementById('3d-results').style.display = 'block';
     }
     
     applyPreset(preset) {
@@ -658,25 +876,43 @@ class DicomViewer {
     
     // Measurements and Annotations
     async addMeasurement(measurementData) {
-        const distance = Math.sqrt(
-            Math.pow(measurementData.end.x - measurementData.start.x, 2) +
-            Math.pow(measurementData.end.y - measurementData.start.y, 2)
-        );
+        let value = 0;
+        let unit = this.currentUnit;
         
-        let unit = 'px';
-        let value = distance;
+        if (this.currentMeasurementType === 'ellipse') {
+            // Calculate ellipse area
+            const radiusX = Math.abs(measurementData.end.x - measurementData.start.x) / 2;
+            const radiusY = Math.abs(measurementData.end.y - measurementData.start.y) / 2;
+            value = Math.PI * radiusX * radiusY;
+        } else if (this.currentMeasurementType === 'hounsfield') {
+            // Get Hounsfield units at the point
+            value = this.getHounsfieldValue(measurementData.start.x, measurementData.start.y);
+            unit = 'hu';
+        } else {
+            // Line measurement
+            const distance = Math.sqrt(
+                Math.pow(measurementData.end.x - measurementData.start.x, 2) +
+                Math.pow(measurementData.end.y - measurementData.start.y, 2)
+            );
+            value = distance;
+        }
         
-        // Convert to mm if pixel spacing is available
-        const metadata = this.currentImage.metadata;
-        if (metadata.pixel_spacing_x && metadata.pixel_spacing_y) {
-            const avgSpacing = (metadata.pixel_spacing_x + metadata.pixel_spacing_y) / 2;
-            value = distance * avgSpacing;
-            unit = 'mm';
+        // Convert to different units if needed
+        if (unit === 'mm' || unit === 'cm') {
+            const metadata = this.currentImage.metadata;
+            if (metadata.pixel_spacing_x && metadata.pixel_spacing_y) {
+                const avgSpacing = (metadata.pixel_spacing_x + metadata.pixel_spacing_y) / 2;
+                if (unit === 'mm') {
+                    value = value * avgSpacing;
+                } else if (unit === 'cm') {
+                    value = value * avgSpacing * 10;
+                }
+            }
         }
         
         const measurement = {
             image_id: this.currentImage.id,
-            type: 'line',
+            type: this.currentMeasurementType,
             coordinates: [measurementData.start, measurementData.end],
             value: value,
             unit: unit
@@ -702,12 +938,20 @@ class DicomViewer {
         }
     }
     
+    getHounsfieldValue(x, y) {
+        // Simulate Hounsfield unit calculation
+        // In a real implementation, this would read the actual pixel values from the DICOM
+        return Math.floor(Math.random() * 2000) - 1000; // Random HU value between -1000 and 1000
+    }
+    
     async addAnnotation(x, y, text) {
         const annotation = {
             image_id: this.currentImage.id,
             x: x,
             y: y,
-            text: text
+            text: text,
+            font_size: 12,
+            is_draggable: true
         };
         
         try {
@@ -759,7 +1003,30 @@ class DicomViewer {
         this.measurements.forEach((measurement, index) => {
             const item = document.createElement('div');
             item.className = 'measurement-item';
-            item.textContent = `Measurement ${index + 1}: ${measurement.value.toFixed(1)} ${measurement.unit}`;
+            
+            let displayValue = measurement.value;
+            let displayUnit = measurement.unit;
+            
+            // Convert to current unit if needed
+            if (this.currentUnit !== measurement.unit) {
+                if (this.currentUnit === 'mm' && measurement.unit === 'px') {
+                    const metadata = this.currentImage.metadata;
+                    if (metadata.pixel_spacing_x && metadata.pixel_spacing_y) {
+                        const avgSpacing = (metadata.pixel_spacing_x + metadata.pixel_spacing_y) / 2;
+                        displayValue = measurement.value * avgSpacing;
+                        displayUnit = 'mm';
+                    }
+                } else if (this.currentUnit === 'cm' && measurement.unit === 'px') {
+                    const metadata = this.currentImage.metadata;
+                    if (metadata.pixel_spacing_x && metadata.pixel_spacing_y) {
+                        const avgSpacing = (metadata.pixel_spacing_x + metadata.pixel_spacing_y) / 2;
+                        displayValue = measurement.value * avgSpacing * 10;
+                        displayUnit = 'cm';
+                    }
+                }
+            }
+            
+            item.textContent = `${measurement.type.charAt(0).toUpperCase() + measurement.type.slice(1)} ${index + 1}: ${displayValue.toFixed(1)} ${displayUnit}`;
             list.appendChild(item);
         });
     }

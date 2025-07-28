@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM Worklist</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/worklist.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="worklist-container">
+        <!-- Header -->
+        <header class="worklist-header">
+            <div class="header-content">
+                <h1><i class="fas fa-list"></i> DICOM Worklist</h1>
+                <div class="header-actions">
+                    <button id="launch-viewer-btn" class="primary-btn">
+                        <i class="fas fa-eye"></i>
+                        Launch Viewer
+                    </button>
+                    <div class="user-info">
+                        <span id="user-role">{{ user_profile.role|title }}</span>
+                        <span id="user-facility">{{ user_profile.facility.name|default:"No Facility" }}</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Notifications Panel -->
+        <div id="notifications-panel" class="notifications-panel" style="display: none;">
+            <div class="notifications-header">
+                <h3><i class="fas fa-bell"></i> Notifications</h3>
+                <button id="close-notifications" class="close-btn">&times;</button>
+            </div>
+            <div id="notifications-list" class="notifications-list">
+                <!-- Notifications will be populated here -->
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="worklist-main">
+            <!-- Filters -->
+            <div class="filters-section">
+                <div class="filter-group">
+                    <label for="modality-filter">Modality:</label>
+                    <select id="modality-filter" class="filter-select">
+                        <option value="">All</option>
+                        <option value="CT">CT</option>
+                        <option value="MR">MR</option>
+                        <option value="XR">XR</option>
+                        <option value="US">US</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="date-filter">Date:</label>
+                    <input type="date" id="date-filter" class="filter-input">
+                </div>
+                <div class="filter-group">
+                    <label for="search-filter">Search:</label>
+                    <input type="text" id="search-filter" class="filter-input" placeholder="Patient name or ID...">
+                </div>
+                <button id="clear-filters" class="secondary-btn">Clear Filters</button>
+            </div>
+
+            <!-- Studies Table -->
+            <div class="table-container">
+                <table class="studies-table">
+                    <thead>
+                        <tr>
+                            <th>Patient Name</th>
+                            <th>Patient ID</th>
+                            <th>Study Date</th>
+                            <th>Modality</th>
+                            <th>Series</th>
+                            <th>Images</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="studies-tbody">
+                        {% for study in studies %}
+                        <tr class="study-row" data-study-id="{{ study.id }}" data-modality="{{ study.modality }}" data-date="{{ study.study_date|date:'Y-m-d' }}">
+                            <td class="patient-name">{{ study.patient_name }}</td>
+                            <td class="patient-id">{{ study.patient_id }}</td>
+                            <td class="study-date">{{ study.study_date|date:"M d, Y" }}</td>
+                            <td class="modality">{{ study.modality }}</td>
+                            <td class="series-count">{{ study.series_count }}</td>
+                            <td class="image-count">{{ study.total_images }}</td>
+                            <td class="status">
+                                {% if study.reports.exists %}
+                                    <span class="status-badge completed">Report Ready</span>
+                                {% else %}
+                                    <span class="status-badge pending">Pending</span>
+                                {% endif %}
+                            </td>
+                            <td class="actions">
+                                <button class="action-btn view-btn" data-study-id="{{ study.id }}" title="View Images">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="action-btn clinical-btn" data-study-id="{{ study.id }}" title="Add Clinical Info">
+                                    <i class="fas fa-notes-medical"></i>
+                                </button>
+                                {% if user_profile.role == 'radiologist' or user_profile.role == 'admin' %}
+                                <button class="action-btn report-btn" data-study-id="{{ study.id }}" title="Create Report">
+                                    <i class="fas fa-file-medical"></i>
+                                </button>
+                                {% endif %}
+                                <button class="action-btn print-btn" data-study-id="{{ study.id }}" title="Print Report">
+                                    <i class="fas fa-print"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="no-studies">
+                                <div class="empty-state">
+                                    <i class="fas fa-inbox"></i>
+                                    <p>No studies found</p>
+                                    <p>Upload DICOM files to get started</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Clinical Information Modal -->
+    <div id="clinical-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Clinical Information</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="clinical-form">
+                    <div class="form-group">
+                        <label for="clinical-notes">Clinical Notes:</label>
+                        <textarea id="clinical-notes" rows="6" placeholder="Enter clinical information..."></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="secondary-btn" id="cancel-clinical">Cancel</button>
+                        <button type="submit" class="primary-btn">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Modal -->
+    <div id="report-modal" class="modal" style="display: none;">
+        <div class="modal-content large-modal">
+            <div class="modal-header">
+                <h3>Create Radiology Report</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="report-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="report-title">Report Title:</label>
+                            <input type="text" id="report-title" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="report-status">Status:</label>
+                            <select id="report-status">
+                                <option value="draft">Draft</option>
+                                <option value="preliminary">Preliminary</option>
+                                <option value="final">Final</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="report-findings">Findings:</label>
+                        <textarea id="report-findings" rows="8" placeholder="Describe the findings..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="report-impression">Impression:</label>
+                        <textarea id="report-impression" rows="6" placeholder="Provide clinical impression..."></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="secondary-btn" id="cancel-report">Cancel</button>
+                        <button type="submit" class="primary-btn">Save Report</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'js/worklist.js' %}"></script>
+</body>
+</html>

@@ -11,6 +11,39 @@ import io
 import base64
 
 
+class UserProfile(models.Model):
+    """Extended user profile with role and facility information"""
+    ROLE_CHOICES = [
+        ('radiologist', 'Radiologist'),
+        ('admin', 'Administrator'),
+        ('technician', 'Technician'),
+        ('facility', 'Facility Staff'),
+    ]
+    
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='technician')
+    facility = models.ForeignKey('Facility', on_delete=models.SET_NULL, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.role}"
+
+
+class Facility(models.Model):
+    """Model to represent medical facilities"""
+    name = models.CharField(max_length=200)
+    address = models.TextField(blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    email = models.EmailField(blank=True)
+    letterhead_logo = models.ImageField(upload_to='facility_logos/', blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return self.name
+
+
 class DicomStudy(models.Model):
     """Model to represent a DICOM study"""
     study_instance_uid = models.CharField(max_length=100, unique=True)
@@ -21,6 +54,8 @@ class DicomStudy(models.Model):
     study_description = models.TextField(blank=True)
     modality = models.CharField(max_length=10)
     institution_name = models.CharField(max_length=200, blank=True)
+    facility = models.ForeignKey(Facility, on_delete=models.SET_NULL, null=True, blank=True)
+    clinical_notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     
@@ -177,13 +212,22 @@ class Measurement(models.Model):
         ('line', 'Line Measurement'),
         ('angle', 'Angle Measurement'),
         ('area', 'Area Measurement'),
+        ('ellipse', 'Ellipse Measurement'),
+        ('hounsfield', 'Hounsfield Units'),
+    ]
+    
+    UNIT_CHOICES = [
+        ('px', 'Pixels'),
+        ('mm', 'Millimeters'),
+        ('cm', 'Centimeters'),
+        ('hu', 'Hounsfield Units'),
     ]
     
     image = models.ForeignKey(DicomImage, related_name='measurements', on_delete=models.CASCADE)
     measurement_type = models.CharField(max_length=10, choices=MEASUREMENT_TYPES, default='line')
     coordinates = models.JSONField()  # Store coordinates as JSON
     value = models.FloatField()  # Measurement value (distance, angle, area)
-    unit = models.CharField(max_length=10, default='px')  # px, mm, cm
+    unit = models.CharField(max_length=10, choices=UNIT_CHOICES, default='px')  # px, mm, cm, hu
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
@@ -201,6 +245,8 @@ class Annotation(models.Model):
     x_coordinate = models.FloatField()
     y_coordinate = models.FloatField()
     text = models.TextField()
+    font_size = models.IntegerField(default=12)
+    is_draggable = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     
@@ -209,3 +255,91 @@ class Annotation(models.Model):
     
     def __str__(self):
         return f"Annotation: {self.text[:50]}"
+
+
+class Report(models.Model):
+    """Model to store radiology reports"""
+    REPORT_STATUS = [
+        ('draft', 'Draft'),
+        ('final', 'Final'),
+        ('preliminary', 'Preliminary'),
+    ]
+    
+    study = models.ForeignKey(DicomStudy, related_name='reports', on_delete=models.CASCADE)
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    findings = models.TextField(blank=True)
+    impression = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=REPORT_STATUS, default='draft')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    signed_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Report for {self.study.patient_name} - {self.created_at.date()}"
+
+
+class Notification(models.Model):
+    """Model to store user notifications"""
+    NOTIFICATION_TYPES = [
+        ('new_upload', 'New DICOM Upload'),
+        ('report_ready', 'Report Ready'),
+        ('system_alert', 'System Alert'),
+    ]
+    
+    user = models.ForeignKey(User, related_name='notifications', on_delete=models.CASCADE)
+    notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    related_study = models.ForeignKey(DicomStudy, on_delete=models.CASCADE, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.title} - {self.user.username}"
+
+
+class AIAnalysis(models.Model):
+    """Model to store AI analysis results"""
+    image = models.ForeignKey(DicomImage, related_name='ai_analyses', on_delete=models.CASCADE)
+    analysis_type = models.CharField(max_length=50)  # e.g., 'tumor_detection', 'fracture_detection'
+    confidence_score = models.FloatField()
+    findings = models.TextField()
+    highlighted_regions = models.JSONField()  # Store coordinates of highlighted areas
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"AI Analysis: {self.analysis_type} - {self.confidence_score}%"
+
+
+class Reconstruction3D(models.Model):
+    """Model to store 3D reconstruction settings and results"""
+    RECONSTRUCTION_TYPES = [
+        ('mpr', 'Multi-Planar Reconstruction'),
+        ('bone', '3D Bone Reconstruction'),
+        ('angio', 'Angiography Reconstruction'),
+        ('virtual_surgery', 'Virtual Surgery'),
+    ]
+    
+    study = models.ForeignKey(DicomStudy, related_name='reconstructions', on_delete=models.CASCADE)
+    reconstruction_type = models.CharField(max_length=20, choices=RECONSTRUCTION_TYPES)
+    settings = models.JSONField()  # Store reconstruction parameters
+    result_file = models.FileField(upload_to='3d_reconstructions/', blank=True, null=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.get_reconstruction_type_display()} - {self.study.patient_name}"
