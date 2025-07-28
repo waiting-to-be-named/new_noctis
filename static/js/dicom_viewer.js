@@ -7,6 +7,7 @@ class DicomViewer {
         
         // State variables
         this.currentStudy = null;
+        this.currentSeries = null;
         this.currentImages = [];
         this.currentImageIndex = 0;
         this.currentImage = null;
@@ -28,10 +29,22 @@ class DicomViewer {
         // Ellipse (HU) drawing state
         this.currentEllipse = null;
 
-        // Measurement unit (mm or cm)
+        // Measurement unit (px, mm or cm)
         this.measurementUnit = 'mm';
         this.isDragging = false;
         this.dragStart = null;
+        
+        // Annotation state
+        this.selectedAnnotation = null;
+        this.isEditingAnnotation = false;
+        
+        // AI Analysis
+        this.aiAnalysisResults = null;
+        this.showAIHighlights = false;
+        
+        // 3D Reconstruction
+        this.reconstructionType = 'mpr';
+        this.is3DEnabled = false;
         
         // Window presets
         this.windowPresets = {
@@ -41,6 +54,9 @@ class DicomViewer {
             'brain': { ww: 100, wl: 50 }
         };
         
+        // Notifications
+        this.notificationCheckInterval = null;
+        
         this.init();
     }
     
@@ -48,6 +64,10 @@ class DicomViewer {
         this.setupCanvas();
         this.setupEventListeners();
         this.loadBackendStudies();
+        this.setupNotifications();
+        this.setupMeasurementUnitSelector();
+        this.setup3DControls();
+        this.setupAIPanel();
     }
     
     setupCanvas() {
@@ -96,14 +116,6 @@ class DicomViewer {
             document.getElementById('zoom-value').textContent = e.target.value + '%';
             this.updateDisplay();
         });
-
-        // Measurement unit selector
-        const unitSelect = document.getElementById('measurement-unit');
-        if (unitSelect) {
-            unitSelect.addEventListener('change', (e) => {
-                this.measurementUnit = e.target.value;
-            });
-        }
         
         // Preset buttons
         document.querySelectorAll('.preset-btn').forEach(btn => {
@@ -118,6 +130,15 @@ class DicomViewer {
             this.showUploadModal();
         });
         
+        // Load from system (worklist)
+        document.getElementById('backend-studies').addEventListener('change', (e) => {
+            if (e.target.value === 'worklist') {
+                window.location.href = '/worklist/';
+            } else if (e.target.value) {
+                this.loadStudy(e.target.value);
+            }
+        });
+        
         // Clear measurements
         document.getElementById('clear-measurements').addEventListener('click', () => {
             this.clearMeasurements();
@@ -128,6 +149,7 @@ class DicomViewer {
         this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
         this.canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
         this.canvas.addEventListener('wheel', (e) => this.onWheel(e));
+        this.canvas.addEventListener('dblclick', (e) => this.onDoubleClick(e));
         
         // Upload modal events
         this.setupUploadModal();
@@ -227,7 +249,11 @@ class DicomViewer {
             const studies = await response.json();
             
             const select = document.getElementById('backend-studies');
-            select.innerHTML = '<option value="">Select DICOM from System</option>';
+            select.innerHTML = `
+                <option value="">Select DICOM from System</option>
+                <option value="worklist">📋 Open Worklist</option>
+                <option disabled>──────────────</option>
+            `;
             
             studies.forEach(study => {
                 const option = document.createElement('option');
@@ -236,11 +262,7 @@ class DicomViewer {
                 select.appendChild(option);
             });
             
-            select.addEventListener('change', (e) => {
-                if (e.target.value) {
-                    this.loadStudy(parseInt(e.target.value));
-                }
-            });
+            // Update: Event listener is already set up in setupEventListeners()
             
         } catch (error) {
             console.error('Error loading studies:', error);
@@ -253,6 +275,7 @@ class DicomViewer {
             const data = await response.json();
             
             this.currentStudy = data.study;
+            this.currentSeries = data.series || null;
             this.currentImages = data.images;
             this.currentImageIndex = 0;
             
@@ -365,6 +388,9 @@ class DicomViewer {
         if (this.crosshair) {
             this.drawCrosshair();
         }
+        if (this.showAIHighlights) {
+            this.drawAIHighlights();
+        }
         
         // Update overlay labels
         this.updateOverlayLabels();
@@ -461,20 +487,91 @@ class DicomViewer {
     drawAnnotations() {
         if (!this.currentImage) return;
         
-        this.ctx.fillStyle = 'yellow';
-        this.ctx.font = '12px Arial';
-        
-        this.annotations.forEach(annotation => {
+        this.annotations.forEach((annotation, index) => {
             const pos = this.imageToCanvasCoords(annotation.x, annotation.y);
             
-            // Background for text
-            const textMetrics = this.ctx.measureText(annotation.text);
-            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-            this.ctx.fillRect(pos.x - 2, pos.y - 14, textMetrics.width + 4, 16);
+            // Set font size and color from annotation properties
+            const fontSize = annotation.font_size || 14;
+            const color = annotation.color || '#FFFF00';
             
-            this.ctx.fillStyle = 'yellow';
-            this.ctx.fillText(annotation.text, pos.x, pos.y);
+            this.ctx.font = `${fontSize * this.zoomFactor}px Arial`;
+            
+            // Measure text for background
+            const textMetrics = this.ctx.measureText(annotation.text);
+            const padding = 4;
+            const textHeight = fontSize * this.zoomFactor;
+            
+            // Check if this annotation is selected
+            const isSelected = this.selectedAnnotation === index;
+            
+            // Draw background
+            this.ctx.fillStyle = isSelected ? 'rgba(100, 100, 100, 0.9)' : 'rgba(0, 0, 0, 0.8)';
+            this.ctx.fillRect(
+                pos.x - padding, 
+                pos.y - textHeight - padding, 
+                textMetrics.width + padding * 2, 
+                textHeight + padding * 2
+            );
+            
+            // Draw border if selected
+            if (isSelected) {
+                this.ctx.strokeStyle = 'white';
+                this.ctx.strokeRect(
+                    pos.x - padding, 
+                    pos.y - textHeight - padding, 
+                    textMetrics.width + padding * 2, 
+                    textHeight + padding * 2
+                );
+            }
+            
+            // Draw text
+            this.ctx.fillStyle = color;
+            this.ctx.fillText(annotation.text, pos.x, pos.y - padding);
         });
+    }
+    
+    drawAIHighlights() {
+        if (!this.aiAnalysisResults || !this.showAIHighlights) return;
+        
+        this.ctx.save();
+        this.ctx.strokeStyle = '#FF0080';
+        this.ctx.lineWidth = 2;
+        this.ctx.setLineDash([5, 5]);
+        
+        this.aiAnalysisResults.highlighted_regions.forEach(region => {
+            const topLeft = this.imageToCanvasCoords(
+                region.x - region.width / 2, 
+                region.y - region.height / 2
+            );
+            const bottomRight = this.imageToCanvasCoords(
+                region.x + region.width / 2, 
+                region.y + region.height / 2
+            );
+            
+            const width = bottomRight.x - topLeft.x;
+            const height = bottomRight.y - topLeft.y;
+            
+            // Draw highlight rectangle
+            this.ctx.strokeRect(topLeft.x, topLeft.y, width, height);
+            
+            // Draw label
+            this.ctx.fillStyle = 'rgba(255, 0, 128, 0.8)';
+            const label = `${region.label} (${(region.confidence * 100).toFixed(0)}%)`;
+            const labelMetrics = this.ctx.measureText(label);
+            
+            this.ctx.fillRect(
+                topLeft.x, 
+                topLeft.y - 20, 
+                labelMetrics.width + 8, 
+                20
+            );
+            
+            this.ctx.fillStyle = 'white';
+            this.ctx.font = '12px Arial';
+            this.ctx.fillText(label, topLeft.x + 4, topLeft.y - 6);
+        });
+        
+        this.ctx.restore();
     }
     
     drawCrosshair() {
@@ -503,31 +600,43 @@ class DicomViewer {
     
     // Event Handlers
     handleToolClick(tool) {
-        console.log('Tool activated:', tool);
-        
-        if (tool === 'reset') {
-            this.resetView();
-        } else if (tool === 'invert') {
-            this.inverted = !this.inverted;
-            this.loadCurrentImage();
-        } else if (tool === 'crosshair') {
-            this.crosshair = !this.crosshair;
-            this.updateDisplay();
-        } else if (tool === 'ai') {
-            alert('AI analysis feature is not implemented yet.');
-        } else if (tool === '3d') {
-            alert('3D reconstruction feature is not implemented yet.');
-        } else {
-            this.activeTool = tool;
-        }
-        
-        // Update button states
+        // Remove active class from all buttons
         document.querySelectorAll('.tool-btn').forEach(btn => {
             btn.classList.remove('active');
         });
         
-        if (!['reset', 'invert', 'crosshair', 'ai', '3d'].includes(tool)) {
-            document.querySelector(`[data-tool="${tool}"]`).classList.add('active');
+        // Add active class to clicked button
+        const clickedBtn = document.querySelector(`[data-tool="${tool}"]`);
+        if (clickedBtn) {
+            clickedBtn.classList.add('active');
+        }
+        
+        switch(tool) {
+            case 'windowing':
+            case 'zoom':
+            case 'pan':
+            case 'measure':
+            case 'ellipse':
+            case 'annotate':
+                this.activeTool = tool;
+                break;
+            case 'crosshair':
+                this.crosshair = !this.crosshair;
+                this.updateDisplay();
+                break;
+            case 'invert':
+                this.inverted = !this.inverted;
+                this.updateDisplay();
+                break;
+            case 'reset':
+                this.resetView();
+                break;
+            case 'ai':
+                this.performAIAnalysis();
+                break;
+            case '3d':
+                this.toggle3DOptions();
+                break;
         }
     }
     
@@ -579,10 +688,20 @@ class DicomViewer {
                 end: imageCoords
             };
         } else if (this.activeTool === 'annotate') {
-            const text = prompt('Enter annotation text:');
-            if (text) {
-                const imageCoords = this.canvasToImageCoords(x, y);
-                this.addAnnotation(imageCoords.x, imageCoords.y, text);
+            // Check if clicking on existing annotation
+            const clickedAnnotation = this.getAnnotationAt(x, y);
+            if (clickedAnnotation !== null) {
+                this.selectedAnnotation = clickedAnnotation;
+                this.isEditingAnnotation = true;
+            } else {
+                // Create new annotation
+                const text = prompt('Enter annotation text:');
+                if (text) {
+                    const imageCoords = this.canvasToImageCoords(x, y);
+                    const fontSize = parseInt(prompt('Font size (default: 14):', '14')) || 14;
+                    const color = prompt('Color (hex, default: #FFFF00):', '#FFFF00') || '#FFFF00';
+                    this.addAnnotation(imageCoords.x, imageCoords.y, text, fontSize, color);
+                }
             }
         }
     }
@@ -597,7 +716,16 @@ class DicomViewer {
         const dx = x - this.dragStart.x;
         const dy = y - this.dragStart.y;
         
-        if (this.activeTool === 'pan') {
+        if (this.activeTool === 'annotate' && this.isEditingAnnotation && this.selectedAnnotation !== null) {
+            // Drag annotation
+            const annotation = this.annotations[this.selectedAnnotation];
+            if (annotation) {
+                const imageCoords = this.canvasToImageCoords(x, y);
+                annotation.x = imageCoords.x;
+                annotation.y = imageCoords.y;
+                this.updateDisplay();
+            }
+        } else if (this.activeTool === 'pan') {
             this.panX += dx;
             this.panY += dy;
             this.dragStart = { x, y };
@@ -636,26 +764,60 @@ class DicomViewer {
     
     onMouseUp(e) {
         if (this.activeTool === 'measure' && this.currentMeasurement) {
-            const rect = this.canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            const imageCoords = this.canvasToImageCoords(x, y);
+            const start = this.currentMeasurement.start;
+            const end = this.currentMeasurement.end;
             
-            this.currentMeasurement.end = imageCoords;
-            this.addMeasurement(this.currentMeasurement);
+            // Calculate distance
+            const dx = end.x - start.x;
+            const dy = end.y - start.y;
+            const pixelDistance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Convert to selected unit
+            let value = pixelDistance;
+            let unit = this.measurementUnit;
+            
+            if (this.currentImage && (unit === 'mm' || unit === 'cm')) {
+                const pixelSpacingX = this.currentImage.pixel_spacing_x || 1.0;
+                const pixelSpacingY = this.currentImage.pixel_spacing_y || 1.0;
+                
+                const realDx = dx * pixelSpacingX;
+                const realDy = dy * pixelSpacingY;
+                const distanceMm = Math.sqrt(realDx * realDx + realDy * realDy);
+                
+                value = unit === 'cm' ? distanceMm / 10.0 : distanceMm;
+            }
+            
+            // Save measurement
+            this.saveMeasurement({
+                type: 'line',
+                coordinates: [
+                    { x: start.x, y: start.y },
+                    { x: end.x, y: end.y }
+                ],
+                value: value,
+                unit: unit
+            });
+            
             this.currentMeasurement = null;
         } else if (this.activeTool === 'ellipse' && this.currentEllipse) {
-            const rect = this.canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            const imageCoords = this.canvasToImageCoords(x, y);
-            this.currentEllipse.end = imageCoords;
-            this.addEllipseHU(this.currentEllipse);
+            const start = this.currentEllipse.start;
+            const end = this.currentEllipse.end;
+            
+            // Save ellipse measurement for HU calculation
+            this.saveEllipseMeasurement({
+                x0: start.x,
+                y0: start.y,
+                x1: end.x,
+                y1: end.y
+            });
+            
             this.currentEllipse = null;
         }
         
         this.isDragging = false;
         this.dragStart = null;
+        this.isEditingAnnotation = false;
+        this.selectedAnnotation = null;
     }
     
     onWheel(e) {
@@ -681,6 +843,16 @@ class DicomViewer {
                 document.getElementById('slice-slider').value = newIndex;
                 document.getElementById('slice-value').textContent = newIndex + 1;
                 this.loadCurrentImage();
+            }
+        }
+    }
+    
+    onDoubleClick(e) {
+        if (this.activeTool === 'annotate') {
+            const text = prompt('Enter annotation text:');
+            if (text) {
+                const imageCoords = this.canvasToImageCoords(e.clientX, e.clientY);
+                this.addAnnotation(imageCoords.x, imageCoords.y, text);
             }
         }
     }
@@ -908,14 +1080,360 @@ class DicomViewer {
     }
     
     // Utility functions
+    getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
     getCSRFToken() {
-        return document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+        return this.getCookie('csrftoken');
     }
     
     redraw() {
         if (this.currentImage) {
             this.updateDisplay();
         }
+    }
+
+    performAIAnalysis() {
+        if (!this.currentImage) {
+            alert('Please load an image first');
+            return;
+        }
+        
+        const aiPanel = document.getElementById('ai-panel');
+        aiPanel.style.display = 'block';
+        
+        const resultsDiv = document.getElementById('ai-results');
+        resultsDiv.innerHTML = '<div class="loading">Performing AI analysis...</div>';
+        
+        fetch(`/api/images/${this.currentImage.id}/ai-analysis/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': this.getCSRFToken()
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            this.aiAnalysisResults = data;
+            this.showAIHighlights = true;
+            this.displayAIResults(data);
+            this.redraw();
+        })
+        .catch(error => {
+            resultsDiv.innerHTML = '<div class="error">Error performing AI analysis</div>';
+            console.error('AI analysis error:', error);
+        });
+    }
+    
+    displayAIResults(results) {
+        const resultsDiv = document.getElementById('ai-results');
+        resultsDiv.innerHTML = `
+            <div class="ai-summary">
+                <h4>Analysis Summary</h4>
+                <p>${results.summary}</p>
+                <p>Confidence: ${(results.confidence_score * 100).toFixed(1)}%</p>
+            </div>
+            <div class="ai-findings">
+                <h4>Findings</h4>
+                <ul>
+                    ${results.findings.map(f => `
+                        <li>
+                            <strong>${f.type}</strong> at (${f.location.x}, ${f.location.y})
+                            <br>Size: ${f.size}px, Confidence: ${(f.confidence * 100).toFixed(1)}%
+                        </li>
+                    `).join('')}
+                </ul>
+            </div>
+            <div class="ai-actions">
+                <button onclick="viewer.copyAIResults()">Copy Results</button>
+                <button onclick="viewer.toggleAIHighlights()">Toggle Highlights</button>
+            </div>
+        `;
+    }
+    
+    copyAIResults() {
+        if (!this.aiAnalysisResults) return;
+        
+        const text = `AI Analysis Results\n\n${this.aiAnalysisResults.summary}\n\nFindings:\n${
+            this.aiAnalysisResults.findings.map(f => 
+                `- ${f.type} at (${f.location.x}, ${f.location.y}), Size: ${f.size}px, Confidence: ${(f.confidence * 100).toFixed(1)}%`
+            ).join('\n')
+        }`;
+        
+        navigator.clipboard.writeText(text).then(() => {
+            alert('Results copied to clipboard');
+        });
+    }
+    
+    toggleAIHighlights() {
+        this.showAIHighlights = !this.showAIHighlights;
+        this.redraw();
+    }
+    
+    toggle3DOptions() {
+        const options3D = document.getElementById('3d-options');
+        this.is3DEnabled = !this.is3DEnabled;
+        options3D.style.display = this.is3DEnabled ? 'block' : 'none';
+    }
+    
+    apply3DReconstruction() {
+        if (!this.currentSeries) {
+            alert('Please load a series first');
+            return;
+        }
+        
+        const modal = this.create3DModal();
+        document.body.appendChild(modal);
+        
+        fetch(`/api/series/${this.currentSeries.id}/3d-reconstruction/?type=${this.reconstructionType}`)
+            .then(response => response.json())
+            .then(data => {
+                this.display3DReconstruction(data, modal);
+            })
+            .catch(error => {
+                modal.querySelector('.modal-content').innerHTML = '<div class="error">Error loading 3D reconstruction</div>';
+                console.error('3D reconstruction error:', error);
+            });
+    }
+    
+    create3DModal() {
+        const modal = document.createElement('div');
+        modal.className = 'modal-3d';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>3D Reconstruction - ${this.reconstructionType.replace('_', ' ').toUpperCase()}</h2>
+                    <button class="close-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="loading">Loading 3D reconstruction...</div>
+                </div>
+            </div>
+        `;
+        
+        modal.querySelector('.close-btn').addEventListener('click', () => {
+            document.body.removeChild(modal);
+        });
+        
+        return modal;
+    }
+    
+    display3DReconstruction(data, modal) {
+        const body = modal.querySelector('.modal-body');
+        
+        switch(data.type) {
+            case 'mpr':
+                body.innerHTML = `
+                    <div class="mpr-viewer">
+                        <h3>Multi-Planar Reconstruction</h3>
+                        <div class="mpr-planes">
+                            <div class="plane">
+                                <h4>Axial</h4>
+                                <div class="plane-info">Slices: ${data.planes.axial.slice_count}</div>
+                            </div>
+                            <div class="plane">
+                                <h4>Coronal</h4>
+                                <div class="plane-info">Slices: ${data.planes.coronal.slice_count}</div>
+                            </div>
+                            <div class="plane">
+                                <h4>Sagittal</h4>
+                                <div class="plane-info">Slices: ${data.planes.sagittal.slice_count}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                break;
+            case '3d_bone':
+                body.innerHTML = `
+                    <div class="bone-3d">
+                        <h3>3D Bone Reconstruction</h3>
+                        <div class="mesh-info">
+                            <p>Vertices: ${data.mesh_data.vertices}</p>
+                            <p>Faces: ${data.mesh_data.faces}</p>
+                            <p>Threshold: ${data.mesh_data.threshold} HU</p>
+                        </div>
+                        <div class="render-placeholder">
+                            [3D Bone Rendering Placeholder]
+                        </div>
+                    </div>
+                `;
+                break;
+            case 'angio':
+                body.innerHTML = `
+                    <div class="angio-3d">
+                        <h3>Angiography Reconstruction</h3>
+                        <div class="vessel-info">
+                            <p>Main vessels: ${data.vessel_tree.main_vessels}</p>
+                            <p>Branches: ${data.vessel_tree.branches}</p>
+                        </div>
+                        <div class="render-placeholder">
+                            [Angio 3D Rendering Placeholder]
+                        </div>
+                    </div>
+                `;
+                break;
+            case 'virtual_surgery':
+                body.innerHTML = `
+                    <div class="virtual-surgery">
+                        <h3>Virtual Surgery Planning</h3>
+                        <div class="tools-info">
+                            <p>Available tools: ${data.tools.join(', ')}</p>
+                            <p>Anatomical structures: ${data.anatomical_structures.join(', ')}</p>
+                        </div>
+                        <div class="surgery-placeholder">
+                            [Virtual Surgery Interface Placeholder]
+                        </div>
+                    </div>
+                `;
+                break;
+        }
+    }
+
+    getAnnotationAt(canvasX, canvasY) {
+        for (let i = this.annotations.length - 1; i >= 0; i--) {
+            const annotation = this.annotations[i];
+            const pos = this.imageToCanvasCoords(annotation.x, annotation.y);
+            
+            const fontSize = (annotation.font_size || 14) * this.zoomFactor;
+            const textMetrics = this.ctx.measureText(annotation.text);
+            const padding = 4;
+            
+            // Check if click is within annotation bounds
+            if (canvasX >= pos.x - padding && 
+                canvasX <= pos.x + textMetrics.width + padding &&
+                canvasY >= pos.y - fontSize - padding &&
+                canvasY <= pos.y + padding) {
+                return i;
+            }
+        }
+        return null;
+    }
+    
+    saveMeasurement(measurement) {
+        if (!this.currentImage) return;
+        
+        const data = {
+            image_id: this.currentImage.id,
+            measurement_type: measurement.type,
+            coordinates: measurement.coordinates || measurement,
+            value: measurement.value,
+            unit: measurement.unit || this.measurementUnit
+        };
+        
+        fetch('/api/measurements/save/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': this.getCSRFToken()
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                this.measurements.push({
+                    id: data.measurement_id,
+                    type: measurement.type,
+                    coordinates: measurement.coordinates,
+                    value: data.value || measurement.value,
+                    unit: data.unit || measurement.unit
+                });
+                this.updateDisplay();
+            }
+        })
+        .catch(error => console.error('Error saving measurement:', error));
+    }
+    
+    saveEllipseMeasurement(coords) {
+        if (!this.currentImage) return;
+        
+        const data = {
+            image_id: this.currentImage.id,
+            measurement_type: 'ellipse',
+            coordinates: coords,
+            value: 0, // Will be calculated server-side
+            unit: 'HU'
+        };
+        
+        fetch('/api/measurements/save/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': this.getCSRFToken()
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                this.measurements.push({
+                    id: data.measurement_id,
+                    type: 'ellipse',
+                    coordinates: coords,
+                    value: data.hounsfield_mean || 0,
+                    unit: 'HU',
+                    hounsfield_min: data.hounsfield_min,
+                    hounsfield_max: data.hounsfield_max,
+                    hounsfield_std: data.hounsfield_std
+                });
+                this.updateDisplay();
+                
+                // Show HU values in alert
+                if (data.hounsfield_mean !== undefined) {
+                    alert(`Hounsfield Unit Measurements:\n\nMean: ${data.hounsfield_mean.toFixed(1)} HU\nMin: ${data.hounsfield_min.toFixed(1)} HU\nMax: ${data.hounsfield_max.toFixed(1)} HU\nStd Dev: ${data.hounsfield_std.toFixed(1)} HU`);
+                }
+            }
+        })
+        .catch(error => console.error('Error saving ellipse measurement:', error));
+    }
+    
+    addAnnotation(x, y, text, fontSize = 14, color = '#FFFF00') {
+        if (!this.currentImage) return;
+        
+        const data = {
+            image_id: this.currentImage.id,
+            x: x,
+            y: y,
+            text: text,
+            font_size: fontSize,
+            color: color
+        };
+        
+        fetch('/api/annotations/save/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': this.getCSRFToken()
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                this.annotations.push({
+                    id: data.annotation_id,
+                    x: x,
+                    y: y,
+                    text: text,
+                    font_size: fontSize,
+                    color: color
+                });
+                this.updateDisplay();
+            }
+        })
+        .catch(error => console.error('Error saving annotation:', error));
     }
 }
 

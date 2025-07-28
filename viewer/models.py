@@ -9,6 +9,24 @@ from PIL import Image
 import numpy as np
 import io
 import base64
+from django.utils import timezone
+
+
+class Facility(models.Model):
+    """Model to represent healthcare facilities"""
+    name = models.CharField(max_length=200)
+    address = models.TextField()
+    phone = models.CharField(max_length=20)
+    email = models.EmailField()
+    letterhead_logo = models.ImageField(upload_to='facility_logos/', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name_plural = "Facilities"
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
 
 
 class DicomStudy(models.Model):
@@ -23,6 +41,10 @@ class DicomStudy(models.Model):
     institution_name = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    facility = models.ForeignKey(Facility, on_delete=models.SET_NULL, null=True, blank=True)
+    clinical_info = models.TextField(blank=True)
+    accession_number = models.CharField(max_length=50, blank=True)
+    referring_physician = models.CharField(max_length=200, blank=True)
     
     class Meta:
         ordering = ['-created_at']
@@ -188,6 +210,11 @@ class Measurement(models.Model):
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    # For ellipse HU measurements
+    hounsfield_mean = models.FloatField(null=True, blank=True)
+    hounsfield_min = models.FloatField(null=True, blank=True)
+    hounsfield_max = models.FloatField(null=True, blank=True)
+    hounsfield_std = models.FloatField(null=True, blank=True)
     
     class Meta:
         ordering = ['-created_at']
@@ -204,9 +231,108 @@ class Annotation(models.Model):
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    font_size = models.IntegerField(default=14)
+    color = models.CharField(max_length=7, default='#FFFF00')  # Hex color
     
     class Meta:
         ordering = ['-created_at']
     
     def __str__(self):
         return f"Annotation: {self.text[:50]}"
+
+
+class Report(models.Model):
+    """Model to store radiology reports"""
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('pending_review', 'Pending Review'),
+        ('finalized', 'Finalized'),
+        ('printed', 'Printed'),
+    ]
+    
+    study = models.ForeignKey(DicomStudy, related_name='reports', on_delete=models.CASCADE)
+    radiologist = models.ForeignKey(User, on_delete=models.CASCADE, related_name='written_reports')
+    findings = models.TextField()
+    impression = models.TextField()
+    recommendations = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    finalized_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Report for {self.study.patient_name} - {self.status}"
+
+
+class WorklistEntry(models.Model):
+    """Model for DICOM worklist entries"""
+    STATUS_CHOICES = [
+        ('scheduled', 'Scheduled'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    patient_name = models.CharField(max_length=200)
+    patient_id = models.CharField(max_length=100)
+    accession_number = models.CharField(max_length=50, unique=True)
+    scheduled_station_ae_title = models.CharField(max_length=16)
+    scheduled_procedure_step_start_date = models.DateField()
+    scheduled_procedure_step_start_time = models.TimeField()
+    modality = models.CharField(max_length=10)
+    scheduled_performing_physician = models.CharField(max_length=200)
+    procedure_description = models.TextField()
+    facility = models.ForeignKey(Facility, on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='scheduled')
+    study = models.ForeignKey(DicomStudy, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-scheduled_procedure_step_start_date', '-scheduled_procedure_step_start_time']
+    
+    def __str__(self):
+        return f"{self.patient_name} - {self.accession_number}"
+
+
+class AIAnalysis(models.Model):
+    """Model to store AI analysis results"""
+    image = models.ForeignKey(DicomImage, related_name='ai_analyses', on_delete=models.CASCADE)
+    analysis_type = models.CharField(max_length=50)
+    findings = models.JSONField()  # Store structured findings
+    summary = models.TextField()
+    confidence_score = models.FloatField()
+    highlighted_regions = models.JSONField()  # Store coordinates of highlighted regions
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"AI Analysis for {self.image} - {self.analysis_type}"
+
+
+class Notification(models.Model):
+    """Model for system notifications"""
+    NOTIFICATION_TYPES = [
+        ('new_study', 'New Study Upload'),
+        ('report_ready', 'Report Ready'),
+        ('ai_complete', 'AI Analysis Complete'),
+        ('system', 'System Message'),
+    ]
+    
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    related_study = models.ForeignKey(DicomStudy, on_delete=models.CASCADE, null=True, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.notification_type}: {self.title}"
