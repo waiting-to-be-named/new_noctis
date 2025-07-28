@@ -4,12 +4,19 @@ from . import views
 app_name = 'viewer'
 
 urlpatterns = [
+    # Authentication
+    path('login/', views.login_view, name='login'),
+    path('logout/', views.logout_view, name='logout'),
+    
     # Home page
     path('home/', views.HomeView.as_view(), name='home'),
     
     # Main viewer page
-    path('', views.DicomViewerView.as_view(), name='viewer'),
+    path('viewer/', views.DicomViewerView.as_view(), name='viewer'),
     path('study/<int:study_id>/', views.DicomViewerView.as_view(), name='viewer_with_study'),
+    
+    # Default route - redirect to login
+    path('', views.login_view, name='default'),
     
     # File upload
     path('api/upload/', views.upload_dicom_files, name='upload_dicom'),

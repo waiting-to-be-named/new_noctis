@@ -8,28 +8,116 @@
     <link rel="stylesheet" href="{% static 'css/worklist.css' %}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        body {
-            background-color: #2a2a2a;
-            color: #e0e0e0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        * {
             margin: 0;
             padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            height: 100vh;
+            overflow: hidden;
         }
         
         .worklist-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
             padding: 20px;
-            max-width: 1400px;
-            margin: 0 auto;
         }
         
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             padding: 20px;
-            background: #1a1a1a;
+            background: #2a2a2a;
             border-radius: 8px;
+            border: 1px solid #333;
+        }
+        
+        .header h1 {
+            color: #00ff00;
+            font-size: 28px;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .upload-section {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #333;
+        }
+        
+        .upload-area {
+            border: 2px dashed #00ff00;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            background: rgba(0, 255, 0, 0.05);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .upload-area:hover {
+            background: rgba(0, 255, 0, 0.1);
+            border-color: #00cc00;
+        }
+        
+        .upload-area.dragover {
+            background: rgba(0, 255, 0, 0.2);
+            border-color: #00ff00;
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            color: #00ff00;
+            margin-bottom: 15px;
+        }
+        
+        .upload-text {
+            font-size: 18px;
+            color: #ccc;
+            margin-bottom: 10px;
+        }
+        
+        .upload-hint {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .upload-progress {
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #00ff00;
+            width: 0%;
+            transition: width 0.3s ease;
         }
         
         .filters {
@@ -37,16 +125,46 @@
             gap: 15px;
             margin-bottom: 20px;
             padding: 15px;
-            background: #1a1a1a;
+            background: #2a2a2a;
             border-radius: 8px;
+            border: 1px solid #333;
+        }
+        
+        .form-control, .form-select {
+            padding: 10px 15px;
+            border: 1px solid #333;
+            border-radius: 6px;
+            background: #1a1a1a;
+            color: #fff;
+            font-size: 14px;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            outline: none;
+            border-color: #00ff00;
+        }
+        
+        .worklist-content {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
         
         .worklist-table {
-            width: 100%;
-            background: #1a1a1a;
+            flex: 1;
+            background: #2a2a2a;
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            border: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .table-container {
+            flex: 1;
+            overflow-y: auto;
         }
         
         .worklist-table table {
@@ -61,6 +179,9 @@
             text-align: left;
             font-weight: 600;
             border-bottom: 2px solid #00ff00;
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
         
         .worklist-table tr {
@@ -169,13 +290,28 @@
         
         .clinical-modal-content {
             position: relative;
-            background: #1a1a1a;
+            background: #2a2a2a;
             margin: 5% auto;
             padding: 20px;
             width: 80%;
             max-width: 600px;
             border-radius: 8px;
             border: 2px solid #00ff00;
+        }
+        
+        .logout-btn {
+            background: #ff4444;
+            color: #fff;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        .logout-btn:hover {
+            background: #cc0000;
         }
     </style>
 </head>
@@ -184,14 +320,37 @@
         <div class="header">
             <h1><i class="fas fa-list-alt"></i> DICOM Worklist</h1>
             <div class="header-actions">
-                <button class="btn btn-view" onclick="window.location.href='/'">
+                <button class="btn btn-view" onclick="window.location.href='/viewer/'">
                     <i class="fas fa-images"></i> Open Viewer
+                </button>
+                <button class="btn btn-view" onclick="window.location.href='/home/'">
+                    <i class="fas fa-home"></i> Home
+                </button>
+                <button class="logout-btn" onclick="window.location.href='/logout/'">
+                    <i class="fas fa-sign-out-alt"></i> Logout
                 </button>
                 {% if is_admin or is_radiologist %}
                 <div id="notification-count" class="notification-badge" style="display: none;">
                     <i class="fas fa-bell"></i> <span>0</span> New Studies
                 </div>
                 {% endif %}
+            </div>
+        </div>
+        
+        <div class="upload-section">
+            <div class="upload-area" id="upload-area">
+                <div class="upload-icon">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                </div>
+                <div class="upload-text">Upload DICOM Files</div>
+                <div class="upload-hint">Drag and drop DICOM files here or click to browse</div>
+                <input type="file" id="file-input" class="file-input" multiple accept=".dcm">
+            </div>
+            <div class="upload-progress" id="upload-progress">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <div id="upload-status">Ready to upload...</div>
             </div>
         </div>
         
@@ -222,57 +381,61 @@
             {% endif %}
         </div>
         
-        <div class="worklist-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Patient Name</th>
-                        <th>Patient ID</th>
-                        <th>Accession #</th>
-                        <th>Modality</th>
-                        <th>Scheduled Date/Time</th>
-                        <th>Status</th>
-                        <th>Facility</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="worklist-body">
-                    {% for entry in entries %}
-                    <tr class="patient-row" data-entry-id="{{ entry.id }}">
-                        <td>{{ entry.patient_name }}</td>
-                        <td>{{ entry.patient_id }}</td>
-                        <td>{{ entry.accession_number }}</td>
-                        <td>{{ entry.modality }}</td>
-                        <td>{{ entry.scheduled_procedure_step_start_date|date:"Y-m-d" }} {{ entry.scheduled_procedure_step_start_time|time:"H:i" }}</td>
-                        <td>
-                            <span class="status-badge status-{{ entry.status }}">
-                                {{ entry.get_status_display }}
-                            </span>
-                        </td>
-                        <td>{{ entry.facility.name }}</td>
-                        <td>
-                            <div class="action-buttons">
-                                {% if entry.study %}
-                                <button class="btn btn-view" onclick="viewStudy({{ entry.id }})">
-                                    <i class="fas fa-eye"></i> View
-                                </button>
-                                {% endif %}
-                                <button class="btn btn-clinical" onclick="addClinicalInfo({{ entry.id }})">
-                                    <i class="fas fa-file-medical"></i> Clinical
-                                </button>
-                                {% if is_radiologist or is_admin %}
-                                {% if entry.study %}
-                                <button class="btn btn-report" onclick="writeReport({{ entry.study.id }})">
-                                    <i class="fas fa-file-alt"></i> Report
-                                </button>
-                                {% endif %}
-                                {% endif %}
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="worklist-content">
+            <div class="worklist-table">
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Patient Name</th>
+                                <th>Patient ID</th>
+                                <th>Accession #</th>
+                                <th>Modality</th>
+                                <th>Scheduled Date/Time</th>
+                                <th>Status</th>
+                                <th>Facility</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="worklist-body">
+                            {% for entry in entries %}
+                            <tr class="patient-row" data-entry-id="{{ entry.id }}">
+                                <td>{{ entry.patient_name }}</td>
+                                <td>{{ entry.patient_id }}</td>
+                                <td>{{ entry.accession_number }}</td>
+                                <td>{{ entry.modality }}</td>
+                                <td>{{ entry.scheduled_procedure_step_start_date|date:"Y-m-d" }} {{ entry.scheduled_procedure_step_start_time|time:"H:i" }}</td>
+                                <td>
+                                    <span class="status-badge status-{{ entry.status }}">
+                                        {{ entry.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>{{ entry.facility.name }}</td>
+                                <td>
+                                    <div class="action-buttons">
+                                        {% if entry.study %}
+                                        <button class="btn btn-view" onclick="viewStudy({{ entry.id }})">
+                                            <i class="fas fa-eye"></i> View
+                                        </button>
+                                        {% endif %}
+                                        <button class="btn btn-clinical" onclick="addClinicalInfo({{ entry.id }})">
+                                            <i class="fas fa-file-medical"></i> Clinical
+                                        </button>
+                                        {% if is_radiologist or is_admin %}
+                                        {% if entry.study %}
+                                        <button class="btn btn-report" onclick="writeReport({{ entry.study.id }})">
+                                            <i class="fas fa-file-alt"></i> Report
+                                        </button>
+                                        {% endif %}
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
         
         <!-- Pagination -->
@@ -311,6 +474,73 @@
     
     <script>
         let currentEntryId = null;
+        
+        // File upload functionality
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const uploadProgress = document.getElementById('upload-progress');
+        const progressFill = document.getElementById('progress-fill');
+        const uploadStatus = document.getElementById('upload-status');
+        
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            handleFiles(files);
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            handleFiles(files);
+        });
+        
+        function handleFiles(files) {
+            if (files.length === 0) return;
+            
+            uploadProgress.style.display = 'block';
+            uploadStatus.textContent = 'Uploading files...';
+            
+            const formData = new FormData();
+            for (let file of files) {
+                formData.append('files', file);
+            }
+            
+            fetch('/api/upload/', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    uploadStatus.textContent = 'Upload successful! Refreshing...';
+                    progressFill.style.width = '100%';
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    uploadStatus.textContent = 'Upload failed: ' + data.error;
+                }
+            })
+            .catch(error => {
+                uploadStatus.textContent = 'Upload failed: ' + error.message;
+            });
+        }
         
         // Row selection
         document.querySelectorAll('.patient-row').forEach(row => {
