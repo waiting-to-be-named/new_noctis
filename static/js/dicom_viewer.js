@@ -24,7 +24,12 @@ class DicomViewer {
         this.activeTool = 'windowing';
         this.measurements = [];
         this.annotations = [];
+        this.draggedAnnotationIndex = null;
+        this.draggingAnnotation = false;
+        // Measurement unit (mm or cm)
+        this.measurementUnit = 'mm';
         this.currentMeasurement = null;
+        this.currentEllipse = null; // ellipse measurement temp
         this.isDragging = false;
         this.dragStart = null;
         
@@ -67,6 +72,14 @@ class DicomViewer {
             });
         });
         
+        // Unit dropdown
+        const unitSelect = document.getElementById('measurement-unit');
+        if (unitSelect) {
+            unitSelect.addEventListener('change', (e) => {
+                this.measurementUnit = e.target.value;
+            });
+        }
+
         // Sliders
         document.getElementById('ww-slider').addEventListener('input', (e) => {
             this.windowWidth = parseInt(e.target.value);
@@ -371,23 +384,39 @@ class DicomViewer {
                 const start = this.imageToCanvasCoords(coords[0].x, coords[0].y);
                 const end = this.imageToCanvasCoords(coords[1].x, coords[1].y);
                 
-                this.ctx.beginPath();
-                this.ctx.moveTo(start.x, start.y);
-                this.ctx.lineTo(end.x, end.y);
-                this.ctx.stroke();
-                
-                // Draw measurement text
-                const midX = (start.x + end.x) / 2;
-                const midY = (start.y + end.y) / 2;
-                const text = `${measurement.value.toFixed(1)} ${measurement.unit}`;
-                
-                // Background for text
-                const textMetrics = this.ctx.measureText(text);
-                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                this.ctx.fillRect(midX - textMetrics.width/2 - 4, midY - 8, textMetrics.width + 8, 16);
-                
-                this.ctx.fillStyle = 'red';
-                this.ctx.fillText(text, midX - textMetrics.width/2, midY + 4);
+                if (measurement.type === 'line') {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(start.x, start.y);
+                    this.ctx.lineTo(end.x, end.y);
+                    this.ctx.stroke();
+
+                    // Draw measurement text
+                    const midX = (start.x + end.x) / 2;
+                    const midY = (start.y + end.y) / 2;
+                    const text = `${measurement.value.toFixed(1)} ${measurement.unit}`;
+                    // Background for text
+                    const textMetrics = this.ctx.measureText(text);
+                    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    this.ctx.fillRect(midX - textMetrics.width/2 - 4, midY - 8, textMetrics.width + 8, 16);
+                    this.ctx.fillStyle = 'red';
+                    this.ctx.fillText(text, midX - textMetrics.width/2, midY + 4);
+                } else if (measurement.type === 'ellipse') {
+                    // Draw ellipse
+                    const centerX = (start.x + end.x) / 2;
+                    const centerY = (start.y + end.y) / 2;
+                    const radiusX = Math.abs(end.x - start.x) / 2;
+                    const radiusY = Math.abs(end.y - start.y) / 2;
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+                    this.ctx.stroke();
+
+                    const text = `${measurement.value.toFixed(1)} HU`;
+                    const textMetrics = this.ctx.measureText(text);
+                    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    this.ctx.fillRect(centerX - textMetrics.width/2 - 4, centerY - 8, textMetrics.width + 8, 16);
+                    this.ctx.fillStyle = 'red';
+                    this.ctx.fillText(text, centerX - textMetrics.width/2, centerY + 4);
+                }
             }
         });
         
@@ -404,13 +433,27 @@ class DicomViewer {
             this.ctx.stroke();
             this.ctx.setLineDash([]);
         }
+        if (this.currentEllipse) {
+            const start = this.imageToCanvasCoords(this.currentEllipse.start.x, this.currentEllipse.start.y);
+            const end = this.imageToCanvasCoords(this.currentEllipse.end.x, this.currentEllipse.end.y);
+            const centerX = (start.x + end.x) / 2;
+            const centerY = (start.y + end.y) / 2;
+            const radiusX = Math.abs(end.x - start.x) / 2;
+            const radiusY = Math.abs(end.y - start.y) / 2;
+            this.ctx.setLineDash([5, 5]);
+            this.ctx.strokeStyle = 'yellow';
+            this.ctx.beginPath();
+            this.ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
+        }
     }
     
     drawAnnotations() {
         if (!this.currentImage) return;
         
         this.ctx.fillStyle = 'yellow';
-        this.ctx.font = '12px Arial';
+        this.ctx.font = '14px Arial';
         
         this.annotations.forEach(annotation => {
             const pos = this.imageToCanvasCoords(annotation.x, annotation.y);
@@ -465,6 +508,8 @@ class DicomViewer {
             alert('AI analysis feature is not implemented yet.');
         } else if (tool === '3d') {
             alert('3D reconstruction feature is not implemented yet.');
+        } else if (tool === 'ellipse') {
+            this.activeTool = 'ellipse';
         } else {
             this.activeTool = tool;
         }
@@ -511,12 +556,27 @@ class DicomViewer {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         
-        this.isDragging = true;
-        this.dragStart = { x, y };
-        
+        // Check if clicking on existing annotation to drag
+        if (this.activeTool === 'annotate') {
+            const clickedIndex = this.getAnnotationAtCanvasPos(x, y);
+            if (clickedIndex !== null) {
+                this.draggedAnnotationIndex = clickedIndex;
+                this.draggingAnnotation = true;
+                this.isDragging = true;
+                this.dragStart = { x, y };
+                return;
+            }
+        }
+
         if (this.activeTool === 'measure') {
             const imageCoords = this.canvasToImageCoords(x, y);
             this.currentMeasurement = {
+                start: imageCoords,
+                end: imageCoords
+            };
+        } else if (this.activeTool === 'ellipse') {
+            const imageCoords = this.canvasToImageCoords(x, y);
+            this.currentEllipse = {
                 start: imageCoords,
                 end: imageCoords
             };
@@ -565,9 +625,19 @@ class DicomViewer {
             
             this.dragStart = { x, y };
             this.loadCurrentImage();
+        } else if (this.draggingAnnotation && this.draggedAnnotationIndex !== null) {
+            const imageCoords = this.canvasToImageCoords(x, y);
+            const ann = this.annotations[this.draggedAnnotationIndex];
+            ann.x = imageCoords.x;
+            ann.y = imageCoords.y;
+            this.updateDisplay();
         } else if (this.activeTool === 'measure' && this.currentMeasurement) {
             const imageCoords = this.canvasToImageCoords(x, y);
             this.currentMeasurement.end = imageCoords;
+            this.updateDisplay();
+        } else if (this.activeTool === 'ellipse' && this.currentEllipse) {
+            const imageCoords = this.canvasToImageCoords(x, y);
+            this.currentEllipse.end = imageCoords;
             this.updateDisplay();
         }
     }
@@ -582,8 +652,22 @@ class DicomViewer {
             this.currentMeasurement.end = imageCoords;
             this.addMeasurement(this.currentMeasurement);
             this.currentMeasurement = null;
+        } else if (this.activeTool === 'ellipse' && this.currentEllipse) {
+            const rect = this.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const imageCoords = this.canvasToImageCoords(x, y);
+            this.currentEllipse.end = imageCoords;
+            this.addEllipseMeasurement(this.currentEllipse);
+            this.currentEllipse = null;
         }
         
+        if (this.draggingAnnotation && this.draggedAnnotationIndex !== null) {
+            // Could send update to backend (not implemented)
+        }
+
+        this.draggingAnnotation = false;
+        this.draggedAnnotationIndex = null;
         this.isDragging = false;
         this.dragStart = null;
     }
@@ -671,7 +755,10 @@ class DicomViewer {
         if (metadata.pixel_spacing_x && metadata.pixel_spacing_y) {
             const avgSpacing = (metadata.pixel_spacing_x + metadata.pixel_spacing_y) / 2;
             value = distance * avgSpacing;
-            unit = 'mm';
+            unit = this.measurementUnit;
+            if (this.measurementUnit === 'cm') {
+                value = value / 10;
+            }
         }
         
         const measurement = {
@@ -701,7 +788,50 @@ class DicomViewer {
             console.error('Error saving measurement:', error);
         }
     }
-    
+
+    async addEllipseMeasurement(ellipseData) {
+        // Coordinates for backend (image space)
+        const params = new URLSearchParams({
+            x1: ellipseData.start.x,
+            y1: ellipseData.start.y,
+            x2: ellipseData.end.x,
+            y2: ellipseData.end.y
+        });
+
+        try {
+            const response = await fetch(`/api/images/${this.currentImage.id}/ellipse-hu/?${params}`);
+            const result = await response.json();
+            if (response.ok && result.mean_hu !== undefined) {
+                const measurement = {
+                    image_id: this.currentImage.id,
+                    type: 'ellipse',
+                    coordinates: [ellipseData.start, ellipseData.end],
+                    value: result.mean_hu,
+                    unit: 'HU'
+                };
+
+                // Save measurement (optional)
+                const saveResp = await fetch('/api/measurements/save/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': this.getCSRFToken()
+                    },
+                    body: JSON.stringify(measurement)
+                });
+
+                if (saveResp.ok) {
+                    this.measurements.push(measurement);
+                    this.updateMeasurementsList();
+                    this.updateDisplay();
+                }
+            }
+        } catch (error) {
+            console.error('Error computing ellipse HU:', error);
+        }
+    }
+
+    // Add a text annotation at specified image coordinates
     async addAnnotation(x, y, text) {
         const annotation = {
             image_id: this.currentImage.id,
@@ -709,7 +839,7 @@ class DicomViewer {
             y: y,
             text: text
         };
-        
+
         try {
             const response = await fetch('/api/annotations/save/', {
                 method: 'POST',
@@ -719,7 +849,7 @@ class DicomViewer {
                 },
                 body: JSON.stringify(annotation)
             });
-            
+
             if (response.ok) {
                 this.annotations.push(annotation);
                 this.updateDisplay();
@@ -795,6 +925,24 @@ class DicomViewer {
         if (this.currentImage) {
             this.updateDisplay();
         }
+    }
+
+    // Helper to detect annotation click
+    getAnnotationAtCanvasPos(canvasX, canvasY) {
+        for (let i = 0; i < this.annotations.length; i++) {
+            const ann = this.annotations[i];
+            const pos = this.imageToCanvasCoords(ann.x, ann.y);
+            this.ctx.font = '14px Arial';
+            const textWidth = this.ctx.measureText(ann.text).width;
+            const left = pos.x - 2;
+            const top = pos.y - 14;
+            const right = left + textWidth + 4;
+            const bottom = top + 16;
+            if (canvasX >= left && canvasX <= right && canvasY >= top && canvasY <= bottom) {
+                return i;
+            }
+        }
+        return null;
     }
 }
 
