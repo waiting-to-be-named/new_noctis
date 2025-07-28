@@ -99,6 +99,13 @@ class DicomImage(models.Model):
     window_width = models.FloatField(null=True, blank=True)
     window_center = models.FloatField(null=True, blank=True)
     
+    # Additional DICOM fields
+    bits_allocated = models.IntegerField(null=True, blank=True)
+    image_number = models.IntegerField(null=True, blank=True)
+    photometric_interpretation = models.CharField(max_length=50, blank=True)
+    pixel_spacing = models.CharField(max_length=100, blank=True)  # Store as string like "1.0\\1.0"
+    samples_per_pixel = models.IntegerField(null=True, blank=True)
+    
     # Cached processed image
     processed_image_cache = models.TextField(blank=True)  # Base64 encoded image
     
