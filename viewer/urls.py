@@ -17,6 +17,7 @@ urlpatterns = [
     
     # File upload
     path('api/upload/', views.upload_dicom_files, name='upload_dicom'),
+    path('api/upload-folder/', views.upload_dicom_folder, name='upload_dicom_folder'),
     
     # Study and image data
     path('api/studies/', views.get_studies, name='get_studies'),

@@ -1,4 +1,4 @@
-# DICOM Viewer System
+# Noctis - Advanced Medical Imaging Platform
 
 A comprehensive web-based DICOM medical imaging viewer with advanced features including AI analysis, 3D reconstruction, measurements, and worklist management.
 
@@ -48,7 +48,7 @@ A comprehensive web-based DICOM medical imaging viewer with advanced features in
 1. Clone the repository:
 ```bash
 git clone <repository-url>
-cd dicom-viewer
+cd noctis
 ```
 
 2. Create a virtual environment:
@@ -83,7 +83,7 @@ python manage.py runserver
 ## Usage
 
 ### Home Page
-- Click "Launch DICOM Viewer" to open the viewer
+- Click "Launch Noctis Viewer" to open the viewer
 - Click "Worklist" to access patient management
 
 ### DICOM Viewer

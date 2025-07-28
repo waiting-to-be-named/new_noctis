@@ -1,6 +1,16 @@
 # dicom_viewer/admin.py
 from django.contrib import admin
-from .models import DicomStudy, DicomSeries, DicomImage, Measurement, Annotation
+from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.models import User
+from .models import (
+    Facility, DicomStudy, DicomSeries, DicomImage, Measurement, 
+    Annotation, Report, WorklistEntry, AIAnalysis, Notification
+)
+
+# Register your models here.
+admin.site.site_header = "Noctis Administration"
+admin.site.site_title = "Noctis Admin"
+admin.site.index_title = "Noctis Medical Imaging Platform"
 
 
 @admin.register(DicomStudy)
