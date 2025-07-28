@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if object %}Edit Facility{% else %}Add New Facility{% endif %} - DICOM System</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background-color: #2a2a2a;
+            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+        }
+        
+        .admin-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #1a1a1a;
+            border-radius: 8px;
+            border: 2px solid #00ff00;
+        }
+        
+        .header h1 {
+            color: #00ff00;
+            font-size: 28px;
+        }
+        
+        .breadcrumbs {
+            margin-bottom: 20px;
+            color: #ccc;
+        }
+        
+        .breadcrumbs a {
+            color: #00ff00;
+            text-decoration: none;
+        }
+        
+        .breadcrumbs a:hover {
+            text-decoration: underline;
+        }
+        
+        .form-container {
+            background: #1a1a1a;
+            border-radius: 8px;
+            padding: 30px;
+            border: 1px solid #333;
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #ccc;
+            font-weight: 500;
+        }
+        
+        .form-group label.required:after {
+            content: " *";
+            color: #ff4444;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 12px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid transparent;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: #00ff00;
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
+        }
+        
+        .form-control::placeholder {
+            color: #999;
+        }
+        
+        textarea.form-control {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        .file-input-group {
+            position: relative;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .file-input-label {
+            display: inline-block;
+            padding: 12px 20px;
+            background: #333;
+            border: 2px dashed #666;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            width: 100%;
+        }
+        
+        .file-input-label:hover {
+            border-color: #00ff00;
+            background: rgba(0, 255, 0, 0.1);
+        }
+        
+        .current-file {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0, 255, 0, 0.1);
+            border: 1px solid #00ff00;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            margin-right: 10px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, #00ff00, #00cc00);
+            color: #000;
+            font-weight: bold;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 255, 0, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #666;
+            color: #fff;
+        }
+        
+        .btn-secondary:hover {
+            background: #777;
+        }
+        
+        .form-actions {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #333;
+        }
+        
+        .errorlist {
+            list-style: none;
+            color: #ff6666;
+            margin-bottom: 10px;
+        }
+        
+        .errorlist li {
+            background: rgba(255, 0, 0, 0.1);
+            border: 1px solid #ff4444;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+        
+        .helptext {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+        
+        .messages {
+            margin-bottom: 20px;
+        }
+        
+        .message {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+        
+        .message.success {
+            background: rgba(0, 255, 0, 0.1);
+            border: 1px solid #00ff00;
+            color: #00ff00;
+        }
+        
+        .message.error {
+            background: rgba(255, 0, 0, 0.1);
+            border: 1px solid #ff4444;
+            color: #ff6666;
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <div class="breadcrumbs">
+            <a href="/">Home</a> / <a href="/home/">Dashboard</a> / <a href="{% url 'viewer:facility_list' %}">Facilities</a> / 
+            {% if object %}Edit{% else %}Add New{% endif %}
+        </div>
+        
+        {% if messages %}
+        <div class="messages">
+            {% for message in messages %}
+            <div class="message {{ message.tags }}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        <div class="header">
+            <h1>
+                <i class="fas fa-hospital"></i> 
+                {% if object %}Edit Facility: {{ object.name }}{% else %}Add New Facility{% endif %}
+            </h1>
+        </div>
+        
+        <div class="form-container">
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                
+                <div class="form-group">
+                    <label for="{{ form.name.id_for_label }}" class="required">Facility Name</label>
+                    {{ form.name.errors }}
+                    <input type="text" 
+                           name="{{ form.name.name }}" 
+                           id="{{ form.name.id_for_label }}"
+                           class="form-control" 
+                           placeholder="Enter facility name"
+                           value="{{ form.name.value|default:'' }}"
+                           required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="{{ form.address.id_for_label }}" class="required">Address</label>
+                    {{ form.address.errors }}
+                    <textarea name="{{ form.address.name }}" 
+                              id="{{ form.address.id_for_label }}"
+                              class="form-control" 
+                              placeholder="Enter complete address including city, state, and ZIP code"
+                              required>{{ form.address.value|default:'' }}</textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="{{ form.phone.id_for_label }}" class="required">Phone Number</label>
+                    {{ form.phone.errors }}
+                    <input type="tel" 
+                           name="{{ form.phone.name }}" 
+                           id="{{ form.phone.id_for_label }}"
+                           class="form-control" 
+                           placeholder="(555) 123-4567"
+                           value="{{ form.phone.value|default:'' }}"
+                           required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="{{ form.email.id_for_label }}" class="required">Email Address</label>
+                    {{ form.email.errors }}
+                    <input type="email" 
+                           name="{{ form.email.name }}" 
+                           id="{{ form.email.id_for_label }}"
+                           class="form-control" 
+                           placeholder="contact@facility.com"
+                           value="{{ form.email.value|default:'' }}"
+                           required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="{{ form.letterhead_logo.id_for_label }}">Letterhead Logo</label>
+                    {{ form.letterhead_logo.errors }}
+                    <div class="file-input-group">
+                        <input type="file" 
+                               name="{{ form.letterhead_logo.name }}" 
+                               id="{{ form.letterhead_logo.id_for_label }}"
+                               class="file-input"
+                               accept="image/*">
+                        <label for="{{ form.letterhead_logo.id_for_label }}" class="file-input-label">
+                            <i class="fas fa-cloud-upload-alt"></i> Choose Logo File
+                        </label>
+                    </div>
+                    {% if form.letterhead_logo.value %}
+                    <div class="current-file">
+                        <i class="fas fa-file-image"></i> Current file: {{ form.letterhead_logo.value }}
+                    </div>
+                    {% endif %}
+                    <div class="helptext">Upload an image file (PNG, JPG, GIF) for the facility letterhead. Recommended size: 200x100px</div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> 
+                        {% if object %}Update Facility{% else %}Create Facility{% endif %}
+                    </button>
+                    <a href="{% url 'viewer:facility_list' %}" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        // File input enhancement
+        document.getElementById('{{ form.letterhead_logo.id_for_label }}').addEventListener('change', function(e) {
+            const label = document.querySelector('label[for="{{ form.letterhead_logo.id_for_label }}"]');
+            if (e.target.files.length > 0) {
+                label.innerHTML = '<i class="fas fa-check"></i> ' + e.target.files[0].name;
+                label.style.borderColor = '#00ff00';
+                label.style.background = 'rgba(0, 255, 0, 0.1)';
+            } else {
+                label.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Choose Logo File';
+                label.style.borderColor = '#666';
+                label.style.background = '#333';
+            }
+        });
+    </script>
+</body>
+</html>

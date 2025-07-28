@@ -1,13 +1,16 @@
 # dicom_viewer/views.py
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
-from django.views.generic import TemplateView
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.models import User, Group
+from django.views.generic import TemplateView, ListView, CreateView, UpdateView
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib import messages
+from django.urls import reverse_lazy
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -38,10 +41,99 @@ class DicomViewerView(TemplateView):
         return context
 
 
+# Admin functionality for facilities and radiologists
+def is_admin(user):
+    """Check if user is admin"""
+    return user.is_superuser
+
+
+class AdminRequiredMixin(UserPassesTestMixin):
+    """Mixin to require admin access"""
+    def test_func(self):
+        return self.request.user.is_superuser
+
+
+class FacilityListView(AdminRequiredMixin, ListView):
+    """Admin view to list all facilities"""
+    model = Facility
+    template_name = 'admin/facility_list.html'
+    context_object_name = 'facilities'
+    paginate_by = 20
+
+
+class FacilityCreateView(AdminRequiredMixin, CreateView):
+    """Admin view to create new facility"""
+    model = Facility
+    template_name = 'admin/facility_form.html'
+    fields = ['name', 'address', 'phone', 'email', 'letterhead_logo']
+    success_url = reverse_lazy('viewer:facility_list')
+    
+    def form_valid(self, form):
+        messages.success(self.request, f'Facility "{form.instance.name}" created successfully.')
+        return super().form_valid(form)
+
+
+class FacilityUpdateView(AdminRequiredMixin, UpdateView):
+    """Admin view to update facility"""
+    model = Facility
+    template_name = 'admin/facility_form.html'
+    fields = ['name', 'address', 'phone', 'email', 'letterhead_logo']
+    success_url = reverse_lazy('viewer:facility_list')
+    
+    def form_valid(self, form):
+        messages.success(self.request, f'Facility "{form.instance.name}" updated successfully.')
+        return super().form_valid(form)
+
+
+class RadiologistListView(AdminRequiredMixin, ListView):
+    """Admin view to list all radiologists"""
+    model = User
+    template_name = 'admin/radiologist_list.html'
+    context_object_name = 'radiologists'
+    paginate_by = 20
+    
+    def get_queryset(self):
+        return User.objects.filter(groups__name='Radiologists').distinct()
+
+
+@login_required
+@user_passes_test(is_admin)
+def create_radiologist(request):
+    """Admin view to create new radiologist"""
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        email = request.POST.get('email')
+        first_name = request.POST.get('first_name')
+        last_name = request.POST.get('last_name')
+        password = request.POST.get('password')
+        
+        if User.objects.filter(username=username).exists():
+            messages.error(request, 'Username already exists.')
+            return render(request, 'admin/radiologist_form.html')
+        
+        # Create user
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            password=password
+        )
+        
+        # Add to radiologists group
+        radiologist_group, created = Group.objects.get_or_create(name='Radiologists')
+        user.groups.add(radiologist_group)
+        
+        messages.success(request, f'Radiologist "{user.get_full_name()}" created successfully.')
+        return redirect('viewer:radiologist_list')
+    
+    return render(request, 'admin/radiologist_form.html')
+
+
 @csrf_exempt
 @require_http_methods(['POST'])
 def upload_dicom_files(request):
-    """Handle DICOM file uploads"""
+    """Handle DICOM file uploads with improved worklist integration"""
     if 'files' not in request.FILES:
         return JsonResponse({'error': 'No files provided'}, status=400)
     
@@ -73,8 +165,30 @@ def upload_dicom_files(request):
                         'institution_name': str(getattr(dicom_data, 'InstitutionName', '')),
                         'uploaded_by': request.user if request.user.is_authenticated else None,
                         'facility': request.user.facility_staff.facility if hasattr(request.user, 'facility_staff') else None,
+                        'accession_number': str(getattr(dicom_data, 'AccessionNumber', '')),
+                        'referring_physician': str(getattr(dicom_data, 'ReferringPhysicianName', '')),
                     }
                 )
+                
+                # Create corresponding worklist entry
+                if created:
+                    try:
+                        WorklistEntry.objects.create(
+                            patient_name=study.patient_name,
+                            patient_id=study.patient_id,
+                            accession_number=study.accession_number or f"ACC{study.id:06d}",
+                            scheduled_station_ae_title="UPLOAD",
+                            scheduled_procedure_step_start_date=study.study_date or datetime.now().date(),
+                            scheduled_procedure_step_start_time=study.study_time or datetime.now().time(),
+                            modality=study.modality,
+                            scheduled_performing_physician=study.referring_physician or "Unknown",
+                            procedure_description=study.study_description,
+                            facility=study.facility or Facility.objects.first(),
+                            study=study,
+                            status='completed'
+                        )
+                    except Exception as e:
+                        print(f"Error creating worklist entry: {e}")
             
             # If study was created, send notifications to radiologists
             if created:
@@ -101,41 +215,52 @@ def upload_dicom_files(request):
                 }
             )
             
-            # Create image
-            sop_uid = str(dicom_data.get('SOPInstanceUID', ''))
+            # Create or get image
+            sop_instance_uid = str(dicom_data.get('SOPInstanceUID', ''))
             image, created = DicomImage.objects.get_or_create(
                 series=series,
-                sop_instance_uid=sop_uid,
+                sop_instance_uid=sop_instance_uid,
                 defaults={
                     'instance_number': int(dicom_data.get('InstanceNumber', 0)),
                     'file_path': file_path,
+                    'rows': getattr(dicom_data, 'Rows', 0),
+                    'columns': getattr(dicom_data, 'Columns', 0),
                 }
             )
             
-            # Save metadata
-            image.save_dicom_metadata()
+            # Extract pixel spacing and other metadata
+            pixel_spacing = getattr(dicom_data, 'PixelSpacing', None)
+            if pixel_spacing and len(pixel_spacing) >= 2:
+                image.pixel_spacing_x = float(pixel_spacing[0])
+                image.pixel_spacing_y = float(pixel_spacing[1])
+            
+            image.slice_thickness = getattr(dicom_data, 'SliceThickness', None)
+            image.window_width = getattr(dicom_data, 'WindowWidth', None)
+            image.window_center = getattr(dicom_data, 'WindowCenter', None)
+            image.save()
             
             uploaded_files.append({
                 'filename': file.name,
-                'study_uid': study_uid,
-                'series_uid': series_uid,
-                'image_id': image.id,
+                'study_id': study.id,
+                'series_id': series.id,
+                'image_id': image.id
             })
             
         except Exception as e:
-            return JsonResponse({'error': f'Error processing {file.name}: {str(e)}'}, status=400)
+            print(f"Error processing file {file.name}: {e}")
+            continue
     
     return JsonResponse({
-        'success': True,
-        'study_id': study.id if study else None,
-        'uploaded_files': uploaded_files
+        'message': f'Uploaded {len(uploaded_files)} files successfully',
+        'uploaded_files': uploaded_files,
+        'study_id': study.id if study else None
     })
 
 
 @api_view(['GET'])
 def get_studies(request):
-    """Get list of DICOM studies"""
-    studies = DicomStudy.objects.all()
+    """Get all studies"""
+    studies = DicomStudy.objects.all()[:20]  # Limit to recent studies
     serializer = DicomStudySerializer(studies, many=True)
     return Response(serializer.data)
 
@@ -143,175 +268,188 @@ def get_studies(request):
 @api_view(['GET'])
 def get_study_images(request, study_id):
     """Get all images for a study"""
-    study = get_object_or_404(DicomStudy, id=study_id)
-    images = DicomImage.objects.filter(series__study=study).order_by('series__series_number', 'instance_number')
-    
-    image_data = []
-    for image in images:
-        image_data.append({
-            'id': image.id,
-            'instance_number': image.instance_number,
-            'series_number': image.series.series_number,
-            'series_description': image.series.series_description,
-            'rows': image.rows,
-            'columns': image.columns,
-            'pixel_spacing_x': image.pixel_spacing_x,
-            'pixel_spacing_y': image.pixel_spacing_y,
-            'window_width': image.window_width,
-            'window_center': image.window_center,
+    try:
+        study = DicomStudy.objects.get(id=study_id)
+        images = DicomImage.objects.filter(series__study=study).order_by('series__series_number', 'instance_number')
+        
+        images_data = []
+        for image in images:
+            image_data = {
+                'id': image.id,
+                'instance_number': image.instance_number,
+                'series_number': image.series.series_number,
+                'series_description': image.series.series_description,
+                'rows': image.rows,
+                'columns': image.columns,
+                'pixel_spacing_x': image.pixel_spacing_x,
+                'pixel_spacing_y': image.pixel_spacing_y,
+                'slice_thickness': image.slice_thickness,
+                'window_width': image.window_width,
+                'window_center': image.window_center,
+            }
+            images_data.append(image_data)
+        
+        return Response({
+            'study': {
+                'id': study.id,
+                'patient_name': study.patient_name,
+                'study_date': study.study_date,
+                'modality': study.modality,
+                'study_description': study.study_description,
+            },
+            'images': images_data
         })
-    
-    return Response({
-        'study': DicomStudySerializer(study).data,
-        'images': image_data
-    })
+    except DicomStudy.DoesNotExist:
+        return Response({'error': 'Study not found'}, status=404)
 
 
 @api_view(['GET'])
 def get_image_data(request, image_id):
     """Get processed image data"""
-    image = get_object_or_404(DicomImage, id=image_id)
-    
-    # Get parameters from request
-    window_width = request.GET.get('window_width')
-    window_level = request.GET.get('window_level')  
-    inverted = request.GET.get('inverted', 'false').lower() == 'true'
-    
-    # Convert parameters
-    if window_width:
-        window_width = float(window_width)
-    if window_level:
-        window_level = float(window_level)
-    
-    # Get processed image
-    image_base64 = image.get_processed_image_base64(window_width, window_level, inverted)
-    
-    if not image_base64:
-        return Response({'error': 'Could not process image'}, status=400)
-    
-    return Response({
-        'image_data': image_base64,
-        'metadata': {
-            'rows': image.rows,
-            'columns': image.columns,
-            'pixel_spacing_x': image.pixel_spacing_x,
-            'pixel_spacing_y': image.pixel_spacing_y,
-            'window_width': image.window_width,
-            'window_center': image.window_center,
-        }
-    })
+    try:
+        image = DicomImage.objects.get(id=image_id)
+        
+        # Get query parameters
+        window_width = request.GET.get('window_width', image.window_width)
+        window_level = request.GET.get('window_level', image.window_center)
+        inverted = request.GET.get('inverted', 'false').lower() == 'true'
+        
+        # Convert to appropriate types
+        if window_width:
+            window_width = float(window_width)
+        if window_level:
+            window_level = float(window_level)
+        
+        # Get processed image
+        image_base64 = image.get_processed_image_base64(window_width, window_level, inverted)
+        
+        if image_base64:
+            return Response({
+                'image_data': image_base64,
+                'metadata': {
+                    'rows': image.rows,
+                    'columns': image.columns,
+                    'pixel_spacing_x': image.pixel_spacing_x,
+                    'pixel_spacing_y': image.pixel_spacing_y,
+                    'slice_thickness': image.slice_thickness,
+                    'window_width': image.window_width,
+                    'window_center': image.window_center,
+                }
+            })
+        else:
+            return Response({'error': 'Could not process image'}, status=500)
+            
+    except DicomImage.DoesNotExist:
+        return Response({'error': 'Image not found'}, status=404)
 
 
 @csrf_exempt
-@api_view(['POST'])
+@require_http_methods(['POST'])
 def save_measurement(request):
-    """Save a measurement"""
+    """Save measurement with improved calculations"""
     try:
         data = json.loads(request.body)
-        image_id = data.get('image_id')
-        measurement_type = data.get('measurement_type')
-        coordinates = data.get('coordinates')
-        value = data.get('value')
-        unit = data.get('unit', 'px')
+        image = DicomImage.objects.get(id=data['image_id'])
         
-        # Convert pixel measurements to selected unit
-        image = get_object_or_404(DicomImage, id=image_id)
+        measurement_type = data.get('type', 'line')
+        coordinates = data['coordinates']
         
-        if unit in ['mm', 'cm'] and measurement_type == 'line':
-            # Get pixel spacing
-            pixel_spacing_x = image.pixel_spacing_x or 1.0
-            pixel_spacing_y = image.pixel_spacing_y or 1.0
+        # Calculate measurement value based on type
+        if measurement_type == 'line':
+            # Line distance measurement
+            start = coordinates[0]
+            end = coordinates[1]
+            pixel_distance = np.sqrt((end['x'] - start['x'])**2 + (end['y'] - start['y'])**2)
             
-            # Convert based on measurement type
-            if measurement_type == 'line':
-                # Calculate actual distance in mm
-                dx = (coordinates['x1'] - coordinates['x0']) * pixel_spacing_x
-                dy = (coordinates['y1'] - coordinates['y0']) * pixel_spacing_y
-                value_mm = np.sqrt(dx**2 + dy**2)
+            # Convert to real-world units if pixel spacing available
+            if image.pixel_spacing_x and image.pixel_spacing_y:
+                avg_spacing = (image.pixel_spacing_x + image.pixel_spacing_y) / 2
+                real_distance = pixel_distance * avg_spacing  # in mm
+                unit = data.get('unit', 'mm')
                 
                 if unit == 'cm':
-                    value = value_mm / 10.0
+                    value = real_distance / 10.0
                 else:
-                    value = value_mm
-        
-        # Handle ellipse HU measurements
-        if measurement_type == 'ellipse':
-            # Calculate HU values
-            pixel_array = image.get_pixel_array()
-            dicom_data = image.load_dicom_data()
-            
-            if pixel_array is not None and dicom_data:
-                # Apply rescale for HU
-                rescale_slope = float(getattr(dicom_data, 'RescaleSlope', 1))
-                rescale_intercept = float(getattr(dicom_data, 'RescaleIntercept', 0))
-                pixel_array = pixel_array * rescale_slope + rescale_intercept
+                    value = real_distance
+            else:
+                value = pixel_distance
+                unit = 'px'
                 
-                # Extract ellipse region
-                x0, y0 = coordinates['x0'], coordinates['y0']
-                x1, y1 = coordinates['x1'], coordinates['y1']
+        elif measurement_type == 'area':
+            # Area measurement for polygons
+            points = coordinates
+            if len(points) >= 3:
+                # Calculate area using shoelace formula
+                area_px = 0.5 * abs(sum(
+                    points[i]['x'] * (points[(i + 1) % len(points)]['y'] - points[(i - 1) % len(points)]['y'])
+                    for i in range(len(points))
+                ))
                 
-                # Calculate ellipse mask
-                xc = (x0 + x1) / 2.0
-                yc = (y0 + y1) / 2.0
-                a = abs(x1 - x0) / 2.0
-                b = abs(y1 - y0) / 2.0
+                if image.pixel_spacing_x and image.pixel_spacing_y:
+                    pixel_area_mm2 = image.pixel_spacing_x * image.pixel_spacing_y
+                    value = area_px * pixel_area_mm2  # in mm²
+                    unit = 'mm²'
+                else:
+                    value = area_px
+                    unit = 'px²'
+            else:
+                value = 0
+                unit = 'px²'
                 
-                y_min = int(max(min(y0, y1), 0))
-                y_max = int(min(max(y0, y1), pixel_array.shape[0] - 1))
-                x_min = int(max(min(x0, x1), 0))
-                x_max = int(min(max(x0, x1), pixel_array.shape[1] - 1))
+        elif measurement_type == 'volume':
+            # Volume measurement for 3D regions
+            # This is a simplified calculation - would need slice data for accurate volume
+            area = data.get('area', 0)  # Area from contour
+            if image.slice_thickness and image.pixel_spacing_x and image.pixel_spacing_y:
+                pixel_area_mm2 = image.pixel_spacing_x * image.pixel_spacing_y
+                volume_mm3 = area * pixel_area_mm2 * image.slice_thickness
+                unit = data.get('unit', 'mm³')
                 
-                yy, xx = np.ogrid[y_min:y_max + 1, x_min:x_max + 1]
-                ellipse_mask = (((xx - xc) / a) ** 2 + ((yy - yc) / b) ** 2) <= 1.0
+                if unit == 'cm³':
+                    value = volume_mm3 / 1000.0  # Convert mm³ to cm³
+                else:
+                    value = volume_mm3
+            else:
+                value = area * (image.slice_thickness or 1)
+                unit = 'px³'
                 
-                region_pixels = pixel_array[y_min:y_max + 1, x_min:x_max + 1][ellipse_mask]
+        elif measurement_type == 'angle':
+            # Angle measurement
+            if len(coordinates) >= 3:
+                p1, vertex, p2 = coordinates[:3]
                 
-                if region_pixels.size > 0:
-                    hounsfield_mean = float(np.mean(region_pixels))
-                    hounsfield_min = float(np.min(region_pixels))
-                    hounsfield_max = float(np.max(region_pixels))
-                    hounsfield_std = float(np.std(region_pixels))
-                    
-                    measurement = Measurement.objects.create(
-                        image_id=image_id,
-                        measurement_type=measurement_type,
-                        coordinates=coordinates,
-                        value=hounsfield_mean,
-                        unit='HU',
-                        hounsfield_mean=hounsfield_mean,
-                        hounsfield_min=hounsfield_min,
-                        hounsfield_max=hounsfield_max,
-                        hounsfield_std=hounsfield_std,
-                        notes=data.get('notes', ''),
-                        created_by=request.user if request.user.is_authenticated else None,
-                    )
-                    
-                    return JsonResponse({
-                        'success': True,
-                        'measurement_id': measurement.id,
-                        'hounsfield_mean': hounsfield_mean,
-                        'hounsfield_min': hounsfield_min,
-                        'hounsfield_max': hounsfield_max,
-                        'hounsfield_std': hounsfield_std
-                    })
-        
+                # Calculate vectors
+                v1 = np.array([p1['x'] - vertex['x'], p1['y'] - vertex['y']])
+                v2 = np.array([p2['x'] - vertex['x'], p2['y'] - vertex['y']])
+                
+                # Calculate angle
+                cos_angle = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+                angle_rad = np.arccos(np.clip(cos_angle, -1.0, 1.0))
+                value = np.degrees(angle_rad)
+                unit = '°'
+            else:
+                value = 0
+                unit = '°'
         else:
-            # Regular measurement
-            measurement = Measurement.objects.create(
-                image_id=image_id,
-                measurement_type=measurement_type,
-                coordinates=coordinates,
-                value=value,
-                unit=unit,
-                notes=data.get('notes', ''),
-                created_by=request.user if request.user.is_authenticated else None,
-            )
+            value = data.get('value', 0)
+            unit = data.get('unit', 'px')
+        
+        # Save measurement
+        measurement = Measurement.objects.create(
+            image=image,
+            measurement_type=measurement_type,
+            coordinates=coordinates,
+            value=value,
+            unit=unit,
+            notes=data.get('notes', ''),
+            created_by=request.user if request.user.is_authenticated else None
+        )
         
         return JsonResponse({
-            'success': True,
-            'measurement_id': measurement.id,
-            'value': measurement.value,
-            'unit': measurement.unit
+            'id': measurement.id,
+            'value': value,
+            'unit': unit,
+            'type': measurement_type
         })
         
     except Exception as e:
@@ -320,27 +458,141 @@ def save_measurement(request):
 
 @csrf_exempt
 @require_http_methods(['POST'])
-def save_annotation(request):
-    """Save an annotation with enhanced properties"""
+def measure_hu(request):
+    """Measure Hounsfield Units with proper radiological reference data"""
     try:
         data = json.loads(request.body)
+        image = DicomImage.objects.get(id=data['image_id'])
         
-        annotation = Annotation.objects.create(
-            image_id=data.get('image_id'),
-            x_coordinate=data.get('x'),
-            y_coordinate=data.get('y'),
-            text=data.get('text'),
-            font_size=data.get('font_size', 14),
-            color=data.get('color', '#FFFF00'),
-            created_by=request.user if request.user.is_authenticated else None,
+        # Load DICOM data
+        dicom_data = image.load_dicom_data()
+        if not dicom_data:
+            return JsonResponse({'error': 'Could not load DICOM data'}, status=400)
+        
+        pixel_array = image.get_pixel_array()
+        if pixel_array is None:
+            return JsonResponse({'error': 'Could not get pixel data'}, status=400)
+        
+        # Get ellipse coordinates
+        x0, y0 = int(data['x0']), int(data['y0'])
+        x1, y1 = int(data['x1']), int(data['y1'])
+        
+        # Create ellipse mask
+        center_x = (x0 + x1) / 2
+        center_y = (y0 + y1) / 2
+        a = abs(x1 - x0) / 2  # semi-major axis
+        b = abs(y1 - y0) / 2  # semi-minor axis
+        
+        # Create coordinate grids
+        y_coords, x_coords = np.ogrid[:pixel_array.shape[0], :pixel_array.shape[1]]
+        
+        # Ellipse equation: ((x-cx)/a)² + ((y-cy)/b)² <= 1
+        mask = ((x_coords - center_x) / a) ** 2 + ((y_coords - center_y) / b) ** 2 <= 1
+        
+        # Extract pixel values within ellipse
+        roi_pixels = pixel_array[mask]
+        
+        if len(roi_pixels) == 0:
+            return JsonResponse({'error': 'No pixels in ROI'}, status=400)
+        
+        # Convert to Hounsfield Units
+        # Check if we have rescale slope and intercept
+        rescale_slope = getattr(dicom_data, 'RescaleSlope', 1)
+        rescale_intercept = getattr(dicom_data, 'RescaleIntercept', 0)
+        
+        # Apply rescaling to get HU values
+        hu_values = roi_pixels * rescale_slope + rescale_intercept
+        
+        # Calculate statistics
+        mean_hu = float(np.mean(hu_values))
+        min_hu = float(np.min(hu_values))
+        max_hu = float(np.max(hu_values))
+        std_hu = float(np.std(hu_values))
+        
+        # Radiological interpretation based on HU values
+        interpretation = get_hu_interpretation(mean_hu)
+        
+        # Save measurement
+        measurement = Measurement.objects.create(
+            image=image,
+            measurement_type='ellipse',
+            coordinates=[{'x0': x0, 'y0': y0, 'x1': x1, 'y1': y1}],
+            value=mean_hu,
+            unit='HU',
+            hounsfield_mean=mean_hu,
+            hounsfield_min=min_hu,
+            hounsfield_max=max_hu,
+            hounsfield_std=std_hu,
+            notes=f"Interpretation: {interpretation}",
+            created_by=request.user if request.user.is_authenticated else None
         )
         
         return JsonResponse({
-            'success': True,
-            'annotation_id': annotation.id,
-            'font_size': annotation.font_size,
-            'color': annotation.color
+            'mean_hu': mean_hu,
+            'min_hu': min_hu,
+            'max_hu': max_hu,
+            'std_hu': std_hu,
+            'pixel_count': len(roi_pixels),
+            'interpretation': interpretation,
+            'measurement_id': measurement.id
         })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+def get_hu_interpretation(hu_value):
+    """
+    Provide radiological interpretation based on Hounsfield Unit values
+    Based on standard radiological reference values
+    """
+    if hu_value < -900:
+        return "Air/Gas"
+    elif -900 <= hu_value < -500:
+        return "Lung tissue"
+    elif -500 <= hu_value < -100:
+        return "Fat tissue"
+    elif -100 <= hu_value < -50:
+        return "Fat/Soft tissue interface"
+    elif -50 <= hu_value < 0:
+        return "Soft tissue (low density)"
+    elif 0 <= hu_value < 20:
+        return "Water/CSF"
+    elif 20 <= hu_value < 40:
+        return "Soft tissue (muscle)"
+    elif 40 <= hu_value < 80:
+        return "Soft tissue (liver, spleen)"
+    elif 80 <= hu_value < 120:
+        return "Soft tissue (kidney)"
+    elif 120 <= hu_value < 200:
+        return "Soft tissue (dense)"
+    elif 200 <= hu_value < 400:
+        return "Calcification/Contrast"
+    elif 400 <= hu_value < 1000:
+        return "Bone (cancellous)"
+    elif 1000 <= hu_value < 2000:
+        return "Bone (cortical)"
+    else:
+        return "Metal/Dense material"
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def save_annotation(request):
+    """Save annotation"""
+    try:
+        data = json.loads(request.body)
+        image = DicomImage.objects.get(id=data['image_id'])
+        
+        annotation = Annotation.objects.create(
+            image=image,
+            x_coordinate=data['x'],
+            y_coordinate=data['y'],
+            text=data['text'],
+            created_by=request.user if request.user.is_authenticated else None
+        )
+        
+        return JsonResponse({'id': annotation.id})
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
@@ -349,278 +601,151 @@ def save_annotation(request):
 @api_view(['GET'])
 def get_measurements(request, image_id):
     """Get measurements for an image"""
-    image = get_object_or_404(DicomImage, id=image_id)
-    measurements = image.measurements.all()
-    
-    measurement_data = []
-    for measurement in measurements:
-        measurement_data.append({
-            'id': measurement.id,
-            'type': measurement.measurement_type,
-            'coordinates': measurement.coordinates,
-            'value': measurement.value,
-            'unit': measurement.unit,
-            'notes': measurement.notes,
-        })
-    
-    return Response(measurement_data)
+    try:
+        measurements = Measurement.objects.filter(image_id=image_id)
+        data = []
+        
+        for m in measurements:
+            measurement_data = {
+                'id': m.id,
+                'type': m.measurement_type,
+                'coordinates': m.coordinates,
+                'value': m.value,
+                'unit': m.unit,
+                'notes': m.notes,
+                'created_at': m.created_at.isoformat()
+            }
+            
+            # Add HU-specific data if available
+            if m.measurement_type == 'ellipse' and m.hounsfield_mean is not None:
+                measurement_data.update({
+                    'hounsfield_mean': m.hounsfield_mean,
+                    'hounsfield_min': m.hounsfield_min,
+                    'hounsfield_max': m.hounsfield_max,
+                    'hounsfield_std': m.hounsfield_std,
+                })
+            
+            data.append(measurement_data)
+        
+        return Response(data)
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
 
 
 @api_view(['GET'])
 def get_annotations(request, image_id):
     """Get annotations for an image"""
-    image = get_object_or_404(DicomImage, id=image_id)
-    annotations = image.annotations.all()
-    
-    annotation_data = []
-    for annotation in annotations:
-        annotation_data.append({
-            'id': annotation.id,
-            'x': annotation.x_coordinate,
-            'y': annotation.y_coordinate,
-            'text': annotation.text,
-        })
-    
-    return Response(annotation_data)
-
-
-@csrf_exempt
-@api_view(['DELETE'])
-def clear_measurements(request, image_id):
-    """Clear all measurements for an image"""
-    image = get_object_or_404(DicomImage, id=image_id)
-    image.measurements.all().delete()
-    image.annotations.all().delete()
-    
-    return JsonResponse({'success': True})
-
-
-@csrf_exempt
-@api_view(['POST'])
-def measure_hu(request):
-    """Calculate average Hounsfield Units inside an ellipse region"""
     try:
-        data = json.loads(request.body)
-        image = get_object_or_404(DicomImage, id=data['image_id'])
-        x0 = float(data['x0'])
-        y0 = float(data['y0'])
-        x1 = float(data['x1'])
-        y1 = float(data['y1'])
+        annotations = Annotation.objects.filter(image_id=image_id)
+        data = [{
+            'id': a.id,
+            'x': a.x_coordinate,
+            'y': a.y_coordinate,
+            'text': a.text,
+            'font_size': a.font_size,
+            'color': a.color,
+            'created_at': a.created_at.isoformat()
+        } for a in annotations]
+        
+        return Response(data)
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
 
-        dicom_data = image.load_dicom_data()
-        if dicom_data is None or not hasattr(dicom_data, 'pixel_array'):
-            return JsonResponse({'error': 'Unable to load DICOM pixel data'}, status=400)
 
-        pixel_array = dicom_data.pixel_array.astype(np.float32)
-
-        # Apply rescale slope/intercept for CT to convert to HU
-        rescale_slope = float(getattr(dicom_data, 'RescaleSlope', 1))
-        rescale_intercept = float(getattr(dicom_data, 'RescaleIntercept', 0))
-        pixel_array = pixel_array * rescale_slope + rescale_intercept
-
-        # Create mask for ellipse within bounding box
-        rows, cols = pixel_array.shape
-        x_min = int(max(min(x0, x1), 0))
-        x_max = int(min(max(x0, x1), cols - 1))
-        y_min = int(max(min(y0, y1), 0))
-        y_max = int(min(max(y0, y1), rows - 1))
-
-        if x_max <= x_min or y_max <= y_min:
-            return JsonResponse({'error': 'Invalid ellipse bounds'}, status=400)
-
-        # Ellipse parameters
-        xc = (x_min + x_max) / 2.0
-        yc = (y_min + y_max) / 2.0
-        a = (x_max - x_min) / 2.0  # semi-major axis
-        b = (y_max - y_min) / 2.0  # semi-minor axis
-
-        yy, xx = np.ogrid[y_min:y_max + 1, x_min:x_max + 1]
-        ellipse_mask = (((xx - xc) / a) ** 2 + ((yy - yc) / b) ** 2) <= 1.0
-
-        region_pixels = pixel_array[y_min:y_max + 1, x_min:x_max + 1][ellipse_mask]
-        if region_pixels.size == 0:
-            return JsonResponse({'error': 'No pixels inside region'}, status=400)
-
-        mean_hu = float(np.mean(region_pixels))
-        min_hu = float(np.min(region_pixels))
-        max_hu = float(np.max(region_pixels))
-
-        # Save measurement
-        measurement = Measurement.objects.create(
-            image=image,
-            measurement_type='ellipse',
-            coordinates={'x0': x0, 'y0': y0, 'x1': x1, 'y1': y1},
-            value=mean_hu,
-            unit='HU',
-            notes=f"Min: {min_hu:.1f}, Max: {max_hu:.1f}",
-            created_by=request.user if request.user.is_authenticated else None,
-        )
-
-        return JsonResponse({
-            'success': True,
-            'measurement_id': measurement.id,
-            'mean_hu': mean_hu,
-            'min_hu': min_hu,
-            'max_hu': max_hu,
-        })
+@csrf_exempt
+@require_http_methods(['DELETE'])
+def clear_measurements(request, image_id):
+    """Clear all measurements and annotations for an image"""
+    try:
+        Measurement.objects.filter(image_id=image_id).delete()
+        Annotation.objects.filter(image_id=image_id).delete()
+        return JsonResponse({'message': 'Measurements cleared'})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
 
 
 @csrf_exempt
-@api_view(['POST'])
+@require_http_methods(['POST'])
 def perform_ai_analysis(request, image_id):
-    """Perform AI analysis on DICOM image"""
+    """Perform AI analysis on image (placeholder implementation)"""
     try:
-        image = get_object_or_404(DicomImage, id=image_id)
+        image = DicomImage.objects.get(id=image_id)
         
-        # Mock AI analysis - in production, this would call actual AI model
-        pixel_array = image.get_pixel_array()
-        if pixel_array is None:
-            return Response({'error': 'Cannot load image data'}, status=400)
+        # This is a placeholder - would integrate with actual AI models
+        # For now, return mock results
+        mock_results = {
+            'analysis_type': 'anomaly_detection',
+            'summary': 'AI analysis completed. No significant abnormalities detected.',
+            'confidence_score': 0.85,
+            'findings': [
+                {
+                    'type': 'Normal structure',
+                    'location': {'x': 100, 'y': 150},
+                    'size': 25,
+                    'confidence': 0.9
+                }
+            ],
+            'highlighted_regions': [
+                {'x': 90, 'y': 140, 'width': 20, 'height': 20, 'type': 'normal'}
+            ]
+        }
         
-        # Simulate finding regions of interest
-        height, width = pixel_array.shape
-        mock_findings = []
-        
-        # Generate some mock findings
-        for i in range(3):
-            x = np.random.randint(width * 0.2, width * 0.8)
-            y = np.random.randint(height * 0.2, height * 0.8)
-            size = np.random.randint(20, 50)
-            confidence = np.random.uniform(0.7, 0.95)
-            
-            mock_findings.append({
-                'type': np.random.choice(['nodule', 'consolidation', 'opacity']),
-                'location': {'x': int(x), 'y': int(y)},
-                'size': int(size),
-                'confidence': float(confidence)
-            })
-        
-        # Create AI analysis record
-        analysis = AIAnalysis.objects.create(
+        # Save AI analysis result
+        ai_analysis = AIAnalysis.objects.create(
             image=image,
-            analysis_type='chest_xray_abnormality_detection',
-            findings=mock_findings,
-            summary=f"Detected {len(mock_findings)} potential abnormalities with high confidence.",
-            confidence_score=0.85,
-            highlighted_regions=[{
-                'x': f['location']['x'],
-                'y': f['location']['y'],
-                'width': f['size'],
-                'height': f['size'],
-                'label': f['type'],
-                'confidence': f['confidence']
-            } for f in mock_findings]
+            analysis_type='anomaly_detection',
+            findings=mock_results['findings'],
+            summary=mock_results['summary'],
+            confidence_score=mock_results['confidence_score'],
+            highlighted_regions=mock_results['highlighted_regions']
         )
         
-        return Response({
-            'analysis_id': analysis.id,
-            'findings': analysis.findings,
-            'summary': analysis.summary,
-            'highlighted_regions': analysis.highlighted_regions,
-            'confidence_score': analysis.confidence_score
-        })
+        return JsonResponse(mock_results)
         
+    except DicomImage.DoesNotExist:
+        return JsonResponse({'error': 'Image not found'}, status=404)
     except Exception as e:
-        return Response({'error': str(e)}, status=400)
+        return JsonResponse({'error': str(e)}, status=400)
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_3d_reconstruction(request, series_id):
-    """Get 3D reconstruction data for a series"""
+    """Get 3D reconstruction data (placeholder implementation)"""
     try:
-        series = get_object_or_404(DicomSeries, id=series_id)
+        series = DicomSeries.objects.get(id=series_id)
         reconstruction_type = request.GET.get('type', 'mpr')
         
-        # Check if series has enough images for 3D
-        if series.image_count < 10:
-            return Response({
-                'error': 'Not enough images for 3D reconstruction'
-            }, status=400)
+        # This is a placeholder - would implement actual 3D reconstruction
+        mock_data = {
+            'type': reconstruction_type,
+            'data_url': '/static/images/3d_placeholder.png',
+            'message': f'{reconstruction_type.upper()} reconstruction generated'
+        }
         
-        # Mock 3D reconstruction data
-        if reconstruction_type == 'mpr':
-            # Multi-planar reconstruction
-            return Response({
-                'type': 'mpr',
-                'planes': {
-                    'axial': {'available': True, 'slice_count': series.image_count},
-                    'coronal': {'available': True, 'slice_count': 100},
-                    'sagittal': {'available': True, 'slice_count': 100}
-                },
-                'voxel_spacing': [1.0, 1.0, 2.0]
-            })
-            
-        elif reconstruction_type == '3d_bone':
-            # 3D bone reconstruction
-            return Response({
-                'type': '3d_bone',
-                'mesh_data': {
-                    'vertices': 15000,
-                    'faces': 30000,
-                    'threshold': 200  # HU threshold for bone
-                },
-                'rendering_params': {
-                    'opacity': 0.8,
-                    'color': '#F5DEB3'
-                }
-            })
-            
-        elif reconstruction_type == 'angio':
-            # Angiography reconstruction
-            return Response({
-                'type': 'angio',
-                'vessel_tree': {
-                    'main_vessels': 12,
-                    'branches': 45
-                },
-                'contrast_params': {
-                    'window': 600,
-                    'level': 100
-                }
-            })
-            
-        elif reconstruction_type == 'virtual_surgery':
-            # Virtual surgery planning
-            return Response({
-                'type': 'virtual_surgery',
-                'tools': ['cutting_plane', 'measurement', 'annotation'],
-                'anatomical_structures': ['bone', 'soft_tissue', 'vessels'],
-                'planning_data': {
-                    'cutting_planes': [],
-                    'measurements': [],
-                    'annotations': []
-                }
-            })
-            
-        else:
-            return Response({'error': 'Unknown reconstruction type'}, status=400)
-            
-    except Exception as e:
-        return Response({'error': str(e)}, status=400)
+        return Response(mock_data)
+        
+    except DicomSeries.DoesNotExist:
+        return Response({'error': 'Series not found'}, status=404)
 
 
+# Utility functions
 def parse_dicom_date(date_str):
     """Parse DICOM date string to Python date"""
-    if not date_str:
-        return None
-    try:
-        return datetime.strptime(str(date_str), '%Y%m%d').date()
-    except:
-        return None
+    if date_str:
+        try:
+            return datetime.strptime(str(date_str), '%Y%m%d').date()
+        except:
+            pass
+    return None
 
 
 def parse_dicom_time(time_str):
     """Parse DICOM time string to Python time"""
-    if not time_str:
-        return None
-    try:
-        time_str = str(time_str).split('.')[0]  # Remove microseconds
-        if len(time_str) == 6:
+    if time_str:
+        try:
+            # Handle various time formats
+            time_str = str(time_str)[:6]  # Take first 6 digits (HHMMSS)
             return datetime.strptime(time_str, '%H%M%S').time()
-        elif len(time_str) == 4:
-            return datetime.strptime(time_str, '%H%M').time()
-    except:
-        return None
+        except:
+            pass
+    return None

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Facilities - DICOM System</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background-color: #2a2a2a;
+            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+        }
+        
+        .admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #1a1a1a;
+            border-radius: 8px;
+            border: 2px solid #00ff00;
+        }
+        
+        .header h1 {
+            color: #00ff00;
+            font-size: 28px;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: #00ff00;
+            color: #000;
+        }
+        
+        .btn-primary:hover {
+            background: #00cc00;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+        }
+        
+        .btn-secondary {
+            background: #666;
+            color: #fff;
+        }
+        
+        .btn-secondary:hover {
+            background: #777;
+        }
+        
+        .btn-edit {
+            background: #0066cc;
+            color: #fff;
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        
+        .btn-edit:hover {
+            background: #0052a3;
+        }
+        
+        .facilities-table {
+            background: #1a1a1a;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #333;
+        }
+        
+        .facilities-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .facilities-table th {
+            background: #0d0d0d;
+            color: #00ff00;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #00ff00;
+        }
+        
+        .facilities-table td {
+            padding: 15px;
+            border-bottom: 1px solid #333;
+            vertical-align: middle;
+        }
+        
+        .facilities-table tr:hover {
+            background: rgba(0, 255, 0, 0.05);
+        }
+        
+        .facility-logo {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #555;
+        }
+        
+        .breadcrumbs {
+            margin-bottom: 20px;
+            color: #ccc;
+        }
+        
+        .breadcrumbs a {
+            color: #00ff00;
+            text-decoration: none;
+        }
+        
+        .breadcrumbs a:hover {
+            text-decoration: underline;
+        }
+        
+        .pagination {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .pagination a {
+            color: #00ff00;
+            text-decoration: none;
+            margin: 0 5px;
+            padding: 8px 12px;
+            border: 1px solid #555;
+            border-radius: 4px;
+        }
+        
+        .pagination a:hover {
+            background: rgba(0, 255, 0, 0.1);
+        }
+        
+        .current {
+            color: #fff;
+            margin: 0 5px;
+            padding: 8px 12px;
+            background: #00ff00;
+            color: #000;
+            border-radius: 4px;
+        }
+        
+        .no-facilities {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+            font-size: 18px;
+        }
+        
+        .messages {
+            margin-bottom: 20px;
+        }
+        
+        .message {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+        
+        .message.success {
+            background: rgba(0, 255, 0, 0.1);
+            border: 1px solid #00ff00;
+            color: #00ff00;
+        }
+        
+        .message.error {
+            background: rgba(255, 0, 0, 0.1);
+            border: 1px solid #ff4444;
+            color: #ff6666;
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <div class="breadcrumbs">
+            <a href="/">Home</a> / <a href="/home/">Dashboard</a> / Admin / Facilities
+        </div>
+        
+        {% if messages %}
+        <div class="messages">
+            {% for message in messages %}
+            <div class="message {{ message.tags }}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        <div class="header">
+            <h1><i class="fas fa-hospital"></i> Manage Facilities</h1>
+            <div class="header-actions">
+                <a href="{% url 'viewer:radiologist_list' %}" class="btn btn-secondary">
+                    <i class="fas fa-user-md"></i> Manage Radiologists
+                </a>
+                <a href="{% url 'viewer:facility_create' %}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Add New Facility
+                </a>
+            </div>
+        </div>
+        
+        {% if facilities %}
+        <div class="facilities-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Logo</th>
+                        <th>Name</th>
+                        <th>Address</th>
+                        <th>Phone</th>
+                        <th>Email</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for facility in facilities %}
+                    <tr>
+                        <td>
+                            {% if facility.letterhead_logo %}
+                            <img src="{{ facility.letterhead_logo.url }}" alt="Logo" class="facility-logo">
+                            {% else %}
+                            <div class="facility-logo" style="background: #555; display: flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-hospital" style="color: #999;"></i>
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td><strong>{{ facility.name }}</strong></td>
+                        <td>{{ facility.address|truncatechars:50 }}</td>
+                        <td>{{ facility.phone }}</td>
+                        <td>{{ facility.email }}</td>
+                        <td>{{ facility.created_at|date:"M d, Y" }}</td>
+                        <td>
+                            <a href="{% url 'viewer:facility_edit' facility.pk %}" class="btn btn-edit">
+                                <i class="fas fa-edit"></i> Edit
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        {% if is_paginated %}
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+                <a href="?page=1">&laquo; first</a>
+                <a href="?page={{ page_obj.previous_page_number }}">previous</a>
+            {% endif %}
+            
+            <span class="current">
+                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+            </span>
+            
+            {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}">next</a>
+                <a href="?page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        {% else %}
+        <div class="no-facilities">
+            <i class="fas fa-hospital" style="font-size: 64px; margin-bottom: 20px; color: #555;"></i>
+            <p>No facilities found. <a href="{% url 'viewer:facility_create' %}" style="color: #00ff00;">Add the first facility</a></p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

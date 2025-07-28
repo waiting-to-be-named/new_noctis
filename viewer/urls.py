@@ -4,12 +4,16 @@ from . import views
 app_name = 'viewer'
 
 urlpatterns = [
-    # Home page
-    path('home/', views.HomeView.as_view(), name='home'),
-    
     # Main viewer page
     path('', views.DicomViewerView.as_view(), name='viewer'),
     path('study/<int:study_id>/', views.DicomViewerView.as_view(), name='viewer_with_study'),
+    
+    # Admin functionality
+    path('admin/facilities/', views.FacilityListView.as_view(), name='facility_list'),
+    path('admin/facilities/new/', views.FacilityCreateView.as_view(), name='facility_create'),
+    path('admin/facilities/<int:pk>/edit/', views.FacilityUpdateView.as_view(), name='facility_edit'),
+    path('admin/radiologists/', views.RadiologistListView.as_view(), name='radiologist_list'),
+    path('admin/radiologists/new/', views.create_radiologist, name='radiologist_create'),
     
     # File upload
     path('api/upload/', views.upload_dicom_files, name='upload_dicom'),

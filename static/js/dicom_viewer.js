@@ -34,6 +34,11 @@ class DicomViewer {
         this.isDragging = false;
         this.dragStart = null;
         
+        // Volume measurement
+        this.volumeTool = false;
+        this.volumeContour = [];
+        this.currentContour = null;
+        
         // Annotation state
         this.selectedAnnotation = null;
         this.isEditingAnnotation = false;
@@ -430,6 +435,41 @@ class DicomViewer {
                 this.ctx.fillRect(centerX - textMetrics.width/2 - 4, centerY - 8, textMetrics.width + 8, 16);
                 this.ctx.fillStyle = 'lime';
                 this.ctx.fillText(text, centerX - textMetrics.width/2, centerY + 4);
+            } else if (measurement.type === 'volume' && coords && coords.length >= 3) {
+                // Draw volume contour
+                this.ctx.strokeStyle = 'blue';
+                this.ctx.fillStyle = 'rgba(0, 0, 255, 0.2)';
+                this.ctx.lineWidth = 2;
+                
+                this.ctx.beginPath();
+                const firstPoint = this.imageToCanvasCoords(coords[0].x, coords[0].y);
+                this.ctx.moveTo(firstPoint.x, firstPoint.y);
+                
+                for (let i = 1; i < coords.length; i++) {
+                    const point = this.imageToCanvasCoords(coords[i].x, coords[i].y);
+                    this.ctx.lineTo(point.x, point.y);
+                }
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.stroke();
+                
+                // Calculate centroid for text placement
+                let centroidX = 0, centroidY = 0;
+                coords.forEach(point => {
+                    const canvasPoint = this.imageToCanvasCoords(point.x, point.y);
+                    centroidX += canvasPoint.x;
+                    centroidY += canvasPoint.y;
+                });
+                centroidX /= coords.length;
+                centroidY /= coords.length;
+                
+                // Draw volume text
+                const text = `${measurement.value.toFixed(2)} ${measurement.unit}`;
+                const textMetrics = this.ctx.measureText(text);
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                this.ctx.fillRect(centroidX - textMetrics.width/2 - 4, centroidY - 8, textMetrics.width + 8, 16);
+                this.ctx.fillStyle = 'blue';
+                this.ctx.fillText(text, centroidX - textMetrics.width/2, centroidY + 4);
             } else if (coords && coords.length >= 2) {
                 // existing line measurement drawing
                 const start = this.imageToCanvasCoords(coords[0].x, coords[0].y);
@@ -481,6 +521,49 @@ class DicomViewer {
             this.ctx.ellipse(centerX, centerY, Math.abs(width)/2, Math.abs(height)/2, 0, 0, Math.PI*2);
             this.ctx.stroke();
             this.ctx.setLineDash([]);
+        }
+        
+        // Draw current volume contour being created
+        if (this.volumeContour && this.volumeContour.length > 0) {
+            this.ctx.strokeStyle = 'orange';
+            this.ctx.fillStyle = 'orange';
+            this.ctx.lineWidth = 2;
+            
+            // Draw lines between points
+            if (this.volumeContour.length > 1) {
+                this.ctx.setLineDash([3, 3]);
+                this.ctx.beginPath();
+                const firstPoint = this.imageToCanvasCoords(this.volumeContour[0].x, this.volumeContour[0].y);
+                this.ctx.moveTo(firstPoint.x, firstPoint.y);
+                
+                for (let i = 1; i < this.volumeContour.length; i++) {
+                    const point = this.imageToCanvasCoords(this.volumeContour[i].x, this.volumeContour[i].y);
+                    this.ctx.lineTo(point.x, point.y);
+                }
+                this.ctx.stroke();
+                this.ctx.setLineDash([]);
+            }
+            
+            // Draw points
+            this.volumeContour.forEach((point, index) => {
+                const canvasPoint = this.imageToCanvasCoords(point.x, point.y);
+                this.ctx.beginPath();
+                this.ctx.arc(canvasPoint.x, canvasPoint.y, 4, 0, Math.PI * 2);
+                this.ctx.fill();
+                
+                // Number the points
+                this.ctx.fillStyle = 'white';
+                this.ctx.font = '10px Arial';
+                this.ctx.fillText(index + 1, canvasPoint.x - 3, canvasPoint.y + 3);
+                this.ctx.fillStyle = 'orange';
+            });
+            
+            // Show instruction text
+            if (this.volumeContour.length >= 3) {
+                this.ctx.fillStyle = 'orange';
+                this.ctx.font = '14px Arial';
+                this.ctx.fillText('Click near first point to close contour', 10, 30);
+            }
         }
     }
     
@@ -600,6 +683,15 @@ class DicomViewer {
     
     // Event Handlers
     handleToolClick(tool) {
+        // Reset current measurement/annotation states
+        this.currentMeasurement = null;
+        this.currentEllipse = null;
+        this.selectedAnnotation = null;
+        this.isEditingAnnotation = false;
+        this.volumeTool = false;
+        this.volumeContour = [];
+        this.currentContour = null;
+        
         // Remove active class from all buttons
         document.querySelectorAll('.tool-btn').forEach(btn => {
             btn.classList.remove('active');
@@ -620,6 +712,11 @@ class DicomViewer {
             case 'annotate':
                 this.activeTool = tool;
                 break;
+            case 'volume':
+                this.activeTool = tool;
+                this.volumeTool = true;
+                alert('Volume measurement: Click to create a closed contour around the region to measure volume.');
+                break;
             case 'crosshair':
                 this.crosshair = !this.crosshair;
                 this.updateDisplay();
@@ -636,6 +733,27 @@ class DicomViewer {
                 break;
             case '3d':
                 this.toggle3DOptions();
+                break;
+        }
+        
+        // Change cursor based on tool
+        switch(tool) {
+            case 'windowing':
+                this.canvas.style.cursor = 'default';
+                break;
+            case 'pan':
+                this.canvas.style.cursor = 'move';
+                break;
+            case 'zoom':
+                this.canvas.style.cursor = 'zoom-in';
+                break;
+            case 'measure':
+            case 'ellipse':
+            case 'volume':
+                this.canvas.style.cursor = 'crosshair';
+                break;
+            case 'annotate':
+                this.canvas.style.cursor = 'text';
                 break;
         }
     }
@@ -687,6 +805,27 @@ class DicomViewer {
                 start: imageCoords,
                 end: imageCoords
             };
+        } else if (this.activeTool === 'volume') {
+            const imageCoords = this.canvasToImageCoords(x, y);
+            
+            // Add point to volume contour
+            this.volumeContour.push(imageCoords);
+            
+            // Check if we should close the contour (double-click or close to start)
+            if (this.volumeContour.length > 2) {
+                const firstPoint = this.volumeContour[0];
+                const distance = Math.sqrt(
+                    Math.pow(imageCoords.x - firstPoint.x, 2) + 
+                    Math.pow(imageCoords.y - firstPoint.y, 2)
+                );
+                
+                if (distance < 10) { // Close contour if clicking near start
+                    this.calculateVolume();
+                    return;
+                }
+            }
+            
+            this.updateDisplay();
         } else if (this.activeTool === 'annotate') {
             // Check if clicking on existing annotation
             const clickedAnnotation = this.getAnnotationAt(x, y);
@@ -1010,12 +1149,51 @@ class DicomViewer {
             const item = document.createElement('div');
             item.className = 'measurement-item';
             let displayText;
-            if (measurement.type === 'ellipse') {
-                displayText = `HU: ${measurement.value.toFixed(1)} (${measurement.notes || ''})`;
-            } else {
-                displayText = `${measurement.value.toFixed(1)} ${measurement.unit}`;
+            let typeText;
+            
+            switch(measurement.type) {
+                case 'ellipse':
+                    typeText = 'HU Analysis';
+                    displayText = `${measurement.value.toFixed(1)} HU`;
+                    if (measurement.hounsfield_min !== undefined) {
+                        displayText += ` (${measurement.hounsfield_min.toFixed(1)} - ${measurement.hounsfield_max.toFixed(1)})`;
+                    }
+                    if (measurement.notes) {
+                        displayText += ` - ${measurement.notes}`;
+                    }
+                    break;
+                case 'volume':
+                    typeText = 'Volume';
+                    displayText = `${measurement.value.toFixed(2)} ${measurement.unit}`;
+                    break;
+                case 'line':
+                    typeText = 'Distance';
+                    displayText = `${measurement.value.toFixed(1)} ${measurement.unit}`;
+                    break;
+                case 'area':
+                    typeText = 'Area';
+                    displayText = `${measurement.value.toFixed(2)} ${measurement.unit}`;
+                    break;
+                case 'angle':
+                    typeText = 'Angle';
+                    displayText = `${measurement.value.toFixed(1)}°`;
+                    break;
+                default:
+                    typeText = 'Measurement';
+                    displayText = `${measurement.value.toFixed(1)} ${measurement.unit}`;
             }
-            item.textContent = `Measurement ${index + 1}: ${displayText}`;
+            
+            item.innerHTML = `<strong>${typeText} ${index + 1}:</strong> ${displayText}`;
+            
+            // Add click handler to highlight measurement
+            item.addEventListener('click', () => {
+                // Remove highlighting from all measurements
+                document.querySelectorAll('.measurement-item').forEach(m => m.classList.remove('highlighted'));
+                // Highlight this measurement
+                item.classList.add('highlighted');
+                // TODO: Could add highlighting on canvas as well
+            });
+            
             list.appendChild(item);
         });
     }
@@ -1042,7 +1220,7 @@ class DicomViewer {
         }
     }
     
-    async addEllipseHU(ellipseData) {
+    async     addEllipseHU(ellipseData) {
         if (!this.currentImage) return;
         const payload = {
             image_id: this.currentImage.id,
@@ -1077,6 +1255,60 @@ class DicomViewer {
         } catch (error) {
             console.error('Error measuring HU:', error);
         }
+    }
+    
+    calculateVolume() {
+        if (this.volumeContour.length < 3) {
+            alert('Need at least 3 points to calculate volume');
+            return;
+        }
+        
+        // Calculate area using shoelace formula
+        let area = 0;
+        const n = this.volumeContour.length;
+        
+        for (let i = 0; i < n; i++) {
+            const j = (i + 1) % n;
+            area += this.volumeContour[i].x * this.volumeContour[j].y;
+            area -= this.volumeContour[j].x * this.volumeContour[i].y;
+        }
+        area = Math.abs(area) / 2;
+        
+        // Convert to real-world units
+        let volume = area;
+        let unit = 'px²';
+        
+        if (this.currentImage) {
+            const pixelSpacingX = this.currentImage.pixel_spacing_x || 1.0;
+            const pixelSpacingY = this.currentImage.pixel_spacing_y || 1.0;
+            const sliceThickness = this.currentImage.slice_thickness || 1.0;
+            
+            if (pixelSpacingX && pixelSpacingY) {
+                const realArea = area * pixelSpacingX * pixelSpacingY; // mm²
+                volume = realArea * sliceThickness; // mm³
+                
+                unit = this.measurementUnit === 'cm' ? 'cm³' : 'mm³';
+                if (unit === 'cm³') {
+                    volume = volume / 1000; // Convert mm³ to cm³
+                }
+            }
+        }
+        
+        // Save volume measurement
+        this.saveMeasurement({
+            type: 'volume',
+            coordinates: this.volumeContour.slice(), // Copy array
+            value: volume,
+            unit: unit,
+            area: area
+        });
+        
+        // Reset volume contour
+        this.volumeContour = [];
+        this.updateDisplay();
+        
+        // Show result
+        alert(`Volume calculated: ${volume.toFixed(2)} ${unit}`);
     }
     
     // Utility functions
