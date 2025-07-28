@@ -8,6 +8,7 @@ from django.core.files.base import ContentFile
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.views.generic import TemplateView
+from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -18,7 +19,7 @@ from datetime import datetime
 import numpy as np
 from .models import (
     DicomStudy, DicomSeries, DicomImage, Measurement, Annotation,
-    Facility, Report, WorklistEntry, AIAnalysis, Notification
+    WorklistEntry, Facility, Report, AIAnalysis, Notification
 )
 from .serializers import DicomStudySerializer, DicomImageSerializer
 
@@ -76,8 +77,27 @@ def upload_dicom_files(request):
                     }
                 )
             
-            # If study was created, send notifications to radiologists
+            # If study was created, send notifications to radiologists and create worklist entry
             if created:
+                # Create worklist entry
+                facility = request.user.facility_staff.facility if hasattr(request.user, 'facility_staff') else Facility.objects.first()
+                accession_number = getattr(dicom_data, 'AccessionNumber', f'ACC{study.id:06d}')
+                
+                WorklistEntry.objects.create(
+                    patient_name=study.patient_name,
+                    patient_id=study.patient_id,
+                    accession_number=accession_number,
+                    scheduled_station_ae_title=getattr(dicom_data, 'ScheduledStationAETitle', 'STATION01'),
+                    scheduled_procedure_step_start_date=study.study_date or timezone.now().date(),
+                    scheduled_procedure_step_start_time=study.study_time or timezone.now().time(),
+                    modality=study.modality,
+                    scheduled_performing_physician=getattr(dicom_data, 'ReferringPhysicianName', 'Unknown'),
+                    procedure_description=study.study_description or 'DICOM Study',
+                    facility=facility,
+                    status='completed',
+                    study=study
+                )
+                
                 radiologists = User.objects.filter(groups__name='Radiologists')
                 for radiologist in radiologists:
                     Notification.objects.create(

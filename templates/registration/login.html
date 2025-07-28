@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Noctis DICOM Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .login-container {
+            background: rgba(30, 30, 30, 0.95);
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 400px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .logo-section {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .logo-section h1 {
+            font-size: 32px;
+            font-weight: 700;
+            color: #4a9eff;
+            margin-bottom: 10px;
+        }
+        
+        .logo-section p {
+            color: #888;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #ccc;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        input[type="text"]:focus,
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #4a9eff;
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.1);
+        }
+        
+        .submit-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #4a9eff 0%, #3d8ce7 100%);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+        
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(74, 158, 255, 0.3);
+        }
+        
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+        
+        .error-message {
+            background: rgba(255, 59, 48, 0.1);
+            border: 1px solid rgba(255, 59, 48, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 20px;
+            color: #ff3b30;
+            font-size: 14px;
+        }
+        
+        .forgot-password {
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .forgot-password a {
+            color: #4a9eff;
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.3s ease;
+        }
+        
+        .forgot-password a:hover {
+            color: #6bb0ff;
+        }
+        
+        @media (max-width: 480px) {
+            .login-container {
+                margin: 20px;
+                padding: 30px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo-section">
+            <h1>Noctis DICOM Viewer</h1>
+            <p>Medical Imaging Platform</p>
+        </div>
+        
+        {% if messages %}
+            {% for message in messages %}
+                <div class="error-message">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+        
+        {% if form.errors %}
+            <div class="error-message">
+                Invalid username or password. Please try again.
+            </div>
+        {% endif %}
+        
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="id_username">Username</label>
+                {{ form.username }}
+            </div>
+            
+            <div class="form-group">
+                <label for="id_password">Password</label>
+                {{ form.password }}
+            </div>
+            
+            <button type="submit" class="submit-btn">Sign In</button>
+        </form>
+        
+        <div class="forgot-password">
+            <a href="#">Forgot password?</a>
+        </div>
+    </div>
+</body>
+</html>
