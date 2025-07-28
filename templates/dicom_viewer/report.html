@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radiology Report</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/dicom_viewer.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .report-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
+        }
+        
+        .report-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #4CAF50;
+        }
+        
+        .hospital-logo {
+            max-width: 200px;
+            max-height: 80px;
+            margin-bottom: 10px;
+        }
+        
+        .hospital-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2E7D32;
+            margin-bottom: 5px;
+        }
+        
+        .hospital-info {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .report-title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+            margin: 20px 0;
+        }
+        
+        .patient-info-section {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .patient-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .info-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .info-value {
+            color: #666;
+        }
+        
+        .report-form {
+            margin-top: 30px;
+        }
+        
+        .form-section {
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .report-actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        }
+        
+        .btn-primary {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary:hover {
+            background: #45a049;
+        }
+        
+        .btn-secondary {
+            background: #757575;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-secondary:hover {
+            background: #616161;
+        }
+        
+        .btn-print {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-print:hover {
+            background: #1976D2;
+        }
+        
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            display: inline-block;
+        }
+        
+        .status-draft {
+            background: #FFF3E0;
+            color: #F57C00;
+        }
+        
+        .status-preliminary {
+            background: #E3F2FD;
+            color: #1976D2;
+        }
+        
+        .status-final {
+            background: #E8F5E8;
+            color: #2E7D32;
+        }
+        
+        .report-preview {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .preview-content {
+            background: white;
+            padding: 30px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        @media print {
+            .report-actions,
+            .form-section {
+                display: none;
+            }
+            
+            .report-preview {
+                display: block;
+            }
+            
+            .preview-content {
+                box-shadow: none;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .report-actions {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <div class="report-header">
+            {% if study.facility and study.facility.letterhead_logo %}
+                <img src="{{ study.facility.letterhead_logo.url }}" alt="Hospital Logo" class="hospital-logo">
+            {% endif %}
+            <div class="hospital-name">
+                {% if study.facility %}
+                    {{ study.facility.name }}
+                {% else %}
+                    Medical Center
+                {% endif %}
+            </div>
+            <div class="hospital-info">
+                {% if study.facility %}
+                    {{ study.facility.address }}<br>
+                    Phone: {{ study.facility.phone }} | Email: {{ study.facility.email }}
+                {% endif %}
+            </div>
+            <div class="report-title">Radiology Report</div>
+        </div>
+        
+        {% if study %}
+        <div class="patient-info-section">
+            <div class="patient-info-grid">
+                <div class="info-item">
+                    <div class="info-label">Patient Name:</div>
+                    <div class="info-value">{{ study.patient_name }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Patient ID:</div>
+                    <div class="info-value">{{ study.patient_id }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Study Date:</div>
+                    <div class="info-value">{{ study.study_date|date:"F d, Y" }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Modality:</div>
+                    <div class="info-value">{{ study.modality }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Study Description:</div>
+                    <div class="info-value">{{ study.study_description|default:"Not specified" }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Referring Physician:</div>
+                    <div class="info-value" id="referring-physician-display">
+                        {% if study.clinical_info %}
+                            {{ study.clinical_info.referring_physician|default:"Not specified" }}
+                        {% else %}
+                            Not specified
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <form id="report-form" class="report-form">
+            <div class="form-section">
+                <div class="section-title">Report Details</div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="report-title">Report Title:</label>
+                        <input type="text" id="report-title" name="title" value="Radiology Report" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="report-status">Status:</label>
+                        <select id="report-status" name="status">
+                            <option value="draft">Draft</option>
+                            <option value="preliminary">Preliminary</option>
+                            <option value="final">Final</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-section">
+                <div class="section-title">Findings</div>
+                <div class="form-group">
+                    <label for="findings">Detailed Findings:</label>
+                    <textarea id="findings" name="findings" rows="8" placeholder="Describe the findings in detail..."></textarea>
+                </div>
+            </div>
+            
+            <div class="form-section">
+                <div class="section-title">Impression</div>
+                <div class="form-group">
+                    <label for="impression">Radiological Impression:</label>
+                    <textarea id="impression" name="impression" rows="6" placeholder="Provide the radiological impression..."></textarea>
+                </div>
+            </div>
+            
+            <div class="form-section">
+                <div class="section-title">Recommendations</div>
+                <div class="form-group">
+                    <label for="recommendations">Recommendations:</label>
+                    <textarea id="recommendations" name="recommendations" rows="4" placeholder="Provide recommendations for follow-up..."></textarea>
+                </div>
+            </div>
+            
+            <div class="report-actions">
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-save"></i>
+                    Save Report
+                </button>
+                <button type="button" class="btn-print" onclick="printReport()">
+                    <i class="fas fa-print"></i>
+                    Print Report
+                </button>
+                <a href="{% url 'dicom_viewer:worklist' %}" class="btn-secondary">
+                    <i class="fas fa-arrow-left"></i>
+                    Back to Worklist
+                </a>
+                <a href="{% url 'dicom_viewer:viewer' %}?study_id={{ study.id }}" class="btn-secondary">
+                    <i class="fas fa-eye"></i>
+                    View Images
+                </a>
+            </div>
+        </form>
+        
+        <div id="report-preview" class="report-preview">
+            <div class="preview-content" id="preview-content">
+                <!-- Report preview will be generated here -->
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentReport = null;
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            loadExistingReport();
+            setupFormHandlers();
+        });
+        
+        function loadExistingReport() {
+            {% if study %}
+            fetch(`/viewer/api/studies/{{ study.id }}/report/`)
+                .then(response => response.json())
+                .then(data => {
+                    currentReport = data;
+                    document.getElementById('report-title').value = data.title || 'Radiology Report';
+                    document.getElementById('report-status').value = data.status || 'draft';
+                    document.getElementById('findings').value = data.findings || '';
+                    document.getElementById('impression').value = data.impression || '';
+                    document.getElementById('recommendations').value = data.recommendations || '';
+                })
+                .catch(error => {
+                    console.error('Error loading report:', error);
+                });
+            {% endif %}
+        }
+        
+        function setupFormHandlers() {
+            document.getElementById('report-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                saveReport();
+            });
+            
+            // Auto-save on input changes
+            const formInputs = document.querySelectorAll('#report-form input, #report-form textarea, #report-form select');
+            formInputs.forEach(input => {
+                input.addEventListener('input', function() {
+                    // Debounce auto-save
+                    clearTimeout(window.autoSaveTimeout);
+                    window.autoSaveTimeout = setTimeout(() => {
+                        saveReport(true); // Silent save
+                    }, 2000);
+                });
+            });
+        }
+        
+        function saveReport(silent = false) {
+            {% if study %}
+            const formData = {
+                title: document.getElementById('report-title').value,
+                status: document.getElementById('report-status').value,
+                findings: document.getElementById('findings').value,
+                impression: document.getElementById('impression').value,
+                recommendations: document.getElementById('recommendations').value,
+            };
+            
+            fetch(`/viewer/api/studies/{{ study.id }}/report/save/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken(),
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    currentReport = formData;
+                    if (!silent) {
+                        alert('Report saved successfully!');
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error saving report:', error);
+                if (!silent) {
+                    alert('Error saving report.');
+                }
+            });
+            {% endif %}
+        }
+        
+        function printReport() {
+            // Generate preview content
+            const previewContent = generateReportPreview();
+            document.getElementById('preview-content').innerHTML = previewContent;
+            
+            // Show preview and print
+            document.getElementById('report-preview').style.display = 'block';
+            
+            setTimeout(() => {
+                window.print();
+                document.getElementById('report-preview').style.display = 'none';
+            }, 100);
+        }
+        
+        function generateReportPreview() {
+            const title = document.getElementById('report-title').value;
+            const status = document.getElementById('report-status').value;
+            const findings = document.getElementById('findings').value;
+            const impression = document.getElementById('impression').value;
+            const recommendations = document.getElementById('recommendations').value;
+            
+            return `
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <h1 style="color: #2E7D32; margin-bottom: 10px;">${title}</h1>
+                    <span class="status-badge status-${status}">${status.charAt(0).toUpperCase() + status.slice(1)}</span>
+                </div>
+                
+                <div style="margin-bottom: 30px;">
+                    <h3 style="color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px;">Patient Information</h3>
+                    <p><strong>Name:</strong> {{ study.patient_name }}</p>
+                    <p><strong>ID:</strong> {{ study.patient_id }}</p>
+                    <p><strong>Study Date:</strong> {{ study.study_date|date:"F d, Y" }}</p>
+                    <p><strong>Modality:</strong> {{ study.modality }}</p>
+                </div>
+                
+                <div style="margin-bottom: 30px;">
+                    <h3 style="color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px;">Findings</h3>
+                    <p style="white-space: pre-wrap;">${findings || 'No findings documented.'}</p>
+                </div>
+                
+                <div style="margin-bottom: 30px;">
+                    <h3 style="color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px;">Impression</h3>
+                    <p style="white-space: pre-wrap;">${impression || 'No impression documented.'}</p>
+                </div>
+                
+                ${recommendations ? `
+                <div style="margin-bottom: 30px;">
+                    <h3 style="color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px;">Recommendations</h3>
+                    <p style="white-space: pre-wrap;">${recommendations}</p>
+                </div>
+                ` : ''}
+                
+                <div style="margin-top: 50px; padding-top: 20px; border-top: 1px solid #ddd;">
+                    <p><strong>Report Date:</strong> ${new Date().toLocaleDateString()}</p>
+                    <p><strong>Radiologist:</strong> {{ user.get_full_name|default:user.username }}</p>
+                </div>
+            `;
+        }
+        
+        function getCSRFToken() {
+            return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                   document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] || '';
+        }
+    </script>
+</body>
+</html>

@@ -11,6 +11,20 @@ import io
 import base64
 
 
+class Facility(models.Model):
+    """Model to represent healthcare facilities"""
+    name = models.CharField(max_length=200)
+    code = models.CharField(max_length=50, unique=True)
+    address = models.TextField(blank=True)
+    phone = models.CharField(max_length=50, blank=True)
+    email = models.EmailField(blank=True)
+    letterhead_logo = models.ImageField(upload_to='facility_logos/', blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return self.name
+
+
 class DicomStudy(models.Model):
     """Model to represent a DICOM study"""
     study_instance_uid = models.CharField(max_length=100, unique=True)
@@ -21,8 +35,10 @@ class DicomStudy(models.Model):
     study_description = models.TextField(blank=True)
     modality = models.CharField(max_length=10)
     institution_name = models.CharField(max_length=200, blank=True)
+    facility = models.ForeignKey(Facility, on_delete=models.CASCADE, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    is_processed = models.BooleanField(default=False)
     
     class Meta:
         ordering = ['-created_at']
@@ -37,6 +53,67 @@ class DicomStudy(models.Model):
     @property
     def total_images(self):
         return DicomImage.objects.filter(series__study=self).count()
+
+
+class ClinicalInformation(models.Model):
+    """Model to store clinical information for studies"""
+    study = models.OneToOneField(DicomStudy, on_delete=models.CASCADE, related_name='clinical_info')
+    chief_complaint = models.TextField(blank=True)
+    clinical_history = models.TextField(blank=True)
+    physical_examination = models.TextField(blank=True)
+    clinical_diagnosis = models.TextField(blank=True)
+    referring_physician = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    
+    def __str__(self):
+        return f"Clinical Info - {self.study.patient_name}"
+
+
+class Report(models.Model):
+    """Model to store radiology reports"""
+    REPORT_STATUS = [
+        ('draft', 'Draft'),
+        ('final', 'Final'),
+        ('preliminary', 'Preliminary'),
+    ]
+    
+    study = models.OneToOneField(DicomStudy, on_delete=models.CASCADE, related_name='report')
+    title = models.CharField(max_length=200, default='Radiology Report')
+    findings = models.TextField()
+    impression = models.TextField()
+    recommendations = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=REPORT_STATUS, default='draft')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    
+    def __str__(self):
+        return f"Report - {self.study.patient_name}"
+
+
+class Notification(models.Model):
+    """Model to store notifications for radiologists and admins"""
+    NOTIFICATION_TYPES = [
+        ('new_upload', 'New Upload'),
+        ('report_ready', 'Report Ready'),
+        ('urgent_case', 'Urgent Case'),
+    ]
+    
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    study = models.ForeignKey(DicomStudy, on_delete=models.CASCADE, null=True, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.notification_type} - {self.recipient.username}"
 
 
 class DicomSeries(models.Model):
@@ -102,34 +179,35 @@ class DicomImage(models.Model):
     def get_pixel_array(self):
         """Get pixel array from DICOM file"""
         dicom_data = self.load_dicom_data()
-        if dicom_data and hasattr(dicom_data, 'pixel_array'):
+        if dicom_data:
             return dicom_data.pixel_array
         return None
     
     def apply_windowing(self, pixel_array, window_width=None, window_level=None, inverted=False):
-        """Apply window/level to pixel array"""
+        """Apply window/level transformation to pixel array"""
         if pixel_array is None:
             return None
         
-        # Use provided values or defaults from DICOM
-        ww = window_width if window_width is not None else (self.window_width or 400)
-        wl = window_level if window_level is not None else (self.window_center or 40)
+        # Use stored values if not provided
+        if window_width is None:
+            window_width = self.window_width or 400
+        if window_level is None:
+            window_level = self.window_center or 40
         
-        # Convert to float for calculations
-        image_data = pixel_array.astype(np.float32)
+        # Normalize to 0-255 range
+        min_val = window_level - window_width / 2
+        max_val = window_level + window_width / 2
         
-        # Apply window/level
-        min_val = wl - ww / 2
-        max_val = wl + ww / 2
+        # Clip values
+        pixel_array = np.clip(pixel_array, min_val, max_val)
         
-        # Clip and normalize
-        image_data = np.clip(image_data, min_val, max_val)
-        image_data = (image_data - min_val) / (max_val - min_val) * 255
+        # Normalize to 0-255
+        pixel_array = ((pixel_array - min_val) / (max_val - min_val) * 255).astype(np.uint8)
         
         if inverted:
-            image_data = 255 - image_data
+            pixel_array = 255 - pixel_array
         
-        return image_data.astype(np.uint8)
+        return pixel_array
     
     def get_processed_image_base64(self, window_width=None, window_level=None, inverted=False):
         """Get processed image as base64 string"""
@@ -137,38 +215,42 @@ class DicomImage(models.Model):
         if pixel_array is None:
             return None
         
+        # Apply windowing
         processed_array = self.apply_windowing(pixel_array, window_width, window_level, inverted)
         
         # Convert to PIL Image
-        pil_image = Image.fromarray(processed_array, mode='L')
+        image = Image.fromarray(processed_array)
         
         # Convert to base64
         buffer = io.BytesIO()
-        pil_image.save(buffer, format='PNG')
-        image_base64 = base64.b64encode(buffer.getvalue()).decode()
+        image.save(buffer, format='PNG')
+        img_str = base64.b64encode(buffer.getvalue()).decode()
         
-        return f"data:image/png;base64,{image_base64}"
+        return f"data:image/png;base64,{img_str}"
     
     def save_dicom_metadata(self):
-        """Extract and save metadata from DICOM file"""
+        """Extract and save DICOM metadata"""
         dicom_data = self.load_dicom_data()
-        if not dicom_data:
-            return
-        
-        # Update image properties
-        self.rows = getattr(dicom_data, 'Rows', 0)
-        self.columns = getattr(dicom_data, 'Columns', 0)
-        
-        pixel_spacing = getattr(dicom_data, 'PixelSpacing', None)
-        if pixel_spacing and len(pixel_spacing) >= 2:
-            self.pixel_spacing_x = float(pixel_spacing[0])
-            self.pixel_spacing_y = float(pixel_spacing[1])
-        
-        self.slice_thickness = getattr(dicom_data, 'SliceThickness', None)
-        self.window_width = getattr(dicom_data, 'WindowWidth', None)
-        self.window_center = getattr(dicom_data, 'WindowCenter', None)
-        
-        self.save()
+        if dicom_data:
+            self.rows = dicom_data.Rows
+            self.columns = dicom_data.Columns
+            
+            # Pixel spacing
+            if hasattr(dicom_data, 'PixelSpacing'):
+                self.pixel_spacing_x = float(dicom_data.PixelSpacing[0])
+                self.pixel_spacing_y = float(dicom_data.PixelSpacing[1])
+            
+            # Slice thickness
+            if hasattr(dicom_data, 'SliceThickness'):
+                self.slice_thickness = float(dicom_data.SliceThickness)
+            
+            # Window settings
+            if hasattr(dicom_data, 'WindowWidth'):
+                self.window_width = float(dicom_data.WindowWidth)
+            if hasattr(dicom_data, 'WindowCenter'):
+                self.window_center = float(dicom_data.WindowCenter)
+            
+            self.save()
 
 
 class Measurement(models.Model):
@@ -185,6 +267,7 @@ class Measurement(models.Model):
     coordinates = models.JSONField()  # Store coordinates as JSON
     value = models.FloatField()  # Measurement value (distance, angle, area)
     unit = models.CharField(max_length=10, default='px')  # px, mm, cm
+    hounsfield_units = models.FloatField(null=True, blank=True)  # For HU measurements
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
@@ -193,7 +276,7 @@ class Measurement(models.Model):
         ordering = ['-created_at']
     
     def __str__(self):
-        return f"{self.measurement_type}: {self.value} {self.unit}"
+        return f"{self.measurement_type} - {self.value}{self.unit}"
 
 
 class Annotation(models.Model):
@@ -202,6 +285,9 @@ class Annotation(models.Model):
     x_coordinate = models.FloatField()
     y_coordinate = models.FloatField()
     text = models.TextField()
+    font_size = models.IntegerField(default=14)
+    color = models.CharField(max_length=7, default='#FF0000')  # Hex color
+    is_draggable = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     
@@ -209,4 +295,4 @@ class Annotation(models.Model):
         ordering = ['-created_at']
     
     def __str__(self):
-        return f"Annotation: {self.text[:50]}"
+        return f"Annotation at ({self.x_coordinate}, {self.y_coordinate})"

@@ -72,6 +72,10 @@
                     <select id="backend-studies" class="form-select">
                         <option value="">Select DICOM from System</option>
                     </select>
+                    <a href="{% url 'dicom_viewer:worklist' %}" class="secondary-btn">
+                        <i class="fas fa-list"></i>
+                        Worklist
+                    </a>
                     <div class="patient-info" id="patient-info">
                         Patient: - | Study Date: - | Modality: -
                     </div>
@@ -98,6 +102,48 @@
                 <div id="crosshair" class="crosshair" style="display: none;">
                     <div class="crosshair-h"></div>
                     <div class="crosshair-v"></div>
+                </div>
+                
+                <!-- AI Analysis Chat Window -->
+                <div id="ai-chat-window" class="ai-chat-window" style="display: none;">
+                    <div class="ai-chat-header">
+                        <h3>AI Analysis</h3>
+                        <button class="ai-chat-close">&times;</button>
+                    </div>
+                    <div class="ai-chat-content" id="ai-chat-content">
+                        <div class="ai-message">
+                            <strong>AI Assistant:</strong> Select an AI analysis type to begin analysis.
+                        </div>
+                    </div>
+                    <div class="ai-chat-input">
+                        <select id="ai-analysis-type" class="form-select">
+                            <option value="">Select AI Analysis Type</option>
+                        </select>
+                        <button id="run-ai-analysis" class="btn-primary">Run Analysis</button>
+                    </div>
+                </div>
+                
+                <!-- 3D Reconstruction Panel -->
+                <div id="3d-panel" class="3d-panel" style="display: none;">
+                    <div class="3d-panel-header">
+                        <h3>3D Reconstruction</h3>
+                        <button class="3d-panel-close">&times;</button>
+                    </div>
+                    <div class="3d-panel-content">
+                        <div class="3d-options">
+                            <label for="3d-reconstruction-type">Reconstruction Type:</label>
+                            <select id="3d-reconstruction-type" class="form-select">
+                                <option value="">Select Reconstruction Type</option>
+                            </select>
+                        </div>
+                        <div class="3d-controls">
+                            <button id="run-3d-reconstruction" class="btn-primary">Generate 3D</button>
+                            <button id="export-3d" class="btn-secondary">Export</button>
+                        </div>
+                        <div id="3d-status" class="3d-status">
+                            <!-- 3D generation status will appear here -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -196,6 +242,26 @@
                     <div id="measurements-list" class="measurements-list"></div>
                 </div>
 
+                <!-- Annotations Section -->
+                <div class="panel-section">
+                    <h3 class="section-title">Annotations</h3>
+                    <div class="annotation-controls">
+                        <div class="control-group">
+                            <label for="annotation-text">Text:</label>
+                            <input type="text" id="annotation-text" placeholder="Enter annotation text">
+                        </div>
+                        <div class="control-group">
+                            <label for="annotation-color">Color:</label>
+                            <input type="color" id="annotation-color" value="#FF0000">
+                        </div>
+                        <div class="control-group">
+                            <label for="annotation-size">Size:</label>
+                            <input type="range" id="annotation-size" min="10" max="30" value="14">
+                        </div>
+                    </div>
+                    <div id="annotations-list" class="annotations-list"></div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -218,6 +284,37 @@
                         <div class="progress-fill" id="progress-fill"></div>
                     </div>
                     <p id="progress-text">Uploading...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Annotation Modal -->
+    <div id="annotation-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add Annotation</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="modal-annotation-text">Annotation Text:</label>
+                    <textarea id="modal-annotation-text" rows="3" placeholder="Enter annotation text"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="modal-annotation-color">Color:</label>
+                        <input type="color" id="modal-annotation-color" value="#FF0000">
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-annotation-size">Font Size:</label>
+                        <input type="range" id="modal-annotation-size" min="10" max="30" value="14">
+                        <span id="modal-size-value">14px</span>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button id="save-annotation" class="btn-primary">Save Annotation</button>
+                    <button class="btn-secondary" onclick="closeAnnotationModal()">Cancel</button>
                 </div>
             </div>
         </div>
