@@ -159,21 +159,33 @@ def upload_dicom_files(request):
         
         for file in files:
             try:
-                # Validate file is a DICOM file
-                if not file.name.lower().endswith(('.dcm', '.dicom')):
+                # More permissive DICOM file validation
+                file_ext = file.name.lower()
+                if not (file_ext.endswith(('.dcm', '.dicom')) or 
+                       file_ext.endswith(('.dcm.gz', '.dicom.gz')) or
+                       file_ext.endswith(('.dcm.bz2', '.dicom.bz2')) or
+                       '.' not in file.name):  # Allow files without extension
                     continue
                 
                 # Save file to proper DICOM directory
                 file_path = default_storage.save(f'dicom_files/{file.name}', ContentFile(file.read()))
                 
-                # Read DICOM data
+                # Read DICOM data with better error handling
                 try:
                     dicom_data = pydicom.dcmread(default_storage.path(file_path))
                 except Exception as e:
                     print(f"Error reading DICOM file {file.name}: {e}")
-                    # Clean up the saved file
-                    default_storage.delete(file_path)
-                    continue
+                    # Try to read as bytes if file path fails
+                    try:
+                        file.seek(0)  # Reset file pointer
+                        dicom_data = pydicom.dcmread(file)
+                        # Save the file again after successful read
+                        file_path = default_storage.save(f'dicom_files/{file.name}', ContentFile(file.read()))
+                    except Exception as e2:
+                        print(f"Failed to read DICOM file {file.name} as bytes: {e2}")
+                        # Clean up the saved file
+                        default_storage.delete(file_path)
+                        continue
                 
                 # Create/update study with facility association
                 study_uid = str(dicom_data.get('StudyInstanceUID', ''))
@@ -315,20 +327,32 @@ def upload_dicom_folder(request):
         
         for file in files:
             try:
-                # Validate file is a DICOM file
-                if not file.name.lower().endswith(('.dcm', '.dicom')):
+                # More permissive DICOM file validation
+                file_ext = file.name.lower()
+                if not (file_ext.endswith(('.dcm', '.dicom')) or 
+                       file_ext.endswith(('.dcm.gz', '.dicom.gz')) or
+                       file_ext.endswith(('.dcm.bz2', '.dicom.bz2')) or
+                       '.' not in file.name):  # Allow files without extension
                     continue
                 
                 # Save file to proper DICOM directory
                 file_path = default_storage.save(f'dicom_files/{file.name}', ContentFile(file.read()))
                 
-                # Read DICOM data
+                # Read DICOM data with better error handling
                 try:
                     dicom_data = pydicom.dcmread(default_storage.path(file_path))
                 except Exception as e:
                     print(f"Error reading DICOM file {file.name}: {e}")
-                    default_storage.delete(file_path)
-                    continue
+                    # Try to read as bytes if file path fails
+                    try:
+                        file.seek(0)  # Reset file pointer
+                        dicom_data = pydicom.dcmread(file)
+                        # Save the file again after successful read
+                        file_path = default_storage.save(f'dicom_files/{file.name}', ContentFile(file.read()))
+                    except Exception as e2:
+                        print(f"Failed to read DICOM file {file.name} as bytes: {e2}")
+                        default_storage.delete(file_path)
+                        continue
                 
                 # Get study UID
                 study_uid = str(dicom_data.get('StudyInstanceUID', ''))
@@ -920,25 +944,388 @@ def perform_ai_analysis(request, image_id):
 
 @api_view(['GET'])
 def get_3d_reconstruction(request, series_id):
-    """Get 3D reconstruction data (placeholder implementation)"""
+    """Enhanced 3D reconstruction with MPR, bone, angiogram, and virtual surgery"""
     try:
-        series = DicomSeries.objects.get(id=series_id)
+        series = get_object_or_404(DicomSeries, id=series_id)
+        images = series.dicomimage_set.all().order_by('image_number')
+        
+        if not images.exists():
+            return Response({'error': 'No images found in series'}, status=404)
+        
         reconstruction_type = request.GET.get('type', 'mpr')
         
-        # This is a placeholder - would implement actual 3D reconstruction
-        mock_data = {
-            'type': reconstruction_type,
-            'data_url': '/static/images/3d_placeholder.png',
-            'message': f'{reconstruction_type.upper()} reconstruction generated'
+        # Get reconstruction parameters
+        window_center = request.GET.get('window_center', 40)
+        window_width = request.GET.get('window_width', 400)
+        threshold_min = request.GET.get('threshold_min', -1000)
+        threshold_max = request.GET.get('threshold_max', 1000)
+        
+        # Prepare 3D data based on reconstruction type
+        if reconstruction_type == 'mpr':
+            # Multi-Planar Reconstruction
+            data = {
+                'type': 'mpr',
+                'series_id': series_id,
+                'modality': series.modality,
+                'images_count': images.count(),
+                'axial_data': [],
+                'sagittal_data': [],
+                'coronal_data': [],
+                'window_center': int(window_center),
+                'window_width': int(window_width)
+            }
+            
+            # Prepare axial slices (original orientation)
+            for image in images:
+                try:
+                    with open(default_storage.path(image.file_path), 'rb') as f:
+                        dicom_data = pydicom.dcmread(f)
+                        pixel_data = dicom_data.pixel_array
+                        
+                        # Apply window/level
+                        pixel_data = apply_window_level(pixel_data, int(window_center), int(window_width))
+                        
+                        data['axial_data'].append({
+                            'image_id': image.id,
+                            'slice_number': image.image_number,
+                            'pixel_data': pixel_data.tolist(),
+                            'rows': image.rows,
+                            'columns': image.columns,
+                            'pixel_spacing': image.pixel_spacing,
+                            'slice_thickness': image.slice_thickness
+                        })
+                except Exception as e:
+                    print(f"Error processing image {image.id}: {e}")
+                    continue
+            
+            # Calculate sagittal and coronal reconstructions
+            if data['axial_data']:
+                data['sagittal_data'] = calculate_sagittal_reconstruction(data['axial_data'])
+                data['coronal_data'] = calculate_coronal_reconstruction(data['axial_data'])
+                
+        elif reconstruction_type == '3d_bone':
+            # 3D Bone Reconstruction
+            data = {
+                'type': '3d_bone',
+                'series_id': series_id,
+                'modality': series.modality,
+                'images_count': images.count(),
+                'volume_data': [],
+                'threshold_min': int(threshold_min),
+                'threshold_max': int(threshold_max),
+                'bone_threshold': 150  # Typical bone threshold
+            }
+            
+            for image in images:
+                try:
+                    with open(default_storage.path(image.file_path), 'rb') as f:
+                        dicom_data = pydicom.dcmread(f)
+                        pixel_data = dicom_data.pixel_array
+                        
+                        # Apply bone threshold
+                        bone_mask = (pixel_data >= data['bone_threshold'])
+                        bone_data = pixel_data * bone_mask
+                        
+                        data['volume_data'].append({
+                            'image_id': image.id,
+                            'slice_number': image.image_number,
+                            'pixel_data': bone_data.tolist(),
+                            'mask_data': bone_mask.tolist(),
+                            'rows': image.rows,
+                            'columns': image.columns,
+                            'pixel_spacing': image.pixel_spacing,
+                            'slice_thickness': image.slice_thickness
+                        })
+                except Exception as e:
+                    print(f"Error processing image {image.id}: {e}")
+                    continue
+                    
+        elif reconstruction_type == 'angiogram':
+            # Angiogram Reconstruction
+            data = {
+                'type': 'angiogram',
+                'series_id': series_id,
+                'modality': series.modality,
+                'images_count': images.count(),
+                'vessel_data': [],
+                'mip_data': [],
+                'threshold_min': int(threshold_min),
+                'threshold_max': int(threshold_max),
+                'vessel_threshold': 100  # Typical vessel threshold
+            }
+            
+            for image in images:
+                try:
+                    with open(default_storage.path(image.file_path), 'rb') as f:
+                        dicom_data = pydicom.dcmread(f)
+                        pixel_data = dicom_data.pixel_array
+                        
+                        # Apply vessel threshold
+                        vessel_mask = (pixel_data >= data['vessel_threshold'])
+                        vessel_data = pixel_data * vessel_mask
+                        
+                        data['vessel_data'].append({
+                            'image_id': image.id,
+                            'slice_number': image.image_number,
+                            'pixel_data': vessel_data.tolist(),
+                            'mask_data': vessel_mask.tolist(),
+                            'rows': image.rows,
+                            'columns': image.columns,
+                            'pixel_spacing': image.pixel_spacing,
+                            'slice_thickness': image.slice_thickness
+                        })
+                except Exception as e:
+                    print(f"Error processing image {image.id}: {e}")
+                    continue
+            
+            # Calculate Maximum Intensity Projection (MIP)
+            if data['vessel_data']:
+                data['mip_data'] = calculate_mip_reconstruction(data['vessel_data'])
+                
+        elif reconstruction_type == 'virtual_surgery':
+            # Virtual Surgery Planning
+            data = {
+                'type': 'virtual_surgery',
+                'series_id': series_id,
+                'modality': series.modality,
+                'images_count': images.count(),
+                'segmentation_data': [],
+                'cutting_planes': [],
+                'surgical_tools': [],
+                'window_center': int(window_center),
+                'window_width': int(window_width)
+            }
+            
+            for image in images:
+                try:
+                    with open(default_storage.path(image.file_path), 'rb') as f:
+                        dicom_data = pydicom.dcmread(f)
+                        pixel_data = dicom_data.pixel_array
+                        
+                        # Apply window/level for surgical planning
+                        pixel_data = apply_window_level(pixel_data, int(window_center), int(window_width))
+                        
+                        # Basic tissue segmentation (bone, soft tissue, air)
+                        segmentation = segment_tissues(pixel_data)
+                        
+                        data['segmentation_data'].append({
+                            'image_id': image.id,
+                            'slice_number': image.image_number,
+                            'pixel_data': pixel_data.tolist(),
+                            'segmentation': segmentation,
+                            'rows': image.rows,
+                            'columns': image.columns,
+                            'pixel_spacing': image.pixel_spacing,
+                            'slice_thickness': image.slice_thickness
+                        })
+                except Exception as e:
+                    print(f"Error processing image {image.id}: {e}")
+                    continue
+        else:
+            return Response({'error': 'Invalid reconstruction type'}, status=400)
+        
+        return Response(data)
+        
+    except Exception as e:
+        print(f"Error in 3D reconstruction: {e}")
+        return Response({'error': f'3D reconstruction failed: {str(e)}'}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def calculate_volume(request):
+    """Calculate volume from contour data"""
+    try:
+        data = json.loads(request.body)
+        contour_points = data.get('contour_points', [])
+        pixel_spacing = data.get('pixel_spacing', [1.0, 1.0])
+        slice_thickness = data.get('slice_thickness', 1.0)
+        
+        if len(contour_points) < 3:
+            return JsonResponse({'error': 'At least 3 points required for volume calculation'}, status=400)
+        
+        # Calculate area using shoelace formula
+        area = 0
+        n = len(contour_points)
+        for i in range(n):
+            j = (i + 1) % n
+            area += contour_points[i][0] * contour_points[j][1]
+            area -= contour_points[j][0] * contour_points[i][1]
+        area = abs(area) / 2.0
+        
+        # Convert to mm²
+        pixel_area = pixel_spacing[0] * pixel_spacing[1]
+        area_mm2 = area * pixel_area
+        
+        # Calculate volume (assuming uniform slice thickness)
+        volume_mm3 = area_mm2 * slice_thickness
+        volume_ml = volume_mm3 / 1000.0  # Convert to ml
+        
+        return JsonResponse({
+            'volume_mm3': round(volume_mm3, 2),
+            'volume_ml': round(volume_ml, 2),
+            'area_mm2': round(area_mm2, 2)
+        })
+        
+    except Exception as e:
+        print(f"Error calculating volume: {e}")
+        return JsonResponse({'error': f'Volume calculation failed: {str(e)}'}, status=500)
+
+
+def apply_window_level(pixel_data, window_center, window_width):
+    """Apply window/level transformation to pixel data"""
+    try:
+        pixel_data = np.array(pixel_data, dtype=np.float32)
+        window_min = window_center - window_width / 2
+        window_max = window_center + window_width / 2
+        
+        # Clip values to window range
+        pixel_data = np.clip(pixel_data, window_min, window_max)
+        
+        # Normalize to 0-255
+        pixel_data = ((pixel_data - window_min) / (window_max - window_min)) * 255
+        pixel_data = np.clip(pixel_data, 0, 255)
+        
+        return pixel_data.astype(np.uint8)
+    except Exception as e:
+        print(f"Error applying window/level: {e}")
+        return pixel_data
+
+
+def calculate_sagittal_reconstruction(axial_data):
+    """Calculate sagittal reconstruction from axial slices"""
+    try:
+        if not axial_data:
+            return []
+        
+        # Get dimensions
+        rows = axial_data[0]['rows']
+        cols = axial_data[0]['columns']
+        slices = len(axial_data)
+        
+        # Create sagittal slices (along Y-Z plane)
+        sagittal_data = []
+        for x in range(cols):
+            sagittal_slice = []
+            for z in range(slices):
+                if z < len(axial_data) and x < len(axial_data[z]['pixel_data'][0]):
+                    row_data = []
+                    for y in range(rows):
+                        if y < len(axial_data[z]['pixel_data']):
+                            row_data.append(axial_data[z]['pixel_data'][y][x])
+                        else:
+                            row_data.append(0)
+                    sagittal_slice.append(row_data)
+                else:
+                    sagittal_slice.append([0] * rows)
+            
+            sagittal_data.append({
+                'slice_number': x,
+                'pixel_data': sagittal_slice,
+                'rows': slices,
+                'columns': rows
+            })
+        
+        return sagittal_data
+    except Exception as e:
+        print(f"Error calculating sagittal reconstruction: {e}")
+        return []
+
+
+def calculate_coronal_reconstruction(axial_data):
+    """Calculate coronal reconstruction from axial slices"""
+    try:
+        if not axial_data:
+            return []
+        
+        # Get dimensions
+        rows = axial_data[0]['rows']
+        cols = axial_data[0]['columns']
+        slices = len(axial_data)
+        
+        # Create coronal slices (along X-Z plane)
+        coronal_data = []
+        for y in range(rows):
+            coronal_slice = []
+            for z in range(slices):
+                if z < len(axial_data) and y < len(axial_data[z]['pixel_data']):
+                    coronal_slice.append(axial_data[z]['pixel_data'][y])
+                else:
+                    coronal_slice.append([0] * cols)
+            
+            coronal_data.append({
+                'slice_number': y,
+                'pixel_data': coronal_slice,
+                'rows': slices,
+                'columns': cols
+            })
+        
+        return coronal_data
+    except Exception as e:
+        print(f"Error calculating coronal reconstruction: {e}")
+        return []
+
+
+def calculate_mip_reconstruction(vessel_data):
+    """Calculate Maximum Intensity Projection for angiogram"""
+    try:
+        if not vessel_data:
+            return []
+        
+        # Get dimensions
+        rows = vessel_data[0]['rows']
+        cols = vessel_data[0]['columns']
+        slices = len(vessel_data)
+        
+        # Calculate MIP along Z-axis
+        mip_data = []
+        for y in range(rows):
+            row_data = []
+            for x in range(cols):
+                max_intensity = 0
+                for z in range(slices):
+                    if (z < len(vessel_data) and 
+                        y < len(vessel_data[z]['pixel_data']) and 
+                        x < len(vessel_data[z]['pixel_data'][0])):
+                        intensity = vessel_data[z]['pixel_data'][y][x]
+                        max_intensity = max(max_intensity, intensity)
+                row_data.append(max_intensity)
+            mip_data.append(row_data)
+        
+        return {
+            'pixel_data': mip_data,
+            'rows': rows,
+            'columns': cols
+        }
+    except Exception as e:
+        print(f"Error calculating MIP reconstruction: {e}")
+        return []
+
+
+def segment_tissues(pixel_data):
+    """Basic tissue segmentation for virtual surgery"""
+    try:
+        pixel_data = np.array(pixel_data)
+        
+        # Simple threshold-based segmentation
+        air_mask = (pixel_data < -500)
+        fat_mask = (pixel_data >= -500) & (pixel_data < -50)
+        soft_tissue_mask = (pixel_data >= -50) & (pixel_data < 150)
+        bone_mask = (pixel_data >= 150)
+        
+        segmentation = {
+            'air': air_mask.tolist(),
+            'fat': fat_mask.tolist(),
+            'soft_tissue': soft_tissue_mask.tolist(),
+            'bone': bone_mask.tolist()
         }
         
-        return Response(mock_data)
-        
-    except DicomSeries.DoesNotExist:
-        return Response({'error': 'Series not found'}, status=404)
+        return segmentation
+    except Exception as e:
+        print(f"Error in tissue segmentation: {e}")
+        return {}
 
 
-# Utility functions
 def parse_dicom_date(date_str):
     """Parse DICOM date string to Python date"""
     if date_str:

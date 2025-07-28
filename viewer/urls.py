@@ -32,6 +32,9 @@ urlpatterns = [
     path('api/images/<int:image_id>/clear-measurements/', views.clear_measurements, name='clear_measurements'),
     path('api/measurements/hu/', views.measure_hu, name='measure_hu'),
     
+    # Volume calculation
+    path('api/volume/calculate/', views.calculate_volume, name='calculate_volume'),
+    
     # AI Analysis
     path('api/images/<int:image_id>/ai-analysis/', views.perform_ai_analysis, name='ai_analysis'),
     

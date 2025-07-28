@@ -97,6 +97,14 @@ class DicomViewer {
             });
         });
         
+        // Worklist button
+        const worklistBtn = document.getElementById('worklist-btn');
+        if (worklistBtn) {
+            worklistBtn.addEventListener('click', () => {
+                window.location.href = '/worklist/';
+            });
+        }
+        
         // Sliders
         document.getElementById('ww-slider').addEventListener('input', (e) => {
             this.windowWidth = parseInt(e.target.value);
@@ -879,16 +887,7 @@ class DicomViewer {
     
     // Event Handlers
     handleToolClick(tool) {
-        // Reset current measurement/annotation states
-        this.currentMeasurement = null;
-        this.currentEllipse = null;
-        this.selectedAnnotation = null;
-        this.isEditingAnnotation = false;
-        this.volumeTool = false;
-        this.volumeContour = [];
-        this.currentContour = null;
-        
-        // Remove active class from all buttons
+        // Remove active class from all tool buttons
         document.querySelectorAll('.tool-btn').forEach(btn => {
             btn.classList.remove('active');
         });
@@ -899,23 +898,31 @@ class DicomViewer {
             clickedBtn.classList.add('active');
         }
         
-        switch(tool) {
+        this.activeTool = tool;
+        
+        // Handle specific tool actions
+        switch (tool) {
             case 'windowing':
-            case 'zoom':
-            case 'pan':
-            case 'measure':
-            case 'ellipse':
-            case 'annotate':
-                this.activeTool = tool;
+                this.canvas.style.cursor = 'default';
                 break;
-            case 'volume':
-                this.activeTool = tool;
-                this.volumeTool = true;
-                alert('Volume measurement: Click to create a closed contour around the region to measure volume.');
+            case 'zoom':
+                this.canvas.style.cursor = 'zoom-in';
+                break;
+            case 'pan':
+                this.canvas.style.cursor = 'grab';
+                break;
+            case 'measure':
+                this.canvas.style.cursor = 'crosshair';
+                break;
+            case 'ellipse':
+                this.canvas.style.cursor = 'crosshair';
+                break;
+            case 'annotate':
+                this.canvas.style.cursor = 'text';
                 break;
             case 'crosshair':
                 this.crosshair = !this.crosshair;
-                this.updateDisplay();
+                this.redraw();
                 break;
             case 'invert':
                 this.inverted = !this.inverted;
@@ -924,32 +931,15 @@ class DicomViewer {
             case 'reset':
                 this.resetView();
                 break;
+            case 'volume':
+                this.canvas.style.cursor = 'crosshair';
+                this.startVolumeCalculation();
+                break;
             case 'ai':
                 this.performAIAnalysis();
                 break;
             case '3d':
                 this.toggle3DOptions();
-                break;
-        }
-        
-        // Change cursor based on tool
-        switch(tool) {
-            case 'windowing':
-                this.canvas.style.cursor = 'default';
-                break;
-            case 'pan':
-                this.canvas.style.cursor = 'move';
-                break;
-            case 'zoom':
-                this.canvas.style.cursor = 'zoom-in';
-                break;
-            case 'measure':
-            case 'ellipse':
-            case 'volume':
-                this.canvas.style.cursor = 'crosshair';
-                break;
-            case 'annotate':
-                this.canvas.style.cursor = 'text';
                 break;
         }
     }
@@ -986,173 +976,113 @@ class DicomViewer {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         
-        this.isDragging = true;
-        this.dragStart = { x, y };
-        
-        if (this.activeTool === 'measure') {
+        if (this.activeTool === 'windowing') {
+            this.isDragging = true;
+            this.dragStart = { x, y };
+        } else if (this.activeTool === 'pan') {
+            this.isDragging = true;
+            this.dragStart = { x, y };
+        } else if (this.activeTool === 'measure') {
             const imageCoords = this.canvasToImageCoords(x, y);
             this.currentMeasurement = {
                 start: imageCoords,
-                end: imageCoords
+                end: imageCoords,
+                type: 'distance'
             };
         } else if (this.activeTool === 'ellipse') {
             const imageCoords = this.canvasToImageCoords(x, y);
             this.currentEllipse = {
-                start: imageCoords,
-                end: imageCoords
+                center: imageCoords,
+                radius: 0,
+                type: 'ellipse'
             };
         } else if (this.activeTool === 'volume') {
             const imageCoords = this.canvasToImageCoords(x, y);
-            
-            // Add point to volume contour
             this.volumeContour.push(imageCoords);
-            
-            // Check if we should close the contour (double-click or close to start)
-            if (this.volumeContour.length > 2) {
-                const firstPoint = this.volumeContour[0];
-                const distance = Math.sqrt(
-                    Math.pow(imageCoords.x - firstPoint.x, 2) + 
-                    Math.pow(imageCoords.y - firstPoint.y, 2)
-                );
-                
-                if (distance < 10) { // Close contour if clicking near start
-                    this.calculateVolume();
-                    return;
-                }
-            }
-            
-            this.updateDisplay();
-        } else if (this.activeTool === 'annotate') {
-            // Check if clicking on existing annotation
-            const clickedAnnotation = this.getAnnotationAt(x, y);
-            if (clickedAnnotation !== null) {
-                this.selectedAnnotation = clickedAnnotation;
-                this.isEditingAnnotation = true;
-            } else {
-                // Create new annotation
-                const text = prompt('Enter annotation text:');
-                if (text) {
-                    const imageCoords = this.canvasToImageCoords(x, y);
-                    const fontSize = parseInt(prompt('Font size (default: 14):', '14')) || 14;
-                    const color = prompt('Color (hex, default: #FFFF00):', '#FFFF00') || '#FFFF00';
-                    this.addAnnotation(imageCoords.x, imageCoords.y, text, fontSize, color);
-                }
-            }
+            this.redraw();
         }
     }
     
     onMouseMove(e) {
-        if (!this.isDragging || !this.dragStart) return;
-        
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         
-        const dx = x - this.dragStart.x;
-        const dy = y - this.dragStart.y;
-        
-        if (this.activeTool === 'annotate' && this.isEditingAnnotation && this.selectedAnnotation !== null) {
-            // Drag annotation
-            const annotation = this.annotations[this.selectedAnnotation];
-            if (annotation) {
-                const imageCoords = this.canvasToImageCoords(x, y);
-                annotation.x = imageCoords.x;
-                annotation.y = imageCoords.y;
-                this.updateDisplay();
-            }
-        } else if (this.activeTool === 'pan') {
-            this.panX += dx;
-            this.panY += dy;
+        if (this.activeTool === 'windowing' && this.isDragging) {
+            const deltaX = x - this.dragStart.x;
+            const deltaY = y - this.dragStart.y;
+            
+            // Adjust window width and level based on mouse movement
+            this.windowWidth += deltaX * 2;
+            this.windowLevel += deltaY * 2;
+            
+            // Clamp values
+            this.windowWidth = Math.max(1, Math.min(4000, this.windowWidth));
+            this.windowLevel = Math.max(-1000, Math.min(1000, this.windowLevel));
+            
             this.dragStart = { x, y };
+            this.updateSliders();
             this.updateDisplay();
-        } else if (this.activeTool === 'zoom') {
-            const zoomDelta = 1 + dy * 0.01;
-            this.zoomFactor = Math.max(0.1, Math.min(5.0, this.zoomFactor * zoomDelta));
+        } else if (this.activeTool === 'pan' && this.isDragging) {
+            const deltaX = x - this.dragStart.x;
+            const deltaY = y - this.dragStart.y;
             
-            const zoomPercent = Math.round(this.zoomFactor * 100);
-            document.getElementById('zoom-slider').value = zoomPercent;
-            document.getElementById('zoom-value').textContent = zoomPercent + '%';
-            
-            this.dragStart = { x, y };
-            this.updateDisplay();
-        } else if (this.activeTool === 'windowing') {
-            this.windowWidth = Math.max(1, this.windowWidth + dx * 2);
-            this.windowLevel = Math.max(-1000, Math.min(1000, this.windowLevel + dy * 2));
-            
-            document.getElementById('ww-slider').value = Math.round(this.windowWidth);
-            document.getElementById('wl-slider').value = Math.round(this.windowLevel);
-            document.getElementById('ww-value').textContent = Math.round(this.windowWidth);
-            document.getElementById('wl-value').textContent = Math.round(this.windowLevel);
+            this.panX += deltaX;
+            this.panY += deltaY;
             
             this.dragStart = { x, y };
-            this.loadCurrentImage();
+            this.redraw();
         } else if (this.activeTool === 'measure' && this.currentMeasurement) {
             const imageCoords = this.canvasToImageCoords(x, y);
             this.currentMeasurement.end = imageCoords;
-            this.updateDisplay();
+            this.redraw();
         } else if (this.activeTool === 'ellipse' && this.currentEllipse) {
             const imageCoords = this.canvasToImageCoords(x, y);
-            this.currentEllipse.end = imageCoords;
-            this.updateDisplay();
+            const dx = imageCoords.x - this.currentEllipse.center.x;
+            const dy = imageCoords.y - this.currentEllipse.center.y;
+            this.currentEllipse.radius = Math.sqrt(dx * dx + dy * dy);
+            this.redraw();
+        }
+        
+        // Update crosshair position
+        if (this.crosshair) {
+            const crosshair = document.getElementById('crosshair');
+            if (crosshair) {
+                crosshair.style.left = x + 'px';
+                crosshair.style.top = y + 'px';
+                crosshair.style.display = 'block';
+            }
         }
     }
     
     onMouseUp(e) {
-        if (this.activeTool === 'measure' && this.currentMeasurement) {
-            const start = this.currentMeasurement.start;
-            const end = this.currentMeasurement.end;
-            
+        if (this.activeTool === 'windowing' || this.activeTool === 'pan') {
+            this.isDragging = false;
+            this.dragStart = null;
+        } else if (this.activeTool === 'measure' && this.currentMeasurement) {
             // Calculate distance
-            const dx = end.x - start.x;
-            const dy = end.y - start.y;
-            const pixelDistance = Math.sqrt(dx * dx + dy * dy);
+            const dx = this.currentMeasurement.end.x - this.currentMeasurement.start.x;
+            const dy = this.currentMeasurement.end.y - this.currentMeasurement.start.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
             
-            // Convert to selected unit
-            let value = pixelDistance;
-            let unit = this.measurementUnit;
-            
-            if (this.currentImage && (unit === 'mm' || unit === 'cm')) {
-                const pixelSpacingX = this.currentImage.pixel_spacing_x || 1.0;
-                const pixelSpacingY = this.currentImage.pixel_spacing_y || 1.0;
-                
-                const realDx = dx * pixelSpacingX;
-                const realDy = dy * pixelSpacingY;
-                const distanceMm = Math.sqrt(realDx * realDx + realDy * realDy);
-                
-                value = unit === 'cm' ? distanceMm / 10.0 : distanceMm;
+            // Convert to mm if pixel spacing is available
+            let distanceMm = distance;
+            if (this.currentImage && this.currentImage.pixel_spacing) {
+                const spacing = this.parsePixelSpacing(this.currentImage.pixel_spacing);
+                distanceMm = distance * spacing[0]; // Use first spacing value
             }
             
-            // Save measurement
-            this.saveMeasurement({
-                type: 'line',
-                coordinates: [
-                    { x: start.x, y: start.y },
-                    { x: end.x, y: end.y }
-                ],
-                value: value,
-                unit: unit
-            });
-            
+            this.currentMeasurement.distance = distanceMm;
+            this.measurements.push(this.currentMeasurement);
+            this.updateMeasurementsList();
             this.currentMeasurement = null;
+            this.redraw();
         } else if (this.activeTool === 'ellipse' && this.currentEllipse) {
-            const start = this.currentEllipse.start;
-            const end = this.currentEllipse.end;
-            
-            // Save ellipse measurement for HU calculation
-            this.saveEllipseMeasurement({
-                x0: start.x,
-                y0: start.y,
-                x1: end.x,
-                y1: end.y
-            });
-            
+            this.measurements.push(this.currentEllipse);
+            this.updateMeasurementsList();
             this.currentEllipse = null;
+            this.redraw();
         }
-        
-        this.isDragging = false;
-        this.dragStart = null;
-        this.isEditingAnnotation = false;
-        this.selectedAnnotation = null;
     }
     
     onWheel(e) {
@@ -1183,12 +1113,8 @@ class DicomViewer {
     }
     
     onDoubleClick(e) {
-        if (this.activeTool === 'annotate') {
-            const text = prompt('Enter annotation text:');
-            if (text) {
-                const imageCoords = this.canvasToImageCoords(e.clientX, e.clientY);
-                this.addAnnotation(imageCoords.x, imageCoords.y, text);
-            }
+        if (this.activeTool === 'volume' && this.volumeContour.length >= 3) {
+            this.calculateVolumeFromContour();
         }
     }
     
@@ -1453,58 +1379,121 @@ class DicomViewer {
         }
     }
     
+    startVolumeCalculation() {
+        this.volumeTool = true;
+        this.volumeContour = [];
+        this.currentContour = null;
+        alert('Volume measurement: Click to create a closed contour around the region to measure volume. Double-click to complete the contour.');
+    }
+    
+    async calculateVolumeFromContour() {
+        if (this.volumeContour.length < 3) {
+            alert('At least 3 points are required for volume calculation');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/viewer/api/volume/calculate/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                },
+                body: JSON.stringify({
+                    contour_points: this.volumeContour,
+                    pixel_spacing: this.currentImage ? this.parsePixelSpacing(this.currentImage.pixel_spacing) : [1.0, 1.0],
+                    slice_thickness: this.currentImage ? this.currentImage.slice_thickness : 1.0
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                alert(`Volume Calculation Results:\nArea: ${result.area_mm2} mm²\nVolume: ${result.volume_mm3} mm³ (${result.volume_ml} ml)`);
+                
+                // Save volume measurement
+                this.saveVolumeMeasurement(result);
+            } else {
+                const error = await response.json();
+                alert('Volume calculation failed: ' + error.error);
+            }
+        } catch (error) {
+            console.error('Volume calculation error:', error);
+            alert('Volume calculation failed: ' + error.message);
+        }
+    }
+    
+    parsePixelSpacing(pixelSpacingStr) {
+        if (!pixelSpacingStr) return [1.0, 1.0];
+        try {
+            const spacing = pixelSpacingStr.split(',');
+            return [parseFloat(spacing[0]), parseFloat(spacing[1])];
+        } catch (e) {
+            return [1.0, 1.0];
+        }
+    }
+    
+    saveVolumeMeasurement(volumeData) {
+        const measurement = {
+            type: 'volume',
+            volume_mm3: volumeData.volume_mm3,
+            volume_ml: volumeData.volume_ml,
+            area_mm2: volumeData.area_mm2,
+            contour_points: this.volumeContour,
+            timestamp: new Date().toISOString()
+        };
+        
+        this.measurements.push(measurement);
+        this.updateMeasurementsList();
+    }
+    
+    drawVolumeContour() {
+        if (this.volumeContour.length === 0) return;
+        
+        this.ctx.strokeStyle = '#00FF00';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        
+        for (let i = 0; i < this.volumeContour.length; i++) {
+            const point = this.volumeContour[i];
+            const canvasPoint = this.imageToCanvasCoords(point.x, point.y);
+            
+            if (i === 0) {
+                this.ctx.moveTo(canvasPoint.x, canvasPoint.y);
+            } else {
+                this.ctx.lineTo(canvasPoint.x, canvasPoint.y);
+            }
+        }
+        
+        // Close the contour
+        if (this.volumeContour.length > 0) {
+            const firstPoint = this.volumeContour[0];
+            const canvasPoint = this.imageToCanvasCoords(firstPoint.x, firstPoint.y);
+            this.ctx.lineTo(canvasPoint.x, canvasPoint.y);
+        }
+        
+        this.ctx.stroke();
+        
+        // Draw points
+        this.ctx.fillStyle = '#00FF00';
+        this.ctx.strokeStyle = '#FFFFFF';
+        this.ctx.lineWidth = 1;
+        
+        for (const point of this.volumeContour) {
+            const canvasPoint = this.imageToCanvasCoords(point.x, point.y);
+            this.ctx.beginPath();
+            this.ctx.arc(canvasPoint.x, canvasPoint.y, 3, 0, 2 * Math.PI);
+            this.ctx.fill();
+            this.ctx.stroke();
+        }
+    }
+
     calculateVolume() {
         if (this.volumeContour.length < 3) {
             alert('Need at least 3 points to calculate volume');
             return;
         }
         
-        // Calculate area using shoelace formula
-        let area = 0;
-        const n = this.volumeContour.length;
-        
-        for (let i = 0; i < n; i++) {
-            const j = (i + 1) % n;
-            area += this.volumeContour[i].x * this.volumeContour[j].y;
-            area -= this.volumeContour[j].x * this.volumeContour[i].y;
-        }
-        area = Math.abs(area) / 2;
-        
-        // Convert to real-world units
-        let volume = area;
-        let unit = 'px²';
-        
-        if (this.currentImage) {
-            const pixelSpacingX = this.currentImage.pixel_spacing_x || 1.0;
-            const pixelSpacingY = this.currentImage.pixel_spacing_y || 1.0;
-            const sliceThickness = this.currentImage.slice_thickness || 1.0;
-            
-            if (pixelSpacingX && pixelSpacingY) {
-                const realArea = area * pixelSpacingX * pixelSpacingY; // mm²
-                volume = realArea * sliceThickness; // mm³
-                
-                unit = this.measurementUnit === 'cm' ? 'cm³' : 'mm³';
-                if (unit === 'cm³') {
-                    volume = volume / 1000; // Convert mm³ to cm³
-                }
-            }
-        }
-        
-        // Save volume measurement
-        this.saveMeasurement({
-            type: 'volume',
-            coordinates: this.volumeContour.slice(), // Copy array
-            value: volume,
-            unit: unit,
-            area: area
-        });
-        
-        // Reset volume contour
-        this.volumeContour = [];
-        this.updateDisplay();
-        
-        // Show result
-        alert(`Volume calculated: ${volume.toFixed(2)} ${unit}`);
+        this.calculateVolumeFromContour();
     }
     
     // Utility functions
@@ -1533,9 +1522,13 @@ class DicomViewer {
     }
     
     redraw() {
-        if (this.currentImage) {
-            this.updateDisplay();
-        }
+        this.updateDisplay();
+        this.drawMeasurements();
+        this.drawAnnotations();
+        this.drawAIHighlights();
+        this.drawVolumeContour();
+        this.drawCrosshair();
+        this.updateOverlayLabels();
     }
 
     performAIAnalysis() {
@@ -1616,122 +1609,366 @@ class DicomViewer {
     }
     
     toggle3DOptions() {
-        const options3D = document.getElementById('3d-options');
-        this.is3DEnabled = !this.is3DEnabled;
-        options3D.style.display = this.is3DEnabled ? 'block' : 'none';
+        this.create3DModal();
     }
     
     apply3DReconstruction() {
-        if (!this.currentSeries) {
-            alert('Please load a series first');
+        const reconstructionType = document.getElementById('3d-reconstruction-type').value;
+        const seriesId = this.currentSeries ? this.currentSeries.id : null;
+        
+        if (!seriesId) {
+            alert('Please select a series first');
             return;
         }
         
-        const modal = this.create3DModal();
-        document.body.appendChild(modal);
+        const modal = document.getElementById('3d-modal');
+        const progressDiv = modal.querySelector('.3d-progress');
+        const progressText = modal.querySelector('.3d-progress-text');
         
-        fetch(`/api/series/${this.currentSeries.id}/3d-reconstruction/?type=${this.reconstructionType}`)
+        progressDiv.style.display = 'block';
+        progressText.textContent = 'Generating 3D reconstruction...';
+        
+        // Get reconstruction parameters
+        const windowCenter = document.getElementById('3d-window-center').value;
+        const windowWidth = document.getElementById('3d-window-width').value;
+        const thresholdMin = document.getElementById('3d-threshold-min').value;
+        const thresholdMax = document.getElementById('3d-threshold-max').value;
+        
+        const url = `/viewer/api/series/${seriesId}/3d-reconstruction/?type=${reconstructionType}&window_center=${windowCenter}&window_width=${windowWidth}&threshold_min=${thresholdMin}&threshold_max=${thresholdMax}`;
+        
+        fetch(url)
             .then(response => response.json())
             .then(data => {
-                this.display3DReconstruction(data, modal);
+                progressText.textContent = '3D reconstruction complete!';
+                setTimeout(() => {
+                    this.display3DReconstruction(data, modal);
+                }, 1000);
             })
             .catch(error => {
-                modal.querySelector('.modal-content').innerHTML = '<div class="error">Error loading 3D reconstruction</div>';
+                progressText.textContent = '3D reconstruction failed: ' + error.message;
                 console.error('3D reconstruction error:', error);
             });
     }
     
     create3DModal() {
+        // Remove existing modal if any
+        const existingModal = document.getElementById('3d-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
         const modal = document.createElement('div');
-        modal.className = 'modal-3d';
+        modal.id = '3d-modal';
+        modal.className = 'modal';
+        modal.style.display = 'block';
+        
         modal.innerHTML = `
-            <div class="modal-content">
+            <div class="modal-content large">
                 <div class="modal-header">
-                    <h2>3D Reconstruction - ${this.reconstructionType.replace('_', ' ').toUpperCase()}</h2>
-                    <button class="close-btn">&times;</button>
+                    <h3>3D Reconstruction</h3>
+                    <button class="modal-close" onclick="this.closest('.modal').remove()">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <div class="loading">Loading 3D reconstruction...</div>
+                    <div class="3d-controls">
+                        <div class="control-group">
+                            <label for="3d-reconstruction-type">Reconstruction Type:</label>
+                            <select id="3d-reconstruction-type" class="form-select">
+                                <option value="mpr">Multi-Planar Reconstruction (MPR)</option>
+                                <option value="3d_bone">3D Bone Reconstruction</option>
+                                <option value="angiogram">Angiogram (MIP)</option>
+                                <option value="virtual_surgery">Virtual Surgery Planning</option>
+                            </select>
+                        </div>
+                        
+                        <div class="control-group">
+                            <label for="3d-window-center">Window Center:</label>
+                            <input type="range" id="3d-window-center" min="-1000" max="1000" value="40" class="slider">
+                            <span id="3d-window-center-value">40</span>
+                        </div>
+                        
+                        <div class="control-group">
+                            <label for="3d-window-width">Window Width:</label>
+                            <input type="range" id="3d-window-width" min="1" max="4000" value="400" class="slider">
+                            <span id="3d-window-width-value">400</span>
+                        </div>
+                        
+                        <div class="control-group">
+                            <label for="3d-threshold-min">Threshold Min:</label>
+                            <input type="range" id="3d-threshold-min" min="-1000" max="1000" value="-1000" class="slider">
+                            <span id="3d-threshold-min-value">-1000</span>
+                        </div>
+                        
+                        <div class="control-group">
+                            <label for="3d-threshold-max">Threshold Max:</label>
+                            <input type="range" id="3d-threshold-max" min="-1000" max="1000" value="1000" class="slider">
+                            <span id="3d-threshold-max-value">1000</span>
+                        </div>
+                        
+                        <div class="3d-description" id="3d-description">
+                            <p><strong>MPR (Multi-Planar Reconstruction):</strong> View images in axial, sagittal, and coronal planes simultaneously.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="3d-progress" id="3d-progress" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 100%;"></div>
+                        </div>
+                        <p class="3d-progress-text">Generating 3D reconstruction...</p>
+                    </div>
+                    
+                    <div class="3d-results" id="3d-results" style="display: none;">
+                        <div class="3d-viewports">
+                            <div class="viewport-container">
+                                <h4>Axial</h4>
+                                <canvas id="3d-axial-canvas" width="256" height="256"></canvas>
+                            </div>
+                            <div class="viewport-container">
+                                <h4>Sagittal</h4>
+                                <canvas id="3d-sagittal-canvas" width="256" height="256"></canvas>
+                            </div>
+                            <div class="viewport-container">
+                                <h4>Coronal</h4>
+                                <canvas id="3d-coronal-canvas" width="256" height="256"></canvas>
+                            </div>
+                        </div>
+                        <div class="3d-controls-panel">
+                            <button class="secondary-btn" onclick="dicomViewer.export3DResults()">Export Results</button>
+                            <button class="secondary-btn" onclick="dicomViewer.save3DReconstruction()">Save Reconstruction</button>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button class="primary-btn" onclick="dicomViewer.apply3DReconstruction()">Generate 3D Reconstruction</button>
+                        <button class="secondary-btn" onclick="this.closest('.modal').remove()">Cancel</button>
+                    </div>
                 </div>
             </div>
         `;
         
-        modal.querySelector('.close-btn').addEventListener('click', () => {
-            document.body.removeChild(modal);
+        document.body.appendChild(modal);
+        
+        // Add event listeners for sliders
+        const sliders = modal.querySelectorAll('input[type="range"]');
+        sliders.forEach(slider => {
+            const valueSpan = modal.querySelector(`#${slider.id}-value`);
+            slider.addEventListener('input', () => {
+                valueSpan.textContent = slider.value;
+                this.update3DDescription();
+            });
         });
         
-        return modal;
+        // Add event listener for reconstruction type change
+        const typeSelect = modal.querySelector('#3d-reconstruction-type');
+        typeSelect.addEventListener('change', () => {
+            this.update3DDescription();
+        });
+        
+        this.update3DDescription();
+    }
+    
+    update3DDescription() {
+        const modal = document.getElementById('3d-modal');
+        if (!modal) return;
+        
+        const type = modal.querySelector('#3d-reconstruction-type').value;
+        const description = modal.querySelector('#3d-description');
+        
+        const descriptions = {
+            'mpr': '<p><strong>MPR (Multi-Planar Reconstruction):</strong> View images in axial, sagittal, and coronal planes simultaneously. Useful for understanding spatial relationships and anatomy.</p>',
+            '3d_bone': '<p><strong>3D Bone Reconstruction:</strong> Create 3D surface rendering of bone structures. Useful for orthopedic planning and fracture assessment.</p>',
+            'angiogram': '<p><strong>Angiogram (MIP):</strong> Maximum Intensity Projection for vessel visualization. Highlights contrast-filled vessels and blood flow.</p>',
+            'virtual_surgery': '<p><strong>Virtual Surgery Planning:</strong> Tissue segmentation and surgical planning tools. Includes cutting planes and surgical tool simulation.</p>'
+        };
+        
+        description.innerHTML = descriptions[type] || descriptions['mpr'];
     }
     
     display3DReconstruction(data, modal) {
-        const body = modal.querySelector('.modal-body');
+        const resultsDiv = modal.querySelector('#3d-results');
+        const progressDiv = modal.querySelector('#3d-progress');
         
-        switch(data.type) {
-            case 'mpr':
-                body.innerHTML = `
-                    <div class="mpr-viewer">
-                        <h3>Multi-Planar Reconstruction</h3>
-                        <div class="mpr-planes">
-                            <div class="plane">
-                                <h4>Axial</h4>
-                                <div class="plane-info">Slices: ${data.planes.axial.slice_count}</div>
-                            </div>
-                            <div class="plane">
-                                <h4>Coronal</h4>
-                                <div class="plane-info">Slices: ${data.planes.coronal.slice_count}</div>
-                            </div>
-                            <div class="plane">
-                                <h4>Sagittal</h4>
-                                <div class="plane-info">Slices: ${data.planes.sagittal.slice_count}</div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                break;
-            case '3d_bone':
-                body.innerHTML = `
-                    <div class="bone-3d">
-                        <h3>3D Bone Reconstruction</h3>
-                        <div class="mesh-info">
-                            <p>Vertices: ${data.mesh_data.vertices}</p>
-                            <p>Faces: ${data.mesh_data.faces}</p>
-                            <p>Threshold: ${data.mesh_data.threshold} HU</p>
-                        </div>
-                        <div class="render-placeholder">
-                            [3D Bone Rendering Placeholder]
-                        </div>
-                    </div>
-                `;
-                break;
-            case 'angio':
-                body.innerHTML = `
-                    <div class="angio-3d">
-                        <h3>Angiography Reconstruction</h3>
-                        <div class="vessel-info">
-                            <p>Main vessels: ${data.vessel_tree.main_vessels}</p>
-                            <p>Branches: ${data.vessel_tree.branches}</p>
-                        </div>
-                        <div class="render-placeholder">
-                            [Angio 3D Rendering Placeholder]
-                        </div>
-                    </div>
-                `;
-                break;
-            case 'virtual_surgery':
-                body.innerHTML = `
-                    <div class="virtual-surgery">
-                        <h3>Virtual Surgery Planning</h3>
-                        <div class="tools-info">
-                            <p>Available tools: ${data.tools.join(', ')}</p>
-                            <p>Anatomical structures: ${data.anatomical_structures.join(', ')}</p>
-                        </div>
-                        <div class="surgery-placeholder">
-                            [Virtual Surgery Interface Placeholder]
-                        </div>
-                    </div>
-                `;
-                break;
+        progressDiv.style.display = 'none';
+        resultsDiv.style.display = 'block';
+        
+        if (data.type === 'mpr') {
+            this.displayMPRReconstruction(data, modal);
+        } else if (data.type === '3d_bone') {
+            this.display3DBoneReconstruction(data, modal);
+        } else if (data.type === 'angiogram') {
+            this.displayAngiogramReconstruction(data, modal);
+        } else if (data.type === 'virtual_surgery') {
+            this.displayVirtualSurgeryReconstruction(data, modal);
         }
+    }
+    
+    displayMPRReconstruction(data, modal) {
+        // Display axial, sagittal, and coronal views
+        if (data.axial_data && data.axial_data.length > 0) {
+            this.displaySlice(data.axial_data[0], '3d-axial-canvas', 'Axial');
+        }
+        
+        if (data.sagittal_data && data.sagittal_data.length > 0) {
+            this.displaySlice(data.sagittal_data[0], '3d-sagittal-canvas', 'Sagittal');
+        }
+        
+        if (data.coronal_data && data.coronal_data.length > 0) {
+            this.displaySlice(data.coronal_data[0], '3d-coronal-canvas', 'Coronal');
+        }
+    }
+    
+    display3DBoneReconstruction(data, modal) {
+        // Display 3D bone reconstruction
+        if (data.volume_data && data.volume_data.length > 0) {
+            this.displayVolumeSlice(data.volume_data[0], '3d-axial-canvas', '3D Bone');
+        }
+    }
+    
+    displayAngiogramReconstruction(data, modal) {
+        // Display angiogram with MIP
+        if (data.mip_data) {
+            this.displayMIPSlice(data.mip_data, '3d-axial-canvas', 'MIP Angiogram');
+        }
+    }
+    
+    displayVirtualSurgeryReconstruction(data, modal) {
+        // Display virtual surgery planning
+        if (data.segmentation_data && data.segmentation_data.length > 0) {
+            this.displaySegmentationSlice(data.segmentation_data[0], '3d-axial-canvas', 'Virtual Surgery');
+        }
+    }
+    
+    displaySlice(sliceData, canvasId, title) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.createImageData(canvas.width, canvas.height);
+        
+        // Convert pixel data to image
+        const pixelData = sliceData.pixel_data;
+        const rows = sliceData.rows;
+        const cols = sliceData.columns;
+        
+        for (let y = 0; y < rows && y < canvas.height; y++) {
+            for (let x = 0; x < cols && x < canvas.width; x++) {
+                const pixelIndex = (y * canvas.width + x) * 4;
+                const value = pixelData[y] ? pixelData[y][x] : 0;
+                
+                imageData.data[pixelIndex] = value;     // R
+                imageData.data[pixelIndex + 1] = value; // G
+                imageData.data[pixelIndex + 2] = value; // B
+                imageData.data[pixelIndex + 3] = 255;   // A
+            }
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+    }
+    
+    displayVolumeSlice(sliceData, canvasId, title) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.createImageData(canvas.width, canvas.height);
+        
+        // Display bone mask with different colors
+        const maskData = sliceData.mask_data;
+        const rows = sliceData.rows;
+        const cols = sliceData.columns;
+        
+        for (let y = 0; y < rows && y < canvas.height; y++) {
+            for (let x = 0; x < cols && x < canvas.width; x++) {
+                const pixelIndex = (y * canvas.width + x) * 4;
+                const isBone = maskData[y] ? maskData[y][x] : false;
+                
+                if (isBone) {
+                    imageData.data[pixelIndex] = 255;     // R (white for bone)
+                    imageData.data[pixelIndex + 1] = 255; // G
+                    imageData.data[pixelIndex + 2] = 255; // B
+                } else {
+                    imageData.data[pixelIndex] = 0;       // R (black for background)
+                    imageData.data[pixelIndex + 1] = 0;   // G
+                    imageData.data[pixelIndex + 2] = 0;   // B
+                }
+                imageData.data[pixelIndex + 3] = 255;     // A
+            }
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+    }
+    
+    displayMIPSlice(mipData, canvasId, title) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.createImageData(canvas.width, canvas.height);
+        
+        // Display MIP data
+        const pixelData = mipData.pixel_data;
+        const rows = mipData.rows;
+        const cols = mipData.columns;
+        
+        for (let y = 0; y < rows && y < canvas.height; y++) {
+            for (let x = 0; x < cols && x < canvas.width; x++) {
+                const pixelIndex = (y * canvas.width + x) * 4;
+                const value = pixelData[y] ? pixelData[y][x] : 0;
+                
+                // Use red color for vessels
+                imageData.data[pixelIndex] = value;     // R
+                imageData.data[pixelIndex + 1] = 0;     // G
+                imageData.data[pixelIndex + 2] = 0;     // B
+                imageData.data[pixelIndex + 3] = 255;   // A
+            }
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+    }
+    
+    displaySegmentationSlice(sliceData, canvasId, title) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.createImageData(canvas.width, canvas.height);
+        
+        // Display segmented tissues with different colors
+        const segmentation = sliceData.segmentation;
+        const rows = sliceData.rows;
+        const cols = sliceData.columns;
+        
+        for (let y = 0; y < rows && y < canvas.height; y++) {
+            for (let x = 0; x < cols && x < canvas.width; x++) {
+                const pixelIndex = (y * canvas.width + x) * 4;
+                
+                let r = 0, g = 0, b = 0;
+                
+                if (segmentation.air && segmentation.air[y] && segmentation.air[y][x]) {
+                    r = 0; g = 0; b = 0; // Black for air
+                } else if (segmentation.fat && segmentation.fat[y] && segmentation.fat[y][x]) {
+                    r = 255; g = 255; b = 0; // Yellow for fat
+                } else if (segmentation.soft_tissue && segmentation.soft_tissue[y] && segmentation.soft_tissue[y][x]) {
+                    r = 128; g = 128; b = 128; // Gray for soft tissue
+                } else if (segmentation.bone && segmentation.bone[y] && segmentation.bone[y][x]) {
+                    r = 255; g = 255; b = 255; // White for bone
+                }
+                
+                imageData.data[pixelIndex] = r;
+                imageData.data[pixelIndex + 1] = g;
+                imageData.data[pixelIndex + 2] = b;
+                imageData.data[pixelIndex + 3] = 255;
+            }
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+    }
+    
+    export3DResults() {
+        alert('3D results export functionality would be implemented here');
+    }
+    
+    save3DReconstruction() {
+        alert('3D reconstruction save functionality would be implemented here');
     }
 
     getAnnotationAt(canvasX, canvasY) {
