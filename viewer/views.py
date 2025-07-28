@@ -281,6 +281,78 @@ def clear_measurements(request, image_id):
     return JsonResponse({'success': True})
 
 
+@csrf_exempt
+@api_view(['POST'])
+def measure_hu(request):
+    """Calculate average Hounsfield Units inside an ellipse region"""
+    try:
+        data = json.loads(request.body)
+        image = get_object_or_404(DicomImage, id=data['image_id'])
+        x0 = float(data['x0'])
+        y0 = float(data['y0'])
+        x1 = float(data['x1'])
+        y1 = float(data['y1'])
+
+        dicom_data = image.load_dicom_data()
+        if dicom_data is None or not hasattr(dicom_data, 'pixel_array'):
+            return JsonResponse({'error': 'Unable to load DICOM pixel data'}, status=400)
+
+        pixel_array = dicom_data.pixel_array.astype(np.float32)
+
+        # Apply rescale slope/intercept for CT to convert to HU
+        rescale_slope = float(getattr(dicom_data, 'RescaleSlope', 1))
+        rescale_intercept = float(getattr(dicom_data, 'RescaleIntercept', 0))
+        pixel_array = pixel_array * rescale_slope + rescale_intercept
+
+        # Create mask for ellipse within bounding box
+        rows, cols = pixel_array.shape
+        x_min = int(max(min(x0, x1), 0))
+        x_max = int(min(max(x0, x1), cols - 1))
+        y_min = int(max(min(y0, y1), 0))
+        y_max = int(min(max(y0, y1), rows - 1))
+
+        if x_max <= x_min or y_max <= y_min:
+            return JsonResponse({'error': 'Invalid ellipse bounds'}, status=400)
+
+        # Ellipse parameters
+        xc = (x_min + x_max) / 2.0
+        yc = (y_min + y_max) / 2.0
+        a = (x_max - x_min) / 2.0  # semi-major axis
+        b = (y_max - y_min) / 2.0  # semi-minor axis
+
+        yy, xx = np.ogrid[y_min:y_max + 1, x_min:x_max + 1]
+        ellipse_mask = (((xx - xc) / a) ** 2 + ((yy - yc) / b) ** 2) <= 1.0
+
+        region_pixels = pixel_array[y_min:y_max + 1, x_min:x_max + 1][ellipse_mask]
+        if region_pixels.size == 0:
+            return JsonResponse({'error': 'No pixels inside region'}, status=400)
+
+        mean_hu = float(np.mean(region_pixels))
+        min_hu = float(np.min(region_pixels))
+        max_hu = float(np.max(region_pixels))
+
+        # Save measurement
+        measurement = Measurement.objects.create(
+            image=image,
+            measurement_type='ellipse',
+            coordinates={'x0': x0, 'y0': y0, 'x1': x1, 'y1': y1},
+            value=mean_hu,
+            unit='HU',
+            notes=f"Min: {min_hu:.1f}, Max: {max_hu:.1f}",
+            created_by=request.user if request.user.is_authenticated else None,
+        )
+
+        return JsonResponse({
+            'success': True,
+            'measurement_id': measurement.id,
+            'mean_hu': mean_hu,
+            'min_hu': min_hu,
+            'max_hu': max_hu,
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
 def parse_dicom_date(date_str):
     """Parse DICOM date string to Python date"""
     if not date_str:
