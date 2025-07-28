@@ -9,7 +9,9 @@ class DicomImageSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'sop_instance_uid', 'instance_number', 'rows', 'columns',
             'pixel_spacing_x', 'pixel_spacing_y', 'slice_thickness',
-            'window_width', 'window_center', 'created_at'
+            'window_width', 'window_center', 'bits_allocated', 'image_number',
+            'photometric_interpretation', 'pixel_spacing', 'samples_per_pixel',
+            'created_at'
         ]
 
 

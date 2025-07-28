@@ -64,6 +64,9 @@ class DicomImageAdmin(admin.ModelAdmin):
         ('Image Properties', {
             'fields': ('rows', 'columns', 'pixel_spacing_x', 'pixel_spacing_y', 'slice_thickness')
         }),
+        ('DICOM Properties', {
+            'fields': ('bits_allocated', 'image_number', 'photometric_interpretation', 'pixel_spacing', 'samples_per_pixel')
+        }),
         ('Display Properties', {
             'fields': ('window_width', 'window_center')
         }),
