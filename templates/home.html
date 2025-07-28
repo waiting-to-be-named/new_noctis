@@ -157,9 +157,40 @@
             font-size: 14px;
             color: #ccc;
         }
+        
+        .header-actions {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 15px;
+        }
+        
+        .logout-btn {
+            background: #ff4444;
+            color: #fff;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+        
+        .logout-btn:hover {
+            background: #cc0000;
+            transform: translateY(-2px);
+        }
     </style>
 </head>
 <body>
+    <div class="header-actions">
+        <a href="/logout/" class="logout-btn">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
+    </div>
+    
     <div class="container">
         <div class="logo">
             <i class="fas fa-x-ray"></i>
@@ -185,7 +216,7 @@
             </div>
         </div>
         
-        <a href="/" class="launch-btn" onclick="launchViewer(); return false;">
+        <a href="/viewer/" class="launch-btn" onclick="launchViewer(); return false;">
             <i class="fas fa-rocket"></i> Launch DICOM Viewer
         </a>
         
@@ -216,7 +247,7 @@
     <script>
         function launchViewer() {
             // Launch viewer in new window for better experience
-            window.open('/', 'DICOM_Viewer', 'width=' + screen.width + ',height=' + screen.height + ',fullscreen=yes');
+            window.open('/viewer/', 'DICOM_Viewer', 'width=' + screen.width + ',height=' + screen.height + ',fullscreen=yes');
         }
         
         // Add hover effects to cards

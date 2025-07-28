@@ -1,5 +1,5 @@
 # dicom_viewer/views.py
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -7,7 +7,9 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
+from django.contrib.auth import authenticate, login, logout
 from django.views.generic import TemplateView
+from django.contrib import messages
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -23,14 +25,48 @@ from .models import (
 from .serializers import DicomStudySerializer, DicomImageSerializer
 
 
+def login_view(request):
+    """Handle user login"""
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        user = authenticate(request, username=username, password=password)
+        
+        if user is not None:
+            login(request, user)
+            return redirect('viewer:home')
+        else:
+            return render(request, 'login.html', {
+                'error_message': 'Invalid username or password. Please try again.'
+            })
+    
+    return render(request, 'login.html')
+
+
+def logout_view(request):
+    """Handle user logout"""
+    logout(request)
+    return redirect('viewer:login')
+
+
 class HomeView(TemplateView):
     """Home page with launch buttons"""
     template_name = 'home.html'
+    
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('viewer:login')
+        return super().dispatch(request, *args, **kwargs)
 
 
 class DicomViewerView(TemplateView):
     """Main DICOM viewer page"""
     template_name = 'dicom_viewer/viewer.html'
+    
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('viewer:login')
+        return super().dispatch(request, *args, **kwargs)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
