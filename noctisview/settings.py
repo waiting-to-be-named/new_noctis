@@ -42,6 +42,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'noctisview.middleware.APIErrorMiddleware',
+    'noctisview.middleware.CSRFMiddleware',
 ]
 
 ROOT_URLCONF = 'noctisview.urls'

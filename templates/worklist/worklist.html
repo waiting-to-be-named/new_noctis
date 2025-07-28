@@ -565,14 +565,27 @@
             
             xhr.addEventListener('load', () => {
                 if (xhr.status === 200) {
-                    const response = JSON.parse(xhr.responseText);
-                    fileInfo.textContent = `Upload complete! ${response.uploaded_files ? response.uploaded_files.length : 0} files processed.`;
-                    setTimeout(() => {
-                        uploadProgress.style.display = 'none';
-                        location.reload(); // Reload to show new entries
-                    }, 2000);
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        fileInfo.textContent = `Upload complete! ${response.uploaded_files ? response.uploaded_files.length : 0} files processed.`;
+                        setTimeout(() => {
+                            uploadProgress.style.display = 'none';
+                            location.reload(); // Reload to show new entries
+                        }, 2000);
+                    } catch (parseError) {
+                        console.error('Failed to parse JSON response:', parseError);
+                        console.error('Response text:', xhr.responseText);
+                        fileInfo.textContent = 'Upload failed: Invalid server response. Please try again.';
+                    }
                 } else {
-                    fileInfo.textContent = 'Upload failed. Please try again.';
+                    try {
+                        const errorResponse = JSON.parse(xhr.responseText);
+                        fileInfo.textContent = `Upload failed: ${errorResponse.error || 'Unknown error'}`;
+                    } catch (parseError) {
+                        console.error('Failed to parse error response:', parseError);
+                        console.error('Response text:', xhr.responseText);
+                        fileInfo.textContent = `Upload failed: Server error (${xhr.status}). Please try again.`;
+                    }
                 }
             });
             
@@ -581,7 +594,7 @@
             });
             
             xhr.open('POST', '/api/upload/');
-            xhr.setRequestHeader('X-CSRFToken', getCookie('csrftoken'));
+            xhr.setRequestHeader('X-CSRFToken', getCSRFToken());
             xhr.send(formData);
         }
         
@@ -680,6 +693,15 @@
                 }
             }
             return cookieValue;
+        }
+        
+        function getCSRFToken() {
+            const token = getCookie('csrftoken');
+            if (!token) {
+                console.warn('CSRF token not found. Upload may fail.');
+                return '';
+            }
+            return token;
         }
         
         // Check for notifications

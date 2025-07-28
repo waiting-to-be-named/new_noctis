@@ -308,8 +308,14 @@ class DicomViewer {
                     }
                 }, 1000);
             } else {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Upload failed');
+                try {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Upload failed');
+                } catch (parseError) {
+                    console.error('Failed to parse error response:', parseError);
+                    console.error('Response text:', await response.text());
+                    throw new Error(`Server error (${response.status}). Please try again.`);
+                }
             }
         } catch (error) {
             progressText.textContent = 'Upload failed: ' + error.message;
@@ -384,8 +390,14 @@ class DicomViewer {
                     }
                 }, 1000);
             } else {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Upload failed');
+                try {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Upload failed');
+                } catch (parseError) {
+                    console.error('Failed to parse error response:', parseError);
+                    console.error('Response text:', await response.text());
+                    throw new Error(`Server error (${response.status}). Please try again.`);
+                }
             }
         } catch (error) {
             progressText.textContent = 'Upload failed: ' + error.message;
@@ -1504,7 +1516,12 @@ class DicomViewer {
     }
     
     getCSRFToken() {
-        return this.getCookie('csrftoken');
+        const token = this.getCookie('csrftoken');
+        if (!token) {
+            console.warn('CSRF token not found. Upload may fail.');
+            return '';
+        }
+        return token;
     }
     
     redraw() {
