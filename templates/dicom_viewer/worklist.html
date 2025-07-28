@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM Worklist - NoctisView</title>
+    {% load static %}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #2d2d2d;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            padding: 1.5rem 2rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 2rem;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .header h1 i {
+            color: #00d4ff;
+        }
+        
+        .nav-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-back {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
+        
+        .btn-back:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        
+        .filters {
+            background: #3a3a3a;
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .filter-group label {
+            font-size: 0.85rem;
+            color: #aaa;
+            font-weight: 600;
+        }
+        
+        .filter-group input,
+        .filter-group select {
+            padding: 0.5rem;
+            border: 1px solid #555;
+            background: #2d2d2d;
+            color: #e0e0e0;
+            border-radius: 5px;
+            font-size: 0.9rem;
+        }
+        
+        .worklist-table {
+            background: #3a3a3a;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        thead {
+            background: #444;
+        }
+        
+        th {
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #00d4ff;
+            border-bottom: 2px solid #555;
+        }
+        
+        tbody tr {
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border-bottom: 1px solid #444;
+        }
+        
+        tbody tr:hover {
+            background: #0d7a0d;
+            box-shadow: 0 2px 10px rgba(0, 255, 0, 0.2);
+        }
+        
+        tbody tr.selected {
+            background: #0f8f0f;
+            box-shadow: 0 4px 15px rgba(0, 255, 0, 0.3);
+        }
+        
+        td {
+            padding: 1rem;
+            font-size: 0.9rem;
+        }
+        
+        .patient-name {
+            font-weight: 600;
+            color: #fff;
+        }
+        
+        .modality-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            background: #2a5298;
+            color: #fff;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .btn-view {
+            background: #00d4ff;
+            color: #1e3c72;
+            padding: 0.4rem 1rem;
+            font-size: 0.85rem;
+        }
+        
+        .btn-view:hover {
+            background: #00b8e6;
+            transform: translateY(-2px);
+        }
+        
+        .btn-clinical {
+            background: #4caf50;
+            color: #fff;
+            padding: 0.4rem 1rem;
+            font-size: 0.85rem;
+        }
+        
+        .btn-clinical:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+        
+        .clinical-info-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: #3a3a3a;
+            padding: 2rem;
+            border-radius: 10px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .modal-header h2 {
+            color: #00d4ff;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        
+        .close-btn:hover {
+            color: #fff;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #00d4ff;
+            font-weight: 600;
+        }
+        
+        .form-group textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #555;
+            background: #2d2d2d;
+            color: #e0e0e0;
+            border-radius: 5px;
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        .submit-btn {
+            background: #4caf50;
+            color: #fff;
+            padding: 0.75rem 2rem;
+            font-size: 1rem;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        .submit-btn:hover {
+            background: #45a049;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        
+        .status-new {
+            background: #ff9800;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-viewed {
+            background: #4caf50;
+        }
+        
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(255, 152, 0, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(255, 152, 0, 0);
+            }
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #666;
+        }
+        
+        .empty-state i {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1>
+                <i class="fas fa-list-alt"></i>
+                DICOM Worklist
+            </h1>
+            <div class="nav-buttons">
+                <a href="{% url 'viewer:home' %}" class="btn btn-back">
+                    <i class="fas fa-arrow-left"></i>
+                    Back to Home
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="filters">
+            <div class="filter-group">
+                <label>Patient Name</label>
+                <input type="text" id="filter-name" placeholder="Search patient...">
+            </div>
+            <div class="filter-group">
+                <label>Date Range</label>
+                <input type="date" id="filter-date-from">
+            </div>
+            <div class="filter-group">
+                <label>&nbsp;</label>
+                <input type="date" id="filter-date-to">
+            </div>
+            <div class="filter-group">
+                <label>Modality</label>
+                <select id="filter-modality">
+                    <option value="">All Modalities</option>
+                    <option value="CT">CT</option>
+                    <option value="MR">MR</option>
+                    <option value="CR">CR</option>
+                    <option value="DX">DX</option>
+                    <option value="US">US</option>
+                </select>
+            </div>
+            {% if facilities %}
+            <div class="filter-group">
+                <label>Facility</label>
+                <select id="filter-facility">
+                    <option value="">All Facilities</option>
+                    {% for facility in facilities %}
+                    <option value="{{ facility.id }}">{{ facility.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="worklist-table">
+            {% if patients %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Patient Name</th>
+                        <th>Patient ID</th>
+                        <th>Study Date</th>
+                        <th>Modality</th>
+                        <th>Description</th>
+                        <th>Facility</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for patient in patients %}
+                    <tr class="patient-row" data-patient-id="{{ patient.id }}">
+                        <td>
+                            <span class="status-indicator {% if patient.is_viewed %}status-viewed{% else %}status-new{% endif %}"></span>
+                        </td>
+                        <td class="patient-name">{{ patient.patient_name }}</td>
+                        <td>{{ patient.patient_id }}</td>
+                        <td>{{ patient.study_date|date:"Y-m-d" }}</td>
+                        <td><span class="modality-badge">{{ patient.modality }}</span></td>
+                        <td>{{ patient.study_description|default:"-" }}</td>
+                        <td>{{ patient.facility.name }}</td>
+                        <td class="action-buttons">
+                            <button class="btn btn-view" onclick="launchViewer({{ patient.id }})">
+                                <i class="fas fa-eye"></i>
+                                View
+                            </button>
+                            <button class="btn btn-clinical" onclick="openClinicalInfo({{ patient.id }})">
+                                <i class="fas fa-notes-medical"></i>
+                                Clinical Info
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <i class="fas fa-inbox"></i>
+                <h3>No patients in worklist</h3>
+                <p>Patients will appear here when received from the DICOM SCP server</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Clinical Information Modal -->
+    <div id="clinical-modal" class="clinical-info-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add Clinical Information</h2>
+                <button class="close-btn" onclick="closeClinicalModal()">&times;</button>
+            </div>
+            <form id="clinical-form">
+                <input type="hidden" id="patient-id" value="">
+                <div class="form-group">
+                    <label>Chief Complaint</label>
+                    <textarea name="chief_complaint" placeholder="Enter chief complaint..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Clinical History</label>
+                    <textarea name="clinical_history" placeholder="Enter clinical history..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Indication</label>
+                    <textarea name="indication" placeholder="Enter indication for study..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Allergies</label>
+                    <textarea name="allergies" placeholder="Enter known allergies..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Current Medications</label>
+                    <textarea name="medications" placeholder="Enter current medications..."></textarea>
+                </div>
+                <button type="submit" class="submit-btn">Save Clinical Information</button>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        // Row selection
+        document.querySelectorAll('.patient-row').forEach(row => {
+            row.addEventListener('click', function(e) {
+                if (!e.target.closest('.action-buttons')) {
+                    document.querySelectorAll('.patient-row').forEach(r => r.classList.remove('selected'));
+                    this.classList.add('selected');
+                }
+            });
+        });
+        
+        // Launch viewer
+        async function launchViewer(patientId) {
+            try {
+                const response = await fetch(`/worklist/${patientId}/launch/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    window.location.href = data.redirect_url;
+                } else {
+                    alert('No studies found for this patient');
+                }
+            } catch (error) {
+                console.error('Error launching viewer:', error);
+                alert('Error launching viewer');
+            }
+        }
+        
+        // Clinical info modal
+        function openClinicalInfo(patientId) {
+            document.getElementById('patient-id').value = patientId;
+            document.getElementById('clinical-modal').style.display = 'flex';
+        }
+        
+        function closeClinicalModal() {
+            document.getElementById('clinical-modal').style.display = 'none';
+            document.getElementById('clinical-form').reset();
+        }
+        
+        // Clinical form submission
+        document.getElementById('clinical-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const patientId = document.getElementById('patient-id').value;
+            const formData = new FormData(e.target);
+            
+            // TODO: Save clinical information
+            alert('Clinical information saved successfully!');
+            closeClinicalModal();
+        });
+        
+        // Filtering
+        function applyFilters() {
+            const nameFilter = document.getElementById('filter-name').value.toLowerCase();
+            const modalityFilter = document.getElementById('filter-modality').value;
+            const facilityFilter = document.getElementById('filter-facility')?.value;
+            
+            document.querySelectorAll('.patient-row').forEach(row => {
+                const name = row.querySelector('.patient-name').textContent.toLowerCase();
+                const modality = row.querySelector('.modality-badge').textContent;
+                const facility = row.cells[6].textContent;
+                
+                let show = true;
+                
+                if (nameFilter && !name.includes(nameFilter)) show = false;
+                if (modalityFilter && modality !== modalityFilter) show = false;
+                if (facilityFilter && !facility.includes(facilityFilter)) show = false;
+                
+                row.style.display = show ? '' : 'none';
+            });
+        }
+        
+        document.getElementById('filter-name').addEventListener('input', applyFilters);
+        document.getElementById('filter-modality').addEventListener('change', applyFilters);
+        document.getElementById('filter-facility')?.addEventListener('change', applyFilters);
+        
+        // CSRF token helper
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+    </script>
+</body>
+</html>

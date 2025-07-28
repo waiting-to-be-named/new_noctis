@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ facility.name }} - NoctisView</title>
+    {% load static %}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 0;
+        }
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        .study-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .study-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+        .patient-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .status-final {
+            background: #27ae60;
+            color: white;
+        }
+        .status-pending {
+            background: #95a5a6;
+            color: white;
+        }
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            margin-right: 0.5rem;
+        }
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+        .btn-print {
+            background: #9b59b6;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>
+            <i class="fas fa-hospital"></i>
+            {{ facility.name }} - Patient Portal
+        </h1>
+    </div>
+    
+    <div class="container">
+        <h2>Patient Studies</h2>
+        
+        {% for study in studies %}
+        <div class="study-card">
+            <div class="study-header">
+                <div>
+                    <div class="patient-name">{{ study.patient_name }}</div>
+                    <div>Patient ID: {{ study.patient_id }}</div>
+                    <div>Study Date: {{ study.study_date|date:"Y-m-d" }}</div>
+                </div>
+                <div>
+                    {% if study.report and study.report.status == 'final' %}
+                        <span class="status-badge status-final">Report Available</span>
+                    {% else %}
+                        <span class="status-badge status-pending">Pending Report</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="study-details">
+                <p><strong>Modality:</strong> {{ study.modality }}</p>
+                <p><strong>Description:</strong> {{ study.study_description|default:"N/A" }}</p>
+            </div>
+            
+            <div class="actions">
+                <a href="{% url 'viewer:viewer' %}?study_id={{ study.id }}" class="btn btn-primary">
+                    <i class="fas fa-eye"></i> View Images
+                </a>
+                {% if study.report and study.report.status == 'final' %}
+                <button class="btn btn-success" onclick="viewReport({{ study.id }})">
+                    <i class="fas fa-file-medical"></i> View Report
+                </button>
+                <button class="btn btn-print" onclick="printReport({{ study.id }})">
+                    <i class="fas fa-print"></i> Print Report
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        {% empty %}
+        <p>No studies found for this facility.</p>
+        {% endfor %}
+    </div>
+    
+    <script>
+        function viewReport(studyId) {
+            // Implementation for viewing report
+            window.open(`/api/studies/${studyId}/report/get/`, '_blank');
+        }
+        
+        function printReport(studyId) {
+            // Implementation for printing report
+            window.open(`/api/studies/${studyId}/report/get/?print=true`, '_blank');
+        }
+    </script>
+</body>
+</html>

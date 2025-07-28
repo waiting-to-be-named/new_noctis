@@ -1,6 +1,9 @@
 # dicom_viewer/admin.py
 from django.contrib import admin
-from .models import DicomStudy, DicomSeries, DicomImage, Measurement, Annotation
+from .models import (
+    DicomStudy, DicomSeries, DicomImage, Measurement, Annotation,
+    Facility, WorklistPatient, ClinicalInformation, Report, Notification
+)
 
 
 @admin.register(DicomStudy)
@@ -95,3 +98,42 @@ class AnnotationAdmin(admin.ModelAdmin):
             'fields': ('created_by', 'created_at')
         }),
     )
+
+
+@admin.register(Facility)
+class FacilityAdmin(admin.ModelAdmin):
+    list_display = ['name', 'code', 'phone', 'created_at']
+    search_fields = ['name', 'code']
+    readonly_fields = ['created_at']
+
+
+@admin.register(WorklistPatient)
+class WorklistPatientAdmin(admin.ModelAdmin):
+    list_display = ['patient_name', 'patient_id', 'study_date', 'modality', 'facility', 'is_viewed', 'created_at']
+    list_filter = ['modality', 'facility', 'is_viewed', 'study_date', 'created_at']
+    search_fields = ['patient_name', 'patient_id']
+    readonly_fields = ['created_at']
+
+
+@admin.register(ClinicalInformation)
+class ClinicalInformationAdmin(admin.ModelAdmin):
+    list_display = ['study', 'created_by', 'created_at']
+    list_filter = ['created_at']
+    search_fields = ['study__patient_name', 'chief_complaint', 'clinical_history']
+    readonly_fields = ['created_at']
+
+
+@admin.register(Report)
+class ReportAdmin(admin.ModelAdmin):
+    list_display = ['study', 'status', 'created_by', 'signed_by', 'created_at', 'signed_at']
+    list_filter = ['status', 'created_at', 'signed_at']
+    search_fields = ['study__patient_name', 'findings', 'impression']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ['user', 'notification_type', 'title', 'facility', 'is_read', 'created_at']
+    list_filter = ['notification_type', 'is_read', 'created_at']
+    search_fields = ['title', 'message']
+    readonly_fields = ['created_at']

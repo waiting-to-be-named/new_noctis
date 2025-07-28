@@ -11,6 +11,45 @@ import io
 import base64
 
 
+class Facility(models.Model):
+    """Model to represent healthcare facilities"""
+    name = models.CharField(max_length=200)
+    code = models.CharField(max_length=50, unique=True)
+    address = models.TextField(blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    letterhead_logo = models.ImageField(upload_to='letterheads/', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name_plural = "Facilities"
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+
+
+class WorklistPatient(models.Model):
+    """Model to represent patients in worklist received from SCP server"""
+    patient_name = models.CharField(max_length=200)
+    patient_id = models.CharField(max_length=100)
+    birth_date = models.DateField(null=True, blank=True)
+    sex = models.CharField(max_length=10, blank=True)
+    study_date = models.DateField(null=True, blank=True)
+    study_time = models.TimeField(null=True, blank=True)
+    modality = models.CharField(max_length=10)
+    scheduled_station_ae_title = models.CharField(max_length=50, blank=True)
+    study_description = models.TextField(blank=True)
+    facility = models.ForeignKey(Facility, on_delete=models.CASCADE, related_name='worklist_patients')
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_viewed = models.BooleanField(default=False)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.patient_name} - {self.study_date}"
+
+
 class DicomStudy(models.Model):
     """Model to represent a DICOM study"""
     study_instance_uid = models.CharField(max_length=100, unique=True)
@@ -21,8 +60,10 @@ class DicomStudy(models.Model):
     study_description = models.TextField(blank=True)
     modality = models.CharField(max_length=10)
     institution_name = models.CharField(max_length=200, blank=True)
+    facility = models.ForeignKey(Facility, on_delete=models.SET_NULL, null=True, blank=True, related_name='studies')
     created_at = models.DateTimeField(auto_now_add=True)
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    worklist_patient = models.ForeignKey(WorklistPatient, on_delete=models.SET_NULL, null=True, blank=True)
     
     class Meta:
         ordering = ['-created_at']
@@ -169,6 +210,115 @@ class DicomImage(models.Model):
         self.window_center = getattr(dicom_data, 'WindowCenter', None)
         
         self.save()
+    
+    def get_hounsfield_value(self, x, y):
+        """Get Hounsfield Unit value at specific pixel coordinates"""
+        dicom_data = self.load_dicom_data()
+        if not dicom_data or not hasattr(dicom_data, 'pixel_array'):
+            return None
+        
+        # Get pixel value
+        try:
+            pixel_value = dicom_data.pixel_array[int(y), int(x)]
+            
+            # Apply rescale slope and intercept if available
+            rescale_slope = getattr(dicom_data, 'RescaleSlope', 1)
+            rescale_intercept = getattr(dicom_data, 'RescaleIntercept', 0)
+            
+            hu_value = pixel_value * rescale_slope + rescale_intercept
+            return hu_value
+        except (IndexError, ValueError):
+            return None
+    
+    def get_hounsfield_stats_ellipse(self, center_x, center_y, radius_x, radius_y):
+        """Calculate Hounsfield Unit statistics for an elliptical ROI"""
+        dicom_data = self.load_dicom_data()
+        if not dicom_data or not hasattr(dicom_data, 'pixel_array'):
+            return None
+        
+        pixel_array = dicom_data.pixel_array
+        rescale_slope = getattr(dicom_data, 'RescaleSlope', 1)
+        rescale_intercept = getattr(dicom_data, 'RescaleIntercept', 0)
+        
+        # Create mask for ellipse
+        y_indices, x_indices = np.ogrid[:pixel_array.shape[0], :pixel_array.shape[1]]
+        ellipse_mask = ((x_indices - center_x) / radius_x)**2 + ((y_indices - center_y) / radius_y)**2 <= 1
+        
+        # Get pixel values within ellipse
+        roi_pixels = pixel_array[ellipse_mask]
+        
+        # Convert to Hounsfield Units
+        hu_values = roi_pixels * rescale_slope + rescale_intercept
+        
+        return {
+            'mean': float(np.mean(hu_values)),
+            'std': float(np.std(hu_values)),
+            'min': float(np.min(hu_values)),
+            'max': float(np.max(hu_values)),
+            'area': float(np.sum(ellipse_mask))
+        }
+
+
+class ClinicalInformation(models.Model):
+    """Model to store clinical information for studies"""
+    study = models.OneToOneField(DicomStudy, on_delete=models.CASCADE, related_name='clinical_info')
+    chief_complaint = models.TextField(blank=True)
+    clinical_history = models.TextField(blank=True)
+    indication = models.TextField(blank=True)
+    allergies = models.TextField(blank=True)
+    medications = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    
+    def __str__(self):
+        return f"Clinical info for {self.study}"
+
+
+class Report(models.Model):
+    """Model to store radiological reports"""
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('final', 'Final'),
+        ('amended', 'Amended'),
+    ]
+    
+    study = models.OneToOneField(DicomStudy, on_delete=models.CASCADE, related_name='report')
+    findings = models.TextField()
+    impression = models.TextField()
+    recommendations = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='draft')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_reports')
+    signed_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='signed_reports')
+    signed_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"Report for {self.study} - {self.status}"
+
+
+class Notification(models.Model):
+    """Model to store notifications for radiologists/admins"""
+    NOTIFICATION_TYPES = [
+        ('new_study', 'New Study'),
+        ('report_ready', 'Report Ready'),
+        ('urgent', 'Urgent'),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES, default='new_study')
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    study = models.ForeignKey(DicomStudy, on_delete=models.CASCADE, null=True, blank=True)
+    facility = models.ForeignKey(Facility, on_delete=models.CASCADE, null=True, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.notification_type}: {self.title}"
 
 
 class Measurement(models.Model):
@@ -177,16 +327,30 @@ class Measurement(models.Model):
         ('line', 'Line Measurement'),
         ('angle', 'Angle Measurement'),
         ('area', 'Area Measurement'),
+        ('ellipse', 'Ellipse ROI'),
+    ]
+    
+    UNIT_CHOICES = [
+        ('px', 'Pixels'),
+        ('mm', 'Millimeters'),
+        ('cm', 'Centimeters'),
+        ('HU', 'Hounsfield Units'),
     ]
     
     image = models.ForeignKey(DicomImage, related_name='measurements', on_delete=models.CASCADE)
     measurement_type = models.CharField(max_length=10, choices=MEASUREMENT_TYPES, default='line')
     coordinates = models.JSONField()  # Store coordinates as JSON
     value = models.FloatField()  # Measurement value (distance, angle, area)
-    unit = models.CharField(max_length=10, default='px')  # px, mm, cm
+    unit = models.CharField(max_length=10, choices=UNIT_CHOICES, default='px')
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    
+    # For ellipse ROI Hounsfield measurements
+    mean_hu = models.FloatField(null=True, blank=True)
+    std_hu = models.FloatField(null=True, blank=True)
+    min_hu = models.FloatField(null=True, blank=True)
+    max_hu = models.FloatField(null=True, blank=True)
     
     class Meta:
         ordering = ['-created_at']
@@ -201,6 +365,9 @@ class Annotation(models.Model):
     x_coordinate = models.FloatField()
     y_coordinate = models.FloatField()
     text = models.TextField()
+    font_size = models.IntegerField(default=14)
+    color = models.CharField(max_length=7, default='#FFFF00')  # Yellow default
+    is_draggable = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     

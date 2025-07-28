@@ -29,6 +29,10 @@
                     <i class="fas fa-ruler"></i>
                     <span>Measure</span>
                 </button>
+                <button class="tool-btn" data-tool="ellipse" title="Ellipse ROI">
+                    <i class="fas fa-circle"></i>
+                    <span>Ellipse</span>
+                </button>
                 <button class="tool-btn" data-tool="annotate" title="Annotate">
                     <i class="fas fa-edit"></i>
                     <span>Annotate</span>
@@ -53,6 +57,16 @@
                     <i class="fas fa-cube"></i>
                     <span>3D</span>
                 </button>
+                
+                <!-- Measurement Unit Dropdown -->
+                <div class="tool-dropdown">
+                    <label>Unit:</label>
+                    <select id="measurement-unit" class="unit-select">
+                        <option value="px">Pixels</option>
+                        <option value="mm">mm</option>
+                        <option value="cm">cm</option>
+                    </select>
+                </div>
             </div>
         </div>
 
@@ -96,6 +110,57 @@
                     <div class="crosshair-v"></div>
                 </div>
             </div>
+        </div>
+
+        <!-- 3D Reconstruction Panel -->
+        <div id="reconstruction-panel" class="reconstruction-panel" style="display: none;">
+            <div class="panel-header">
+                <h3>3D Reconstruction</h3>
+                <button class="close-btn" onclick="closeReconstructionPanel()">&times;</button>
+            </div>
+            <div class="reconstruction-options">
+                <button class="recon-btn" data-type="mpr">
+                    <i class="fas fa-layer-group"></i>
+                    MPR View
+                </button>
+                <button class="recon-btn" data-type="bone">
+                    <i class="fas fa-bone"></i>
+                    3D Bone
+                </button>
+                <button class="recon-btn" data-type="angio">
+                    <i class="fas fa-heart"></i>
+                    Angiography
+                </button>
+                <button class="recon-btn" data-type="surgery">
+                    <i class="fas fa-cut"></i>
+                    Virtual Surgery
+                </button>
+            </div>
+            <div id="reconstruction-viewer" class="reconstruction-viewer">
+                <!-- 3D content will be rendered here -->
+            </div>
+        </div>
+        
+        <!-- AI Chat Window -->
+        <div id="ai-chat" class="ai-chat-window" style="display: none;">
+            <div class="chat-header">
+                <h3><i class="fas fa-robot"></i> AI Analysis</h3>
+                <button class="minimize-btn" onclick="toggleAIChat()">_</button>
+            </div>
+            <div class="chat-messages" id="chat-messages">
+                <div class="chat-message ai-message">
+                    <p>AI Assistant ready. Click on any area of the image for analysis.</p>
+                </div>
+            </div>
+            <div class="chat-input">
+                <textarea id="ai-query" placeholder="Ask about the image..."></textarea>
+                <button onclick="sendAIQuery()"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+        
+        <!-- Notification Toast -->
+        <div id="notification-container" class="notification-container">
+            <!-- Notifications will appear here -->
         </div>
 
         <!-- Right Panel -->
@@ -184,6 +249,14 @@
                     <button id="clear-measurements" class="secondary-btn">Clear All</button>
                     <div id="measurements-list" class="measurements-list"></div>
                 </div>
+                
+                <!-- Report Section (for radiologists/admins) -->
+                {% if user.is_authenticated and user.is_staff or user.groups.filter.name == 'Radiologists' %}
+                <div class="panel-section">
+                    <h3 class="section-title">Report</h3>
+                    <button id="write-report" class="primary-btn">Write Report</button>
+                </div>
+                {% endif %}
 
             </div>
         </div>
@@ -215,6 +288,268 @@
     <!-- Hidden file input for DICOM upload -->
     <input type="file" id="hidden-file-input" multiple accept=".dcm,.dicom" style="display: none;">
 
+    <!-- Report Modal -->
+    <div id="report-modal" class="modal" style="display: none;">
+        <div class="modal-content large-modal">
+            <div class="modal-header">
+                <h3>Radiological Report</h3>
+                <button class="modal-close" onclick="closeReportModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="report-form">
+                    <div class="form-group">
+                        <label>Clinical Information</label>
+                        <div id="clinical-info-display" class="info-display">
+                            <!-- Clinical info will be loaded here -->
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Findings</label>
+                        <textarea name="findings" rows="6" placeholder="Describe your findings..." required></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Impression</label>
+                        <textarea name="impression" rows="4" placeholder="Clinical impression..." required></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Recommendations</label>
+                        <textarea name="recommendations" rows="3" placeholder="Follow-up recommendations (optional)"></textarea>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="saveReportDraft()">Save as Draft</button>
+                        <button type="submit" class="btn btn-primary">Sign & Finalize</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="{% static 'js/dicom_viewer.js' %}"></script>
+    <script>
+        // Initialize study ID if provided
+        {% if study_id %}
+        window.onload = function() {
+            // Load the study automatically
+            loadStudyById({{ study_id }});
+        };
+        {% endif %}
+        
+        // Notification system
+        let notificationCheckInterval;
+        
+        {% if user.is_authenticated and user.is_staff or user.groups.filter.name == 'Radiologists' %}
+        // Check for notifications every 30 seconds
+        notificationCheckInterval = setInterval(checkNotifications, 30000);
+        checkNotifications(); // Check immediately on load
+        {% endif %}
+        
+        async function checkNotifications() {
+            try {
+                const response = await fetch('/api/notifications/');
+                const notifications = await response.json();
+                
+                notifications.forEach(notif => {
+                    showNotification(notif);
+                });
+            } catch (error) {
+                console.error('Error checking notifications:', error);
+            }
+        }
+        
+        function showNotification(notif) {
+            const container = document.getElementById('notification-container');
+            const notification = document.createElement('div');
+            notification.className = 'notification toast';
+            notification.innerHTML = `
+                <div class="notification-header">
+                    <strong>${notif.title}</strong>
+                    <button onclick="dismissNotification(${notif.id}, this)">&times;</button>
+                </div>
+                <div class="notification-body">
+                    <p>${notif.message}</p>
+                    ${notif.facility_name ? `<small>Facility: ${notif.facility_name}</small>` : ''}
+                </div>
+                ${notif.study_id ? `<button class="btn btn-sm" onclick="loadStudyById(${notif.study_id})">View Study</button>` : ''}
+            `;
+            container.appendChild(notification);
+            
+            // Auto-dismiss after 10 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 10000);
+        }
+        
+        async function dismissNotification(notifId, button) {
+            try {
+                await fetch(`/api/notifications/${notifId}/mark-read/`, { method: 'POST' });
+                button.closest('.notification').remove();
+            } catch (error) {
+                console.error('Error dismissing notification:', error);
+            }
+        }
+        
+        // Report functions
+        function closeReportModal() {
+            document.getElementById('report-modal').style.display = 'none';
+        }
+        
+        document.getElementById('write-report')?.addEventListener('click', async () => {
+            const modal = document.getElementById('report-modal');
+            modal.style.display = 'block';
+            
+            // Load clinical information if available
+            if (window.currentStudyId) {
+                try {
+                    const response = await fetch(`/api/studies/${window.currentStudyId}/clinical-info/`);
+                    if (response.ok) {
+                        const clinicalInfo = await response.json();
+                        document.getElementById('clinical-info-display').innerHTML = `
+                            <p><strong>Chief Complaint:</strong> ${clinicalInfo.chief_complaint || 'N/A'}</p>
+                            <p><strong>Clinical History:</strong> ${clinicalInfo.clinical_history || 'N/A'}</p>
+                            <p><strong>Indication:</strong> ${clinicalInfo.indication || 'N/A'}</p>
+                        `;
+                    }
+                } catch (error) {
+                    console.error('Error loading clinical info:', error);
+                }
+            }
+        });
+        
+        document.getElementById('report-form')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await saveReport('final', new FormData(e.target));
+        });
+        
+        async function saveReportDraft() {
+            const formData = new FormData(document.getElementById('report-form'));
+            await saveReport('draft', formData);
+        }
+        
+        async function saveReport(status, formData) {
+            if (!window.currentStudyId) {
+                alert('Please load a study first');
+                return;
+            }
+            
+            const data = {
+                findings: formData.get('findings'),
+                impression: formData.get('impression'),
+                recommendations: formData.get('recommendations'),
+                status: status,
+                sign: status === 'final'
+            };
+            
+            try {
+                const response = await fetch(`/api/studies/${window.currentStudyId}/report/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    alert(`Report ${status === 'draft' ? 'saved as draft' : 'signed and finalized'} successfully!`);
+                    closeReportModal();
+                } else {
+                    alert('Error saving report');
+                }
+            } catch (error) {
+                console.error('Error saving report:', error);
+                alert('Error saving report');
+            }
+        }
+        
+        // 3D Reconstruction functions
+        function closeReconstructionPanel() {
+            document.getElementById('reconstruction-panel').style.display = 'none';
+        }
+        
+        document.querySelectorAll('.recon-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const type = this.dataset.type;
+                const viewer = document.getElementById('reconstruction-viewer');
+                
+                // Simulate 3D reconstruction loading
+                viewer.innerHTML = `
+                    <div style="text-align: center;">
+                        <i class="fas fa-spinner fa-spin" style="font-size: 48px; color: #00d4ff;"></i>
+                        <p style="margin-top: 20px;">Loading ${type.toUpperCase()} reconstruction...</p>
+                    </div>
+                `;
+                
+                // In a real implementation, this would initialize a 3D viewer (e.g., VTK.js, Three.js)
+                setTimeout(() => {
+                    viewer.innerHTML = `
+                        <div style="text-align: center;">
+                            <p>3D ${type} reconstruction would be displayed here</p>
+                            <p style="color: #666; margin-top: 10px;">Integration with 3D rendering library required</p>
+                        </div>
+                    `;
+                }, 2000);
+            });
+        });
+        
+        // AI Chat functions
+        function toggleAIChat() {
+            const aiChat = document.getElementById('ai-chat');
+            aiChat.style.display = aiChat.style.display === 'none' ? 'block' : 'none';
+        }
+        
+        async function sendAIQuery() {
+            const query = document.getElementById('ai-query').value;
+            if (!query.trim()) return;
+            
+            const chatMessages = document.getElementById('chat-messages');
+            
+            // Add user message
+            const userMsg = document.createElement('div');
+            userMsg.className = 'chat-message user-message';
+            userMsg.innerHTML = `<p>${query}</p>`;
+            chatMessages.appendChild(userMsg);
+            
+            // Clear input
+            document.getElementById('ai-query').value = '';
+            
+            // Simulate AI response
+            setTimeout(() => {
+                const aiMsg = document.createElement('div');
+                aiMsg.className = 'chat-message ai-message';
+                aiMsg.innerHTML = `<p>AI analysis based on your query would appear here. Integration with medical AI API required.</p>`;
+                chatMessages.appendChild(aiMsg);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }, 1000);
+        }
+        
+        // Helper function to load study by ID
+        function loadStudyById(studyId) {
+            window.currentStudyId = studyId;
+            // Trigger study loading in the viewer
+            const select = document.getElementById('backend-studies');
+            select.value = studyId;
+            select.dispatchEvent(new Event('change'));
+        }
+        
+        // CSRF token helper
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+    </script>
 </body>
 </html>
