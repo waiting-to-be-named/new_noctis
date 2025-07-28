@@ -18,8 +18,10 @@
         
         .worklist-container {
             padding: 20px;
-            max-width: 1400px;
-            margin: 0 auto;
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            min-height: 100vh;
         }
         
         .header {
@@ -184,7 +186,7 @@
         <div class="header">
             <h1><i class="fas fa-list-alt"></i> DICOM Worklist</h1>
             <div class="header-actions">
-                <button class="btn btn-view" onclick="window.location.href='/'">
+                <button class="btn btn-view" onclick="window.location.href='/viewer/'">
                     <i class="fas fa-images"></i> Open Viewer
                 </button>
                 {% if is_admin or is_radiologist %}

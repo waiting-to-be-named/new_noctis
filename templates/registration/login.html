@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | DICOM System</title>
+    {% load static %}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg,#1a1a1a 0%,#2a2a2a 100%);
+            font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+            color: #e0e0e0;
+        }
+        .login-card {
+            background: rgba(255,255,255,0.05);
+            padding: 40px 50px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 420px;
+            border: 2px solid transparent;
+            transition: all .3s ease;
+        }
+        .login-card:hover {
+            border-color: #00ff00;
+            box-shadow: 0 0 20px rgba(0,255,0,.2);
+        }
+        h2 { text-align: center; margin-bottom: 30px; background: linear-gradient(45deg,#00ff00,#0099ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+        .form-group { margin-bottom: 20px; }
+        label { display:block; margin-bottom:6px; }
+        input[type="text"], input[type="password"] {
+            width:100%; padding:12px 15px; border:none; border-radius:6px;
+            background:#0d0d0d; color:#e0e0e0;
+        }
+        .submit-btn {
+            width:100%; padding:12px; border:none; border-radius:30px; background:linear-gradient(45deg,#00ff00,#00cc00); color:#000; font-weight:bold; cursor:pointer; transition:all .3s ease;
+        }
+        .submit-btn:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,255,0,.4); }
+        .helper-links { text-align:center; margin-top:15px; font-size:14px; }
+        a { color:#00ffcc; text-decoration:none; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h2><i class="fas fa-user-md"></i> DICOM System Login</h2>
+        {% if form.errors %}
+            <p style="color:#ff0066; text-align:center; margin-bottom:20px;">Please enter the correct username and password.</p>
+        {% endif %}
+        <form method="post" action="{% url 'login' %}">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="id_username">Username</label>
+                {{ form.username }}
+            </div>
+            <div class="form-group">
+                <label for="id_password">Password</label>
+                {{ form.password }}
+            </div>
+            <button type="submit" class="submit-btn">Login</button>
+        </form>
+        <div class="helper-links">
+            <a href="/admin/">Admin</a>
+        </div>
+    </div>
+</body>
+</html>

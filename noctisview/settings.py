@@ -102,6 +102,10 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Redirect to main dashboard after login
+LOGIN_REDIRECT_URL = '/home/'
+LOGOUT_REDIRECT_URL = '/'
+
 # DICOM specific settings
 DICOM_UPLOAD_PATH = 'dicom_files/'
 MAX_DICOM_FILE_SIZE = 100 * 1024 * 1024  # 100MB

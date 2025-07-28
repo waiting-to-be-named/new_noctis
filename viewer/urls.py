@@ -7,9 +7,9 @@ urlpatterns = [
     # Home page
     path('home/', views.HomeView.as_view(), name='home'),
     
-    # Main viewer page
-    path('', views.DicomViewerView.as_view(), name='viewer'),
-    path('study/<int:study_id>/', views.DicomViewerView.as_view(), name='viewer_with_study'),
+    # Main viewer page (moved under /viewer/)
+    path('viewer/', views.DicomViewerView.as_view(), name='viewer'),
+    path('viewer/study/<int:study_id>/', views.DicomViewerView.as_view(), name='viewer_with_study'),
     
     # File upload
     path('api/upload/', views.upload_dicom_files, name='upload_dicom'),

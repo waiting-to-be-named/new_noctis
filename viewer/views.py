@@ -15,6 +15,8 @@ import json
 import os
 import pydicom
 from datetime import datetime
+from django.utils import timezone
+import uuid
 import numpy as np
 from .models import (
     DicomStudy, DicomSeries, DicomImage, Measurement, Annotation,
@@ -76,7 +78,7 @@ def upload_dicom_files(request):
                     }
                 )
             
-            # If study was created, send notifications to radiologists
+            # If study was created, send notifications and create worklist entry
             if created:
                 radiologists = User.objects.filter(groups__name='Radiologists')
                 for radiologist in radiologists:
@@ -87,6 +89,29 @@ def upload_dicom_files(request):
                         message=f'New study uploaded for {study.patient_name}',
                         related_study=study
                     )
+
+                # Determine facility for worklist entry (fallback to first facility)
+                facility_for_entry = study.facility or Facility.objects.first()
+
+                # Create corresponding worklist entry so the study shows up in the worklist
+                try:
+                    WorklistEntry.objects.create(
+                        patient_name=study.patient_name,
+                        patient_id=study.patient_id,
+                        accession_number=str(getattr(dicom_data, 'AccessionNumber', '')) or uuid.uuid4().hex[:12],
+                        scheduled_station_ae_title='UPLOAD',
+                        scheduled_procedure_step_start_date=timezone.now().date(),
+                        scheduled_procedure_step_start_time=timezone.now().time(),
+                        modality=study.modality,
+                        scheduled_performing_physician=str(getattr(dicom_data, 'PerformingPhysicianName', '')),
+                        procedure_description=study.study_description or 'Uploaded Study',
+                        facility=facility_for_entry,
+                        status='completed',
+                        study=study,
+                    )
+                except Exception:
+                    # Don't fail the upload if the worklist entry creation has an issue
+                    pass
             
             # Create or get series
             series_uid = str(dicom_data.get('SeriesInstanceUID', ''))
