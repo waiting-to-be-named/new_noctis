@@ -11,6 +11,42 @@ import io
 import base64
 
 
+class Facility(models.Model):
+    """Model to represent medical facilities"""
+    name = models.CharField(max_length=200)
+    address = models.TextField(blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    email = models.EmailField(blank=True)
+    letterhead_logo = models.ImageField(upload_to='letterheads/', blank=True, null=True)
+    ae_title = models.CharField(max_length=16, default='FACILITY')  # DICOM AE Title
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name_plural = "Facilities"
+    
+    def __str__(self):
+        return self.name
+
+
+class UserProfile(models.Model):
+    """Extended user profile with roles"""
+    USER_ROLES = [
+        ('admin', 'Administrator'),
+        ('radiologist', 'Radiologist'),
+        ('technician', 'Technician'),
+        ('facility_user', 'Facility User'),
+    ]
+    
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    role = models.CharField(max_length=20, choices=USER_ROLES, default='facility_user')
+    facility = models.ForeignKey(Facility, on_delete=models.CASCADE, null=True, blank=True)
+    license_number = models.CharField(max_length=50, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.user.get_full_name()} - {self.get_role_display()}"
+
+
 class DicomStudy(models.Model):
     """Model to represent a DICOM study"""
     study_instance_uid = models.CharField(max_length=100, unique=True)
@@ -21,8 +57,10 @@ class DicomStudy(models.Model):
     study_description = models.TextField(blank=True)
     modality = models.CharField(max_length=10)
     institution_name = models.CharField(max_length=200, blank=True)
+    facility = models.ForeignKey(Facility, on_delete=models.CASCADE, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    is_processed = models.BooleanField(default=False)
     
     class Meta:
         ordering = ['-created_at']
@@ -37,6 +75,72 @@ class DicomStudy(models.Model):
     @property
     def total_images(self):
         return DicomImage.objects.filter(series__study=self).count()
+
+
+class ClinicalInformation(models.Model):
+    """Model to store clinical information for studies"""
+    study = models.OneToOneField(DicomStudy, on_delete=models.CASCADE, related_name='clinical_info')
+    patient_age = models.CharField(max_length=10, blank=True)
+    patient_sex = models.CharField(max_length=1, choices=[('M', 'Male'), ('F', 'Female'), ('O', 'Other')], blank=True)
+    patient_weight = models.FloatField(null=True, blank=True, help_text="Weight in kg")
+    patient_height = models.FloatField(null=True, blank=True, help_text="Height in cm")
+    referring_physician = models.CharField(max_length=200, blank=True)
+    clinical_history = models.TextField(blank=True)
+    indication = models.TextField(blank=True)
+    contrast_agent = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    
+    def __str__(self):
+        return f"Clinical Info for {self.study.patient_name}"
+
+
+class RadiologyReport(models.Model):
+    """Model to store radiology reports"""
+    REPORT_STATUS = [
+        ('draft', 'Draft'),
+        ('pending', 'Pending Review'),
+        ('finalized', 'Finalized'),
+        ('amended', 'Amended'),
+    ]
+    
+    study = models.OneToOneField(DicomStudy, on_delete=models.CASCADE, related_name='report')
+    findings = models.TextField(blank=True)
+    impression = models.TextField(blank=True)
+    recommendations = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=REPORT_STATUS, default='draft')
+    radiologist = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reports')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    finalized_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"Report for {self.study.patient_name} - {self.get_status_display()}"
+
+
+class Notification(models.Model):
+    """Model for user notifications"""
+    NOTIFICATION_TYPES = [
+        ('new_study', 'New Study Uploaded'),
+        ('report_ready', 'Report Ready'),
+        ('study_shared', 'Study Shared'),
+        ('system', 'System Notification'),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES, default='system')
+    study = models.ForeignKey(DicomStudy, on_delete=models.CASCADE, null=True, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.title} - {self.user.username}"
 
 
 class DicomSeries(models.Model):
@@ -180,12 +284,23 @@ class Measurement(models.Model):
         ('ellipse', 'Ellipse HU Measurement'),
     ]
     
+    UNITS = [
+        ('px', 'Pixels'),
+        ('mm', 'Millimeters'),
+        ('cm', 'Centimeters'),
+        ('HU', 'Hounsfield Units'),
+    ]
+    
     image = models.ForeignKey(DicomImage, related_name='measurements', on_delete=models.CASCADE)
     measurement_type = models.CharField(max_length=10, choices=MEASUREMENT_TYPES, default='line')
     coordinates = models.JSONField()  # Store coordinates as JSON
-    value = models.FloatField()  # Measurement value (distance, angle, area)
-    unit = models.CharField(max_length=10, default='px')  # px, mm, cm
+    value = models.FloatField()  # Measurement value (distance, angle, area, HU)
+    unit = models.CharField(max_length=10, choices=UNITS, default='mm')
     notes = models.TextField(blank=True)
+    # Additional HU statistics for ellipse measurements
+    min_value = models.FloatField(null=True, blank=True)
+    max_value = models.FloatField(null=True, blank=True)
+    std_dev = models.FloatField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     
