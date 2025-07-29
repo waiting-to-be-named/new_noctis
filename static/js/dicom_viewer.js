@@ -2235,6 +2235,102 @@ class DicomViewer {
         })
         .catch(error => console.error('Error saving annotation:', error));
     }
+
+    showError(message) {
+        console.error('DICOM Viewer Error:', message);
+        
+        // Try to find an existing error display element
+        let errorDiv = document.getElementById('dicom-error-display');
+        
+        if (!errorDiv) {
+            // Create error display element if it doesn't exist
+            errorDiv = document.createElement('div');
+            errorDiv.id = 'dicom-error-display';
+            errorDiv.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: #f8d7da;
+                color: #721c24;
+                padding: 20px;
+                border: 1px solid #f5c6cb;
+                border-radius: 5px;
+                max-width: 500px;
+                z-index: 1000;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            `;
+            document.body.appendChild(errorDiv);
+        }
+        
+        errorDiv.innerHTML = `
+            <div style="margin-bottom: 10px;">
+                <strong>Error:</strong> ${message}
+            </div>
+            <button onclick="document.getElementById('dicom-error-display').style.display='none'" 
+                    style="background: #721c24; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">
+                Close
+            </button>
+        `;
+        errorDiv.style.display = 'block';
+        
+        // Auto-hide after 10 seconds
+        setTimeout(() => {
+            if (errorDiv.style.display !== 'none') {
+                errorDiv.style.display = 'none';
+            }
+        }, 10000);
+    }
+    
+    async loadStudyImages(studyId) {
+        console.log('Loading study images for study:', studyId);
+        try {
+            const response = await fetch(`/api/studies/${studyId}/images/`);
+            
+            if (!response.ok) {
+                let errorMessage;
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.error || `Failed to load study (${response.status})`;
+                } catch (e) {
+                    const responseText = await response.text();
+                    if (responseText.includes('<!DOCTYPE')) {
+                        errorMessage = `Server error (${response.status}): Received HTML instead of JSON. Please check server logs.`;
+                    } else {
+                        errorMessage = `Server error (${response.status}): ${responseText.substring(0, 200)}`;
+                    }
+                }
+                console.error('Failed to load study images:', errorMessage);
+                this.showError(`Failed to load study: ${errorMessage}`);
+                return;
+            }
+
+            const data = await response.json();
+            console.log('Loaded study data:', data);
+            
+            if (!data.images || data.images.length === 0) {
+                this.showError('No images found in this study. The study may be corrupted or the files may have been moved.');
+                return;
+            }
+
+            this.currentStudy = data.study;
+            this.currentImages = data.images;
+            this.currentImageIndex = 0;
+            
+            // Update the UI with study information
+            this.updateStudyInfo(data.study);
+            
+            // Load the first image
+            if (this.currentImages.length > 0) {
+                await this.loadImage(0);
+                this.updateImageControls();
+            }
+            
+        } catch (error) {
+            console.error('Error loading study images:', error);
+            this.showError(`Network error loading study: ${error.message}. Please check your connection and try again.`);
+        }
+    }
 }
 
 // Initialize the viewer when the page loads

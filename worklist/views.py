@@ -29,9 +29,16 @@ class WorklistView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         queryset = super().get_queryset()
         
+        # Debug: Print total count before filtering
+        total_count = WorklistEntry.objects.count()
+        print(f"Total worklist entries in database: {total_count}")
+        
         # Filter by facility if user is facility staff
         if hasattr(self.request.user, 'facility_staff'):
             queryset = queryset.filter(facility=self.request.user.facility_staff.facility)
+            print(f"Filtered by facility, count: {queryset.count()}")
+        else:
+            print(f"No facility filtering, showing all entries: {queryset.count()}")
         
         # Apply search filters
         search = self.request.GET.get('search')
@@ -41,18 +48,32 @@ class WorklistView(LoginRequiredMixin, ListView):
                 Q(patient_id__icontains=search) |
                 Q(accession_number__icontains=search)
             )
+            print(f"After search filter '{search}': {queryset.count()}")
         
         # Filter by status
         status = self.request.GET.get('status')
         if status:
             queryset = queryset.filter(status=status)
+            print(f"After status filter '{status}': {queryset.count()}")
             
         # Filter by modality
         modality = self.request.GET.get('modality')
         if modality:
             queryset = queryset.filter(modality=modality)
-            
-        return queryset
+            print(f"After modality filter '{modality}': {queryset.count()}")
+        
+        # Filter by date range
+        start_date = self.request.GET.get('start_date')
+        end_date = self.request.GET.get('end_date')
+        if start_date:
+            queryset = queryset.filter(scheduled_procedure_step_start_date__gte=start_date)
+            print(f"After start date filter '{start_date}': {queryset.count()}")
+        if end_date:
+            queryset = queryset.filter(scheduled_procedure_step_start_date__lte=end_date)
+            print(f"After end date filter '{end_date}': {queryset.count()}")
+        
+        print(f"Final queryset count: {queryset.count()}")
+        return queryset.order_by('-scheduled_procedure_step_start_date', '-scheduled_procedure_step_start_time')
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
