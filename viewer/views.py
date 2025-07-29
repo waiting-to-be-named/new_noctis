@@ -436,20 +436,20 @@ def upload_dicom_files(request):
                                 study.facility = facility
                                 study.save()
                             
-                            WorklistEntry.objects.create(
-                                patient_name=study.patient_name,
-                                patient_id=study.patient_id,
-                                accession_number=study.accession_number or f"ACC{study.id:06d}",
-                                scheduled_station_ae_title="UPLOAD",
-                                scheduled_procedure_step_start_date=study.study_date or datetime.now().date(),
-                                scheduled_procedure_step_start_time=study.study_time or datetime.now().time(),
-                                modality=study.modality,
-                                scheduled_performing_physician=study.referring_physician or "Unknown",
-                                procedure_description=study.study_description,
-                                facility=facility,
-                                study=study,
-                                status='completed'
-                            )
+                                                    WorklistEntry.objects.create(
+                            patient_name=study.patient_name,
+                            patient_id=study.patient_id,
+                            accession_number=study.accession_number or f"ACC{study.id:06d}",
+                            scheduled_station_ae_title="UPLOAD",
+                            scheduled_procedure_step_start_date=study.study_date or datetime.now().date(),
+                            scheduled_procedure_step_start_time=study.study_time or datetime.now().time(),
+                            modality=study.modality,
+                            scheduled_performing_physician=study.referring_physician or "Unknown",
+                            procedure_description=study.study_description,
+                            facility=facility,
+                            study=study,
+                            status='scheduled'
+                        )
                             print(f"Created worklist entry for study {study.id}")
                         except Exception as e:
                             print(f"Error creating worklist entry: {e}")
@@ -785,7 +785,7 @@ def upload_dicom_folder(request):
                             procedure_description=study.study_description,
                             facility=facility,
                             study=study,
-                            status='completed'
+                            status='scheduled'
                         )
                     except Exception as e:
                         print(f"Error creating worklist entry: {e}")
@@ -958,9 +958,13 @@ def get_study_images(request, study_id):
             'study': {
                 'id': study.id,
                 'patient_name': study.patient_name,
-                'study_date': study.study_date,
+                'patient_id': study.patient_id,
+                'study_date': study.study_date.strftime('%Y-%m-%d') if study.study_date else 'Unknown',
                 'modality': study.modality,
                 'study_description': study.study_description,
+                'institution_name': study.institution_name,
+                'accession_number': study.accession_number,
+                'referring_physician': study.referring_physician,
             },
             'images': images_data
         })
