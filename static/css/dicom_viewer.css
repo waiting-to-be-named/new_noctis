@@ -43,20 +43,21 @@ body {
 }
 
 .top-bar {
-    background: #252525;
-    padding: 15px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    background: linear-gradient(135deg, #252525, #2a2a2a);
+    padding: 16px 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     flex-wrap: wrap;
     min-height: auto;
-    max-height: 120px; /* Prevent excessive height */
+    max-height: 140px;
+    border-bottom: 2px solid #0066cc;
 }
 
 .top-controls {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     align-items: center;
     flex-wrap: wrap;
 }
@@ -70,8 +71,32 @@ body {
 .patient-info {
     font-weight: bold;
     font-size: 14px;
-    margin-bottom: 5px;
+    margin-bottom: 8px;
     color: #fff;
+    background: linear-gradient(135deg, #0066cc, #0088ff);
+    padding: 12px 16px;
+    border-radius: 8px;
+    border-left: 4px solid #00aaff;
+    box-shadow: 0 2px 8px rgba(0, 102, 204, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.patient-info i {
+    font-size: 18px;
+    color: #ffffff;
+    opacity: 0.9;
+}
+
+.patient-text {
+    flex: 1;
+    line-height: 1.4;
+}
+
+.patient-text strong {
+    color: #e6f3ff;
+    font-weight: 600;
 }
 
 /* Responsive Design */
@@ -407,54 +432,78 @@ body {
 }
 
 /* Buttons */
-.primary-btn, .secondary-btn {
-    padding: 10px 20px;
+.primary-btn {
+    background: linear-gradient(135deg, #0066cc, #0088ff);
+    color: white;
     border: none;
-    border-radius: 4px;
+    padding: 12px 24px;
+    border-radius: 8px;
     cursor: pointer;
     font-size: 14px;
+    font-weight: 600;
     transition: all 0.3s ease;
-}
-
-.primary-btn {
-    background: #0066cc;
-    color: white;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 2px 6px rgba(0, 102, 204, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .primary-btn:hover {
-    background: #0052a3;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    background: linear-gradient(135deg, #0088ff, #00aaff);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 136, 255, 0.4);
+}
+
+.primary-btn i {
+    font-size: 16px;
 }
 
 .secondary-btn {
-    background: #666;
+    background: linear-gradient(135deg, #666, #777);
     color: white;
+    border: 1px solid #888;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .secondary-btn:hover {
-    background: #555;
+    background: linear-gradient(135deg, #777, #888);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
 }
 
 .logout-btn {
-    background: #dc3545;
+    background: linear-gradient(135deg, #dc3545, #c82333);
     color: white;
     padding: 10px 20px;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     cursor: pointer;
-    font-weight: 500;
+    font-weight: 600;
     font-size: 14px;
     transition: all 0.3s ease;
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    box-shadow: 0 2px 6px rgba(220, 53, 69, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .logout-btn:hover {
-    background: #c82333;
+    background: linear-gradient(135deg, #c82333, #a71e2a);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
 }
 
 /* Preset Buttons */
@@ -927,22 +976,25 @@ body {
 }
 
 #worklist-btn {
-    background: #444;
+    background: linear-gradient(135deg, #444, #555);
     color: #fff;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
+    border: 1px solid #666;
+    padding: 10px 18px;
+    border-radius: 8px;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     font-size: 14px;
+    font-weight: 500;
     transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 #worklist-btn:hover {
-    background: #555;
-    transform: translateY(-1px);
+    background: linear-gradient(135deg, #555, #666);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
 #worklist-btn i {
@@ -1163,18 +1215,24 @@ body {
 .clinical-info-section {
     background: #2a2a2a;
     border: 1px solid #555;
-    border-radius: 5px;
-    margin-top: 10px;
+    border-radius: 8px;
+    margin-top: 12px;
     overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .clinical-info-header {
-    background: #333;
-    padding: 8px 12px;
+    background: linear-gradient(135deg, #333, #444);
+    padding: 12px 16px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+.clinical-info-header:hover {
+    background: linear-gradient(135deg, #444, #555);
 }
 
 .clinical-info-header h4 {
@@ -1184,42 +1242,327 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    font-weight: 600;
+}
+
+.clinical-info-header h4 i {
+    font-size: 16px;
 }
 
 .btn-toggle {
-    background: none;
-    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     color: #ccc;
     cursor: pointer;
     font-size: 12px;
-    padding: 2px;
-    border-radius: 3px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
 }
 
 .btn-toggle:hover {
+    background: rgba(255, 255, 255, 0.2);
     color: #fff;
-    background: #555;
+    transform: scale(1.05);
 }
 
 .clinical-info-content {
-    padding: 12px;
+    padding: 16px;
     border-top: 1px solid #555;
-    max-height: 150px;
+    max-height: 200px;
     overflow-y: auto;
-}
-
-.clinical-info-content p {
-    margin: 0;
-    color: #ccc;
-    font-size: 13px;
-    line-height: 1.4;
+    transition: max-height 0.3s ease;
 }
 
 .clinical-info-content.collapsed {
-    display: none;
+    max-height: 0;
+    padding: 0 16px;
+    overflow: hidden;
 }
 
-.clinical-info.expanded {
-    background: #1a3a1a;
-    border-color: #00ff00;
+.clinical-info-item {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    border-left: 3px solid #00ff00;
+}
+
+.clinical-info-item:last-child {
+    margin-bottom: 0;
+}
+
+.clinical-info-item label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: #00ff00;
+    font-size: 13px;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.clinical-info-item label i {
+    font-size: 14px;
+    opacity: 0.8;
+}
+
+.clinical-info-item p {
+    margin: 0;
+    color: #e0e0e0;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Loading Overlay */
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.loading-content {
+    text-align: center;
+    color: #fff;
+}
+
+.loading-content i {
+    font-size: 48px;
+    color: #0099ff;
+    margin-bottom: 20px;
+    display: block;
+}
+
+.loading-content p {
+    font-size: 18px;
+    margin: 0;
+}
+
+/* Enhanced Error Messages */
+.error-message {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #ff4444;
+    color: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(255, 68, 68, 0.3);
+    z-index: 1002;
+    max-width: 450px;
+    border-left: 5px solid #ff1122;
+    animation: slideInRight 0.3s ease;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.error-content {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.error-content i {
+    font-size: 24px;
+    color: #ffcccc;
+}
+
+.error-content button {
+    background: #ff1122;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-left: auto;
+}
+
+.error-content button:hover {
+    background: #dd0011;
+}
+
+/* Improved Notifications */
+.notification-container {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 1003;
+    max-width: 400px;
+}
+
+.notification {
+    background: #1a1a1a;
+    border: 2px solid #00ff00;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 15px;
+    min-width: 320px;
+    box-shadow: 0 8px 24px rgba(0, 255, 0, 0.2);
+    animation: slideInNotification 0.5s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+@keyframes slideInNotification {
+    from {
+        transform: translateX(100%) scale(0.8);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0) scale(1);
+        opacity: 1;
+    }
+}
+
+.notification::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #00ff00, #00cc00, #00ff00);
+    animation: notificationPulse 2s ease-in-out infinite;
+}
+
+@keyframes notificationPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.notification-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.notification-header h4 {
+    color: #00ff00;
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.close-notif {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #ccc;
+    cursor: pointer;
+    font-size: 18px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.close-notif:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    transform: scale(1.1);
+}
+
+.notification-body {
+    color: #e0e0e0;
+    line-height: 1.5;
+    margin-bottom: 15px;
+}
+
+.view-study-btn {
+    margin-top: 15px;
+    padding: 10px 16px;
+    background: linear-gradient(45deg, #0066cc, #0088ff);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    width: 100%;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.view-study-btn:hover {
+    background: linear-gradient(45deg, #0088ff, #00aaff);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 136, 255, 0.4);
+}
+
+/* Success Notifications */
+.notification.success {
+    border-color: #00ff88;
+}
+
+.notification.success::before {
+    background: linear-gradient(90deg, #00ff88, #00cc66, #00ff88);
+}
+
+.notification.success .notification-header h4 {
+    color: #00ff88;
+}
+
+/* Warning Notifications */
+.notification.warning {
+    border-color: #ffaa00;
+}
+
+.notification.warning::before {
+    background: linear-gradient(90deg, #ffaa00, #ff8800, #ffaa00);
+}
+
+.notification.warning .notification-header h4 {
+    color: #ffaa00;
+}
+
+/* Error Notifications */
+.notification.error {
+    border-color: #ff4444;
+}
+
+.notification.error::before {
+    background: linear-gradient(90deg, #ff4444, #ff2222, #ff4444);
+}
+
+.notification.error .notification-header h4 {
+    color: #ff4444;
+}
+
+/* Info Notifications */
+.notification.info {
+    border-color: #0099ff;
+}
+
+.notification.info::before {
+    background: linear-gradient(90deg, #0099ff, #0077cc, #0099ff);
+}
+
+.notification.info .notification-header h4 {
+    color: #0099ff;
 }

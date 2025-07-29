@@ -126,17 +126,29 @@
                 </div>
                 <div class="study-info">
                     <div class="patient-info" id="patient-info">
-                        Patient: - | Study Date: - | Modality: -
+                        <i class="fas fa-user-md"></i>
+                        <span class="patient-text">Patient: - | Study Date: - | Modality: -</span>
                     </div>
                     <div class="clinical-info-section" id="clinical-info-section" style="display: none;">
-                        <div class="clinical-info-header">
+                        <div class="clinical-info-header" onclick="toggleClinicalInfo()">
                             <h4><i class="fas fa-file-medical"></i> Clinical Information</h4>
-                            <button class="btn-toggle" onclick="toggleClinicalInfo()">
+                            <button class="btn-toggle">
                                 <i class="fas fa-chevron-up"></i>
                             </button>
                         </div>
                         <div class="clinical-info-content" id="clinical-info-content">
-                            <p id="clinical-info-text">No clinical information available</p>
+                            <div class="clinical-info-item">
+                                <label><i class="fas fa-notes-medical"></i> Clinical History:</label>
+                                <p id="clinical-info-text">No clinical information available</p>
+                            </div>
+                            <div class="clinical-info-item">
+                                <label><i class="fas fa-user-doctor"></i> Referring Physician:</label>
+                                <p id="referring-physician-text">-</p>
+                            </div>
+                            <div class="clinical-info-item">
+                                <label><i class="fas fa-hashtag"></i> Accession Number:</label>
+                                <p id="accession-number-text">-</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -327,6 +339,8 @@
                 .then(data => {
                     const section = document.getElementById('clinical-info-section');
                     const textElement = document.getElementById('clinical-info-text');
+                    const referringPhysicianText = document.getElementById('referring-physician-text');
+                    const accessionNumberText = document.getElementById('accession-number-text');
                     
                     if (data.clinical_info && data.clinical_info.trim()) {
                         textElement.textContent = data.clinical_info;
@@ -334,6 +348,18 @@
                     } else {
                         textElement.textContent = 'No clinical information available';
                         section.style.display = 'none';
+                    }
+
+                    if (data.referring_physician) {
+                        referringPhysicianText.textContent = data.referring_physician;
+                    } else {
+                        referringPhysicianText.textContent = '-';
+                    }
+
+                    if (data.accession_number) {
+                        accessionNumberText.textContent = data.accession_number;
+                    } else {
+                        accessionNumberText.textContent = '-';
                     }
                 })
                 .catch(error => {
