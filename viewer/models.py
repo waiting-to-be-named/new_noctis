@@ -1,6 +1,8 @@
 # dicom_viewer/models.py
 from django.db import models
 from django.contrib.auth.models import User
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 import json
 import os
 import pydicom
@@ -10,6 +12,68 @@ import numpy as np
 import io
 import base64
 from django.utils import timezone
+
+
+class UserProfile(models.Model):
+    """Extended user profile for medical imaging system"""
+    USER_TYPES = [
+        ('radiologist', 'Radiologist'),
+        ('technologist', 'Technologist'),
+        ('admin', 'Administrator'),
+        ('facility_staff', 'Facility Staff'),
+        ('resident', 'Resident'),
+        ('fellow', 'Fellow'),
+    ]
+    
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    user_type = models.CharField(max_length=20, choices=USER_TYPES, default='radiologist')
+    facility = models.ForeignKey('Facility', on_delete=models.SET_NULL, null=True, blank=True, related_name='staff')
+    medical_license = models.CharField(max_length=50, blank=True)
+    specialization = models.CharField(max_length=100, blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    is_active_staff = models.BooleanField(default=True)
+    profile_picture = models.ImageField(upload_to='profile_pictures/', null=True, blank=True)
+    bio = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['user__username']
+    
+    def __str__(self):
+        return f"{self.user.get_full_name() or self.user.username} ({self.get_user_type_display()})"
+    
+    @property
+    def display_name(self):
+        """Get display name for notifications and chats"""
+        if self.user.get_full_name():
+            return self.user.get_full_name()
+        return self.user.username
+    
+    @property
+    def role_display(self):
+        """Get role display for UI"""
+        return self.get_user_type_display()
+    
+    def can_access_facility(self, facility):
+        """Check if user can access a specific facility"""
+        if self.user.is_superuser:
+            return True
+        return self.facility == facility
+
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    """Create user profile when user is created"""
+    if created:
+        UserProfile.objects.create(user=instance)
+
+
+@receiver(post_save, sender=User)
+def save_user_profile(sender, instance, **kwargs):
+    """Save user profile when user is updated"""
+    if hasattr(instance, 'profile'):
+        instance.profile.save()
 
 
 class Facility(models.Model):
@@ -381,13 +445,18 @@ class Notification(models.Model):
         ('system_error', 'System Error'),
         ('system', 'System Message'),
         ('chat', 'Chat Message'),
+        ('user_mention', 'User Mention'),
+        ('facility_update', 'Facility Update'),
+        ('report_assigned', 'Report Assigned'),
     ]
     
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_notifications', null=True, blank=True)
     notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
     title = models.CharField(max_length=200)
     message = models.TextField()
     related_study = models.ForeignKey(DicomStudy, on_delete=models.CASCADE, null=True, blank=True)
+    related_facility = models.ForeignKey(Facility, on_delete=models.CASCADE, null=True, blank=True)
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -396,6 +465,13 @@ class Notification(models.Model):
     
     def __str__(self):
         return f"{self.notification_type}: {self.title}"
+    
+    @property
+    def sender_display_name(self):
+        """Get sender display name"""
+        if self.sender and hasattr(self.sender, 'profile'):
+            return self.sender.profile.display_name
+        return self.sender.get_full_name() or self.sender.username if self.sender else 'System'
 
 
 class ChatMessage(models.Model):
@@ -403,6 +479,8 @@ class ChatMessage(models.Model):
     MESSAGE_TYPES = [
         ('system_upload', 'System Upload'),
         ('user_chat', 'User Chat'),
+        ('facility_broadcast', 'Facility Broadcast'),
+        ('study_discussion', 'Study Discussion'),
     ]
     
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
@@ -419,3 +497,21 @@ class ChatMessage(models.Model):
     
     def __str__(self):
         return f"{self.sender.username} -> {self.recipient.username if self.recipient else 'Facility'}: {self.message[:50]}"
+    
+    @property
+    def sender_display_name(self):
+        """Get sender display name"""
+        if hasattr(self.sender, 'profile'):
+            return self.sender.profile.display_name
+        return self.sender.get_full_name() or self.sender.username
+    
+    @property
+    def sender_role(self):
+        """Get sender role"""
+        if hasattr(self.sender, 'profile'):
+            return self.sender.profile.role_display
+        return 'User'
+    
+    def is_facility_broadcast(self):
+        """Check if this is a facility broadcast message"""
+        return self.message_type == 'facility_broadcast' and self.facility and not self.recipient

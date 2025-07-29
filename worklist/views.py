@@ -7,7 +7,7 @@ from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.db.models import Q
 from viewer.models import (
-    DicomStudy, WorklistEntry, Facility, Report, 
+    UserProfile, DicomStudy, WorklistEntry, Facility, Report, 
     Notification, DicomSeries, DicomImage, ChatMessage
 )
 import json
@@ -17,6 +17,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 import io
+from django.contrib.auth.models import User
 
 
 class WorklistView(LoginRequiredMixin, ListView):
@@ -368,6 +369,8 @@ def get_notifications(request):
         'title': n.title,
         'message': n.message,
         'study_id': n.related_study.id if n.related_study else None,
+        'facility_id': n.related_facility.id if n.related_facility else None,
+        'sender_name': n.sender_display_name,
         'created_at': n.created_at.isoformat()
     } for n in notifications]
     
@@ -404,8 +407,10 @@ def api_notifications(request):
         'title': n.title,
         'message': n.message,
         'is_read': n.is_read,
+        'sender_name': n.sender_display_name,
         'created_at': n.created_at.isoformat(),
-        'related_study_id': n.related_study.id if n.related_study else None
+        'related_study_id': n.related_study.id if n.related_study else None,
+        'related_facility_id': n.related_facility.id if n.related_facility else None
     } for n in notifications]
     
     return JsonResponse({'notifications': data})
@@ -483,13 +488,15 @@ def api_chat_messages(request):
     
     data = [{
         'id': m.id,
-        'sender_name': m.sender.get_full_name() or m.sender.username,
+        'sender_name': m.sender_display_name,
+        'sender_role': m.sender_role,
         'recipient_name': m.recipient.get_full_name() or m.recipient.username if m.recipient else 'All',
         'message_type': m.message_type,
         'message': m.message,
         'is_read': m.is_read,
         'created_at': m.created_at.isoformat(),
-        'facility_name': m.facility.name if m.facility else None
+        'facility_name': m.facility.name if m.facility else None,
+        'is_broadcast': m.is_facility_broadcast()
     } for m in messages]
     
     return JsonResponse({'messages': data})
@@ -503,38 +510,74 @@ def api_chat_send(request):
         data = json.loads(request.body)
         message_text = data.get('message', '').strip()
         facility_id = data.get('facility_id')
+        recipient_id = data.get('recipient_id')
+        message_type = data.get('message_type', 'user_chat')
+        study_id = data.get('study_id')
         
         if not message_text:
             return JsonResponse({'success': False, 'error': 'Message cannot be empty'})
         
         facility = None
         recipient = None
+        related_study = None
         
+        # Get facility
         if facility_id:
             try:
                 facility = Facility.objects.get(id=facility_id)
-                # Find facility staff to send message to
-                # For now, we'll send to all facility users
             except Facility.DoesNotExist:
                 return JsonResponse({'success': False, 'error': 'Facility not found'})
+        
+        # Get recipient
+        if recipient_id:
+            try:
+                recipient = User.objects.get(id=recipient_id)
+            except User.DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Recipient not found'})
+        
+        # Get related study
+        if study_id:
+            try:
+                related_study = DicomStudy.objects.get(id=study_id)
+            except DicomStudy.DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Study not found'})
         
         # Create chat message
         chat_message = ChatMessage.objects.create(
             sender=request.user,
             recipient=recipient,
             facility=facility,
-            message_type='user_chat',
-            message=message_text
+            message_type=message_type,
+            message=message_text,
+            related_study=related_study
         )
         
-        # Create notification for recipient
+        # Create notifications for recipients
         if recipient:
+            # Direct message notification
             Notification.objects.create(
                 recipient=recipient,
+                sender=request.user,
                 notification_type='chat',
                 title='New Chat Message',
-                message=f'{request.user.get_full_name() or request.user.username}: {message_text[:50]}...'
+                message=f'{request.user.profile.display_name if hasattr(request.user, "profile") else request.user.get_full_name() or request.user.username}: {message_text[:50]}...',
+                related_facility=facility,
+                related_study=related_study
             )
+        elif facility and message_type == 'facility_broadcast':
+            # Facility broadcast - notify all facility staff
+            facility_staff = UserProfile.objects.filter(facility=facility, is_active_staff=True)
+            for staff_member in facility_staff:
+                if staff_member.user != request.user:
+                    Notification.objects.create(
+                        recipient=staff_member.user,
+                        sender=request.user,
+                        notification_type='chat',
+                        title='Facility Broadcast',
+                        message=f'{request.user.profile.display_name if hasattr(request.user, "profile") else request.user.get_full_name() or request.user.username}: {message_text[:50]}...',
+                        related_facility=facility,
+                        related_study=related_study
+                    )
         
         return JsonResponse({'success': True})
         
@@ -555,22 +598,123 @@ def api_chat_clear(request):
     return JsonResponse({'success': True, 'deleted_count': deleted_count})
 
 
-def create_notification(user, notification_type, title, message, related_study=None):
+def create_notification(user, notification_type, title, message, related_study=None, sender=None, related_facility=None):
     """Helper function to create notifications"""
     Notification.objects.create(
         recipient=user,
+        sender=sender,
         notification_type=notification_type,
         title=title,
         message=message,
-        related_study=related_study
+        related_study=related_study,
+        related_facility=related_facility
     )
 
 
 def create_system_upload_message(study, user):
-    """Create a system upload message when a study is uploaded"""
+    """Create system upload message for chat"""
     ChatMessage.objects.create(
         sender=user,
+        facility=study.facility,
         message_type='system_upload',
-        message=f'New study uploaded: {study.patient_name} - {study.study_description or study.modality}',
+        message=f'New study uploaded: {study.patient_name} ({study.modality})',
         related_study=study
     )
+
+
+@login_required
+def api_users_list(request):
+    """API endpoint to get list of users for chat/notifications"""
+    user_type = request.GET.get('user_type', 'all')
+    facility_id = request.GET.get('facility_id')
+    
+    users = User.objects.filter(is_active=True)
+    
+    # Filter by user type if specified
+    if user_type != 'all':
+        users = users.filter(profile__user_type=user_type)
+    
+    # Filter by facility if specified
+    if facility_id:
+        users = users.filter(profile__facility_id=facility_id)
+    
+    data = [{
+        'id': user.id,
+        'username': user.username,
+        'display_name': user.profile.display_name if hasattr(user, 'profile') else user.get_full_name() or user.username,
+        'user_type': user.profile.user_type if hasattr(user, 'profile') else 'user',
+        'role_display': user.profile.role_display if hasattr(user, 'profile') else 'User',
+        'facility_id': user.profile.facility.id if hasattr(user, 'profile') and user.profile.facility else None,
+        'facility_name': user.profile.facility.name if hasattr(user, 'profile') and user.profile.facility else None,
+        'is_active': user.profile.is_active_staff if hasattr(user, 'profile') else True
+    } for user in users]
+    
+    return JsonResponse({'users': data})
+
+
+@login_required
+def api_user_profile(request, user_id):
+    """API endpoint to get user profile details"""
+    try:
+        user = User.objects.get(id=user_id)
+        profile = user.profile if hasattr(user, 'profile') else None
+        
+        data = {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'display_name': profile.display_name if profile else user.get_full_name() or user.username,
+            'user_type': profile.user_type if profile else 'user',
+            'role_display': profile.role_display if profile else 'User',
+            'facility_id': profile.facility.id if profile and profile.facility else None,
+            'facility_name': profile.facility.name if profile and profile.facility else None,
+            'medical_license': profile.medical_license if profile else '',
+            'specialization': profile.specialization if profile else '',
+            'phone': profile.phone if profile else '',
+            'bio': profile.bio if profile else '',
+            'is_active_staff': profile.is_active_staff if profile else True,
+            'profile_picture_url': profile.profile_picture.url if profile and profile.profile_picture else None,
+            'created_at': profile.created_at.isoformat() if profile else None,
+            'updated_at': profile.updated_at.isoformat() if profile else None
+        }
+        
+        return JsonResponse({'user': data})
+        
+    except User.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=404)
+
+
+@login_required
+def api_facility_staff(request, facility_id):
+    """API endpoint to get facility staff members"""
+    try:
+        facility = Facility.objects.get(id=facility_id)
+        staff = UserProfile.objects.filter(facility=facility, is_active_staff=True)
+        
+        data = [{
+            'id': profile.user.id,
+            'username': profile.user.username,
+            'display_name': profile.display_name,
+            'user_type': profile.user_type,
+            'role_display': profile.role_display,
+            'medical_license': profile.medical_license,
+            'specialization': profile.specialization,
+            'phone': profile.phone,
+            'profile_picture_url': profile.profile_picture.url if profile.profile_picture else None
+        } for profile in staff]
+        
+        return JsonResponse({'staff': data})
+        
+    except Facility.DoesNotExist:
+        return JsonResponse({'error': 'Facility not found'}, status=404)
+
+
+@login_required
+def user_management(request):
+    """User management page for administrators"""
+    if not request.user.is_superuser:
+        return redirect('/worklist/')
+    
+    return render(request, 'admin/user_management.html')
