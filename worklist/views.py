@@ -159,54 +159,75 @@ def create_report(request, study_id):
         return JsonResponse({'error': 'Permission denied'}, status=403)
     
     if request.method == 'POST':
-        data = json.loads(request.body)
-        
-        # Get or create report
-        report, created = Report.objects.get_or_create(
-            study=study,
-            radiologist=request.user,
-            defaults={
-                'findings': data.get('findings', ''),
-                'impression': data.get('impression', ''),
-                'recommendations': data.get('recommendations', ''),
-                'status': 'draft'
-            }
-        )
-        
-        if not created:
-            report.findings = data.get('findings', report.findings)
-            report.impression = data.get('impression', report.impression)
-            report.recommendations = data.get('recommendations', report.recommendations)
+        try:
+            # Handle both JSON and form data
+            if request.content_type == 'application/json':
+                data = json.loads(request.body)
+            else:
+                # Handle form data
+                data = {
+                    'findings': request.POST.get('findings', ''),
+                    'impression': request.POST.get('impression', ''),
+                    'recommendations': request.POST.get('recommendations', ''),
+                    'finalize': request.POST.get('finalize', 'false').lower() == 'true'
+                }
             
-        if data.get('finalize'):
-            report.status = 'finalized'
-            report.finalized_at = timezone.now()
+            # Get or create report
+            report, created = Report.objects.get_or_create(
+                study=study,
+                radiologist=request.user,
+                defaults={
+                    'findings': data.get('findings', ''),
+                    'impression': data.get('impression', ''),
+                    'recommendations': data.get('recommendations', ''),
+                    'status': 'draft'
+                }
+            )
             
-            # Update worklist entry status to completed
-            worklist_entries = WorklistEntry.objects.filter(study=study)
-            for entry in worklist_entries:
-                entry.status = 'completed'
-                entry.save()
+            if not created:
+                report.findings = data.get('findings', report.findings)
+                report.impression = data.get('impression', report.impression)
+                report.recommendations = data.get('recommendations', report.recommendations)
+                
+            if data.get('finalize'):
+                report.status = 'finalized'
+                report.finalized_at = timezone.now()
+                
+                # Update worklist entry status to completed
+                worklist_entries = WorklistEntry.objects.filter(study=study)
+                for entry in worklist_entries:
+                    entry.status = 'completed'
+                    entry.save()
+                
+                # Create notification for facility
+                if study.facility:
+                    facility_users = study.facility.staff.all()
+                    for user in facility_users:
+                        Notification.objects.create(
+                            recipient=user,
+                            notification_type='report_ready',
+                            title=f'Report Ready: {study.patient_name}',
+                            message=f'The radiology report for {study.patient_name} is now available.',
+                            related_study=study
+                        )
             
-            # Create notification for facility
-            if study.facility:
-                facility_users = study.facility.staff.all()
-                for user in facility_users:
-                    Notification.objects.create(
-                        recipient=user,
-                        notification_type='report_ready',
-                        title=f'Report Ready: {study.patient_name}',
-                        message=f'The radiology report for {study.patient_name} is now available.',
-                        related_study=study
-                    )
-        
-        report.save()
-        
-        return JsonResponse({
-            'success': True,
-            'report_id': report.id,
-            'status': report.status
-        })
+            report.save()
+            
+            return JsonResponse({
+                'success': True,
+                'report_id': report.id,
+                'status': report.status
+            })
+        except json.JSONDecodeError as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'Invalid JSON data: {str(e)}'
+            }, status=400)
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'Error saving report: {str(e)}'
+            }, status=500)
     
     else:
         # GET request - check if it's an AJAX request or regular page load
@@ -247,11 +268,12 @@ def print_report(request, report_id):
     report = get_object_or_404(Report, id=report_id)
     study = report.study
     
-    # Check permissions
+    # Check permissions - allow all users to print finalized reports
     if not (request.user.is_superuser or 
             request.user.groups.filter(name='Radiologists').exists() or
             (hasattr(request.user, 'facility_staff') and 
-             request.user.facility_staff.facility == study.facility)):
+             request.user.facility_staff.facility == study.facility) or
+            report.status in ['finalized', 'printed']):
         return HttpResponse('Permission denied', status=403)
     
     # Create PDF

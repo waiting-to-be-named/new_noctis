@@ -16,6 +16,11 @@
                 <button class="btn btn-view" onclick="window.location.href='/home/'">
                     <i class="fas fa-home"></i> Home
                 </button>
+                {% if is_admin %}
+                <button class="btn btn-view" onclick="window.location.href='/dicom-server/config/'">
+                    <i class="fas fa-server"></i> DICOM Server
+                </button>
+                {% endif %}
                 {% if is_admin or is_radiologist %}
                 <div class="notification-area">
                     <button id="notification-bell" class="notification-bell" onclick="toggleNotifications()">
@@ -133,9 +138,13 @@
                                     {% endif %}
                                     {% endif %}
                                     {% if entry.study.reports.exists %}
-                                    <button class="btn btn-print" onclick="printReport({{ entry.study.reports.first.id }})">
-                                        <i class="fas fa-print"></i> Print
-                                    </button>
+                                        {% with report=entry.study.reports.first %}
+                                            {% if report.status == 'finalized' or report.status == 'printed' %}
+                                            <button class="btn btn-print" onclick="printReport({{ report.id }})">
+                                                <i class="fas fa-print"></i> Print
+                                            </button>
+                                            {% endif %}
+                                        {% endwith %}
                                     {% endif %}
                                     {% if is_admin %}
                                     <button class="btn btn-delete" onclick="deleteEntry({{ entry.id }}, '{{ entry.patient_name }}', '{{ entry.accession_number }}')">
