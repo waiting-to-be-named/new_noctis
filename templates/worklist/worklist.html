@@ -314,7 +314,24 @@
         }
         
         function viewStudy(entryId) {
-            window.location.href = `/worklist/entry/${entryId}/view/`;
+            // Get the study ID from the entry and redirect to viewer
+            fetch(`/worklist/entry/${entryId}/view/`)
+                .then(response => {
+                    if (response.redirected) {
+                        window.location.href = response.url;
+                    } else {
+                        return response.json();
+                    }
+                })
+                .then(data => {
+                    if (data && data.error) {
+                        alert(data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error viewing study:', error);
+                    alert('Error opening study viewer');
+                });
         }
         
         function addClinicalInfo(entryId) {
