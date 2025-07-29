@@ -1,7 +1,7 @@
 // static/js/dicom_viewer.js
 
 class DicomViewer {
-    constructor() {
+    constructor(initialStudyId = null) {
         this.canvas = document.getElementById('dicom-canvas');
         this.ctx = this.canvas.getContext('2d');
         
@@ -62,17 +62,26 @@ class DicomViewer {
         // Notifications
         this.notificationCheckInterval = null;
         
+        // Store initial study ID
+        this.initialStudyId = initialStudyId;
+        
         this.init();
     }
     
-    init() {
+    async init() {
         this.setupCanvas();
         this.setupEventListeners();
-        this.loadBackendStudies();
+        await this.loadBackendStudies();
         this.setupNotifications();
         this.setupMeasurementUnitSelector();
         this.setup3DControls();
         this.setupAIPanel();
+        
+        // Load initial study if provided
+        if (this.initialStudyId) {
+            console.log('Loading initial study:', this.initialStudyId);
+            await this.loadStudy(this.initialStudyId);
+        }
     }
     
     setupCanvas() {
@@ -580,6 +589,7 @@ class DicomViewer {
     
     async loadStudy(studyId) {
         try {
+            console.log(`Loading study ${studyId}...`);
             const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
             
             if (!response.ok) {
@@ -592,6 +602,8 @@ class DicomViewer {
                 throw new Error('No images found in this study');
             }
             
+            console.log(`Found ${data.images.length} images in study`);
+            
             this.currentStudy = data.study;
             this.currentSeries = data.series || null;
             this.currentImages = data.images;
@@ -600,7 +612,17 @@ class DicomViewer {
             // Update UI
             this.updatePatientInfo();
             this.updateSliders();
-            this.loadCurrentImage();
+            
+            // Load the first image
+            await this.loadCurrentImage();
+            
+            // Update study selector if available
+            const studySelect = document.getElementById('backend-studies');
+            if (studySelect) {
+                studySelect.value = studyId;
+            }
+            
+            console.log('Study loaded successfully');
             
         } catch (error) {
             console.error('Error loading study:', error);
@@ -615,6 +637,7 @@ class DicomViewer {
         }
         
         const imageData = this.currentImages[this.currentImageIndex];
+        console.log(`Loading image ${this.currentImageIndex + 1}/${this.currentImages.length}, ID: ${imageData.id}`);
         
         try {
             const params = new URLSearchParams({
@@ -634,6 +657,7 @@ class DicomViewer {
             if (data.image_data) {
                 const img = new Image();
                 img.onload = () => {
+                    console.log('Image loaded successfully');
                     this.currentImage = {
                         image: img,
                         metadata: data.metadata,
@@ -2336,5 +2360,7 @@ class DicomViewer {
 // Initialize the viewer when the page loads
 let viewer;
 document.addEventListener('DOMContentLoaded', () => {
-    viewer = new DicomViewer();
+    // Get initial study ID from global variable (if set by template)
+    const initialStudyId = window.initialStudyId || null;
+    viewer = new DicomViewer(initialStudyId);
 });
