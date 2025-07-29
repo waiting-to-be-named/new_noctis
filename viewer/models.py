@@ -144,8 +144,9 @@ class DicomImage(models.Model):
                 print(f"File path from model: {self.file_path}")
                 # Try alternative paths
                 alt_paths = [
-                    os.path.join(os.getcwd(), 'media', str(self.file_path).replace('dicom_files/', '')),
+                    os.path.join(os.getcwd(), 'media', str(self.file_path)),
                     os.path.join(os.getcwd(), str(self.file_path)),
+                    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'media', str(self.file_path)),
                     str(self.file_path)
                 ]
                 for alt_path in alt_paths:
