@@ -5,6 +5,10 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
+from django.contrib.auth.hashers import make_password, check_password
+from django.contrib.auth import login as auth_login
+from django.contrib.auth import logout as auth_logout
+from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User, Group
 from django.views.generic import TemplateView, ListView, CreateView, UpdateView
@@ -21,10 +25,16 @@ from datetime import datetime
 import numpy as np
 from .models import (
     DicomStudy, DicomSeries, DicomImage, Measurement, Annotation,
-    Facility, Report, WorklistEntry, AIAnalysis, Notification
+    Facility, Report, WorklistEntry, AIAnalysis, Notification, FacilityUser
 )
 from django.contrib.auth.models import Group
 from .serializers import DicomStudySerializer, DicomImageSerializer
+from django.utils import timezone
+from skimage import feature, morphology, filters
+from scipy import ndimage
+from skimage.transform import hough_line, hough_line_peaks
+from skimage.transform import hough_circle, hough_circle_peaks
+from skimage.measure import regionprops
 
 
 # Ensure required directories exist
@@ -81,19 +91,137 @@ class HomeView(TemplateView):
     template_name = 'home.html'
 
 
+class FacilityLoginView(TemplateView):
+    """Facility login page"""
+    template_name = 'facility/login.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['facilities'] = Facility.objects.all()
+        return context
+    
+    def post(self, request, *args, **kwargs):
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        
+        try:
+            facility_user = FacilityUser.objects.get(username=username, is_active=True)
+            if check_password(password, facility_user.password):
+                # Store facility user in session
+                request.session['facility_user_id'] = facility_user.id
+                request.session['facility_id'] = facility_user.facility.id
+                request.session['facility_name'] = facility_user.facility.name
+                
+                # Update last login
+                facility_user.last_login = timezone.now()
+                facility_user.save()
+                
+                messages.success(request, f'Welcome back, {facility_user.facility.name}!')
+                return redirect('viewer:facility_dashboard')
+            else:
+                messages.error(request, 'Invalid password.')
+        except FacilityUser.DoesNotExist:
+            messages.error(request, 'Invalid username or account is inactive.')
+        
+        return self.get(request, *args, **kwargs)
+
+
+class FacilityDashboardView(TemplateView):
+    """Facility dashboard showing only their studies"""
+    template_name = 'facility/dashboard.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Check if facility user is logged in
+        facility_user_id = self.request.session.get('facility_user_id')
+        if not facility_user_id:
+            return redirect('viewer:facility_login')
+        
+        try:
+            facility_user = FacilityUser.objects.get(id=facility_user_id)
+            context['facility_user'] = facility_user
+            context['facility'] = facility_user.facility
+            
+            # Get only studies uploaded by this facility
+            studies = DicomStudy.objects.filter(
+                facility=facility_user.facility
+            ).order_by('-created_at')
+            
+            context['studies'] = studies
+            context['total_studies'] = studies.count()
+            context['recent_studies'] = studies[:5]
+            
+        except FacilityUser.DoesNotExist:
+            messages.error(self.request, 'Invalid facility session.')
+            return redirect('viewer:facility_login')
+        
+        return context
+
+
+def facility_logout(request):
+    """Logout facility user"""
+    # Clear session data
+    request.session.pop('facility_user_id', None)
+    request.session.pop('facility_id', None)
+    request.session.pop('facility_name', None)
+    
+    messages.success(request, 'You have been logged out successfully.')
+    return redirect('viewer:facility_login')
+
+
+def is_facility_user(request):
+    """Check if user is a facility user"""
+    return 'facility_user_id' in request.session
+
+
+class FacilityRequiredMixin:
+    """Mixin to require facility user access"""
+    def dispatch(self, request, *args, **kwargs):
+        if not is_facility_user(request):
+            return redirect('viewer:facility_login')
+        return super().dispatch(request, *args, **kwargs)
+
+
 class DicomViewerView(TemplateView):
     """Main DICOM viewer page"""
     template_name = 'dicom_viewer/viewer.html'
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['studies'] = DicomStudy.objects.all()[:10]  # Recent studies
+        
+        # Check if facility user is logged in
+        if is_facility_user(self.request):
+            facility_user_id = self.request.session.get('facility_user_id')
+            try:
+                facility_user = FacilityUser.objects.get(id=facility_user_id)
+                # Only show studies for this facility
+                context['studies'] = DicomStudy.objects.filter(
+                    facility=facility_user.facility
+                ).order_by('-created_at')[:10]
+                context['is_facility_user'] = True
+                context['facility_name'] = facility_user.facility.name
+            except FacilityUser.DoesNotExist:
+                context['studies'] = DicomStudy.objects.all()[:10]
+        else:
+            # Show all studies for admin/radiologist
+            context['studies'] = DicomStudy.objects.all()[:10]
+            context['is_facility_user'] = False
         
         # Check if we have a study_id parameter
         study_id = kwargs.get('study_id')
         if study_id:
             try:
                 study = DicomStudy.objects.get(id=study_id)
+                
+                # Check if facility user can access this study
+                if is_facility_user(self.request):
+                    facility_user_id = self.request.session.get('facility_user_id')
+                    facility_user = FacilityUser.objects.get(id=facility_user_id)
+                    if study.facility != facility_user.facility:
+                        context['initial_study_error'] = 'Access denied: You can only view studies from your facility.'
+                        return context
+                
                 context['initial_study_id'] = study_id
                 context['initial_study'] = study
                 
@@ -141,7 +269,33 @@ class FacilityCreateView(AdminRequiredMixin, CreateView):
     success_url = reverse_lazy('viewer:facility_list')
     
     def form_valid(self, form):
-        messages.success(self.request, f'Facility "{form.instance.name}" created successfully.')
+        # Save the facility first
+        facility = form.save()
+        
+        # Get username and password from form
+        username = self.request.POST.get('facility_username')
+        password = self.request.POST.get('facility_password')
+        email = self.request.POST.get('email')
+        
+        if username and password:
+            # Check if username already exists
+            if FacilityUser.objects.filter(username=username).exists():
+                messages.error(self.request, f'Username "{username}" already exists.')
+                facility.delete()  # Rollback facility creation
+                return self.form_invalid(form)
+            
+            # Create facility user
+            facility_user = FacilityUser.objects.create(
+                facility=facility,
+                username=username,
+                password=make_password(password),
+                email=email
+            )
+            
+            messages.success(self.request, f'Facility "{facility.name}" and user "{username}" created successfully.')
+        else:
+            messages.warning(self.request, f'Facility "{facility.name}" created but no user credentials were provided.')
+        
         return super().form_valid(form)
 
 
@@ -153,7 +307,38 @@ class FacilityUpdateView(AdminRequiredMixin, UpdateView):
     success_url = reverse_lazy('viewer:facility_list')
     
     def form_valid(self, form):
-        messages.success(self.request, f'Facility "{form.instance.name}" updated successfully.')
+        # Get username and password from form
+        username = self.request.POST.get('facility_username')
+        password = self.request.POST.get('facility_password')
+        
+        if username and password:
+            # Check if username already exists (excluding current facility)
+            existing_user = FacilityUser.objects.filter(username=username).exclude(facility=self.object).first()
+            if existing_user:
+                messages.error(self.request, f'Username "{username}" already exists.')
+                return self.form_invalid(form)
+            
+            # Update or create facility user
+            facility_user, created = FacilityUser.objects.get_or_create(
+                facility=self.object,
+                defaults={
+                    'username': username,
+                    'password': make_password(password),
+                    'email': self.request.POST.get('email')
+                }
+            )
+            
+            if not created:
+                # Update existing user
+                facility_user.username = username
+                facility_user.password = make_password(password)
+                facility_user.email = self.request.POST.get('email')
+                facility_user.save()
+            
+            messages.success(self.request, f'Facility "{form.instance.name}" and user "{username}" updated successfully.')
+        else:
+            messages.success(self.request, f'Facility "{form.instance.name}" updated successfully.')
+        
         return super().form_valid(form)
 
 
@@ -1255,45 +1440,588 @@ def clear_measurements(request, image_id):
 @csrf_exempt
 @require_http_methods(['POST'])
 def perform_ai_analysis(request, image_id):
-    """Perform AI analysis on image (placeholder implementation)"""
+    """Perform AI analysis on DICOM image with enhanced diagnosis capabilities"""
     try:
-        image = DicomImage.objects.get(id=image_id)
+        image = get_object_or_404(DicomImage, id=image_id)
         
-        # This is a placeholder - would integrate with actual AI models
-        # For now, return mock results
-        mock_results = {
-            'analysis_type': 'anomaly_detection',
-            'summary': 'AI analysis completed. No significant abnormalities detected.',
-            'confidence_score': 0.85,
-            'findings': [
-                {
-                    'type': 'Normal structure',
-                    'location': {'x': 100, 'y': 150},
-                    'size': 25,
-                    'confidence': 0.9
-                }
-            ],
-            'highlighted_regions': [
-                {'x': 90, 'y': 140, 'width': 20, 'height': 20, 'type': 'normal'}
-            ]
-        }
+        # Get pixel data
+        pixel_array = image.get_pixel_array()
+        if pixel_array is None:
+            return JsonResponse({'error': 'Could not load image data'}, status=400)
         
-        # Save AI analysis result
+        # Enhanced AI analysis with multiple detection capabilities
+        analysis_results = perform_enhanced_ai_analysis(pixel_array, image)
+        
+        # Save analysis results
         ai_analysis = AIAnalysis.objects.create(
             image=image,
-            analysis_type='anomaly_detection',
-            findings=mock_results['findings'],
-            summary=mock_results['summary'],
-            confidence_score=mock_results['confidence_score'],
-            highlighted_regions=mock_results['highlighted_regions']
+            analysis_type='enhanced_diagnosis',
+            findings=analysis_results['findings'],
+            summary=analysis_results['summary'],
+            confidence_score=analysis_results['confidence'],
+            highlighted_regions=analysis_results['regions']
         )
         
-        return JsonResponse(mock_results)
+        return JsonResponse({
+            'success': True,
+            'analysis': {
+                'id': ai_analysis.id,
+                'summary': analysis_results['summary'],
+                'findings': analysis_results['findings'],
+                'confidence': analysis_results['confidence'],
+                'recommendations': analysis_results['recommendations'],
+                'regions': analysis_results['regions']
+            }
+        })
         
-    except DicomImage.DoesNotExist:
-        return JsonResponse({'error': 'Image not found'}, status=404)
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+        print(f"AI Analysis error: {e}")
+        return JsonResponse({'error': 'AI analysis failed'}, status=500)
+
+
+def perform_enhanced_ai_analysis(pixel_array, image):
+    """Enhanced AI analysis with multiple detection capabilities"""
+    import numpy as np
+    from scipy import ndimage
+    from skimage import feature, morphology, filters
+    
+    # Normalize pixel array
+    normalized = (pixel_array - pixel_array.min()) / (pixel_array.max() - pixel_array.min())
+    
+    # Initialize results
+    findings = {}
+    regions = []
+    confidence = 0.0
+    recommendations = []
+    
+    # 1. Anatomical Structure Detection
+    anatomical_findings = detect_anatomical_structures(normalized, image)
+    findings.update(anatomical_findings)
+    
+    # 2. Pathology Detection
+    pathology_findings = detect_pathologies(normalized, image)
+    findings.update(pathology_findings)
+    
+    # 3. Image Quality Assessment
+    quality_findings = assess_image_quality(normalized, image)
+    findings.update(quality_findings)
+    
+    # 4. Artifact Detection
+    artifact_findings = detect_artifacts(normalized, image)
+    findings.update(artifact_findings)
+    
+    # Calculate overall confidence
+    confidence = calculate_confidence(findings)
+    
+    # Generate summary and recommendations
+    summary = generate_ai_summary(findings, image)
+    recommendations = generate_recommendations(findings, image)
+    
+    return {
+        'findings': findings,
+        'summary': summary,
+        'confidence': confidence,
+        'recommendations': recommendations,
+        'regions': regions
+    }
+
+
+def detect_anatomical_structures(image, dicom_image):
+    """Detect anatomical structures in the image"""
+    findings = {}
+    
+    # Edge detection for structure identification
+    edges = feature.canny(image, sigma=1)
+    
+    # Morphological operations to identify structures
+    kernel = morphology.disk(3)
+    closed = morphology.closing(edges, kernel)
+    
+    # Label connected components
+    labeled, num_features = ndimage.label(closed)
+    
+    # Analyze structures based on modality
+    modality = dicom_image.series.study.modality.lower()
+    
+    if modality in ['ct', 'computed tomography']:
+        findings['anatomical_structures'] = detect_ct_structures(image, labeled, num_features)
+    elif modality in ['mr', 'magnetic resonance']:
+        findings['anatomical_structures'] = detect_mr_structures(image, labeled, num_features)
+    elif modality in ['xr', 'x-ray', 'cr']:
+        findings['anatomical_structures'] = detect_xray_structures(image, labeled, num_features)
+    
+    return findings
+
+
+def detect_pathologies(image, dicom_image):
+    """Detect potential pathologies in the image"""
+    findings = {}
+    
+    # Apply various filters for pathology detection
+    # Gaussian blur for noise reduction
+    blurred = filters.gaussian(image, sigma=1)
+    
+    # Detect potential lesions/masses
+    lesions = detect_potential_lesions(blurred, image)
+    if lesions:
+        findings['potential_lesions'] = lesions
+    
+    # Detect calcifications
+    calcifications = detect_calcifications(image)
+    if calcifications:
+        findings['calcifications'] = calcifications
+    
+    # Detect fractures (for bone imaging)
+    modality = dicom_image.series.study.modality.lower()
+    if modality in ['ct', 'xr', 'cr']:
+        fractures = detect_fractures(image)
+        if fractures:
+            findings['potential_fractures'] = fractures
+    
+    # Detect fluid collections
+    fluid = detect_fluid_collections(image)
+    if fluid:
+        findings['fluid_collections'] = fluid
+    
+    return findings
+
+
+def detect_potential_lesions(blurred_image, original_image):
+    """Detect potential lesions using intensity and texture analysis"""
+    lesions = []
+    
+    # Threshold-based detection
+    threshold = np.percentile(blurred_image, 85)
+    potential_regions = blurred_image > threshold
+    
+    # Morphological operations to clean up regions
+    kernel = morphology.disk(2)
+    cleaned = morphology.opening(potential_regions, kernel)
+    
+    # Label regions
+    labeled, num_regions = ndimage.label(cleaned)
+    
+    for i in range(1, num_regions + 1):
+        region = labeled == i
+        if np.sum(region) > 50:  # Minimum size threshold
+            # Calculate region properties
+            props = regionprops(region, original_image)[0]
+            
+            lesion_info = {
+                'type': 'potential_mass',
+                'size': props.area,
+                'intensity': props.mean_intensity,
+                'location': props.centroid,
+                'confidence': min(0.8, props.area / 1000)  # Simple confidence based on size
+            }
+            lesions.append(lesion_info)
+    
+    return lesions
+
+
+def detect_calcifications(image):
+    """Detect calcifications in the image"""
+    calcifications = []
+    
+    # High-intensity threshold for calcifications
+    threshold = np.percentile(image, 95)
+    calc_regions = image > threshold
+    
+    # Morphological operations
+    kernel = morphology.disk(1)
+    cleaned = morphology.opening(calc_regions, kernel)
+    
+    # Label regions
+    labeled, num_regions = ndimage.label(cleaned)
+    
+    for i in range(1, num_regions + 1):
+        region = labeled == i
+        if 10 < np.sum(region) < 500:  # Size range for calcifications
+            props = regionprops(region, image)[0]
+            
+            calc_info = {
+                'type': 'calcification',
+                'size': props.area,
+                'intensity': props.mean_intensity,
+                'location': props.centroid,
+                'confidence': 0.7
+            }
+            calcifications.append(calc_info)
+    
+    return calcifications
+
+
+def detect_fractures(image):
+    """Detect potential fractures using edge detection"""
+    fractures = []
+    
+    # Edge detection
+    edges = feature.canny(image, sigma=1)
+    
+    # Line detection using Hough transform
+    from skimage.transform import hough_line, hough_line_peaks
+    
+    h, theta, d = hough_line(edges)
+    peaks = hough_line_peaks(h, theta, d, num_peaks=10)
+    
+    for _, angle, dist in zip(*peaks):
+        if 30 < abs(angle) < 150:  # Potential fracture angles
+            fracture_info = {
+                'type': 'potential_fracture',
+                'angle': angle,
+                'distance': dist,
+                'confidence': 0.6
+            }
+            fractures.append(fracture_info)
+    
+    return fractures
+
+
+def detect_fluid_collections(image):
+    """Detect fluid collections based on intensity patterns"""
+    fluid = []
+    
+    # Low-intensity regions with smooth boundaries
+    threshold = np.percentile(image, 30)
+    fluid_regions = image < threshold
+    
+    # Morphological operations
+    kernel = morphology.disk(5)
+    closed = morphology.closing(fluid_regions, kernel)
+    
+    # Label regions
+    labeled, num_regions = ndimage.label(closed)
+    
+    for i in range(1, num_regions + 1):
+        region = labeled == i
+        if np.sum(region) > 100:  # Minimum size
+            props = regionprops(region, image)[0]
+            
+            # Check for smooth boundaries (low perimeter/area ratio)
+            if props.perimeter / props.area < 0.1:
+                fluid_info = {
+                    'type': 'fluid_collection',
+                    'size': props.area,
+                    'intensity': props.mean_intensity,
+                    'location': props.centroid,
+                    'confidence': 0.7
+                }
+                fluid.append(fluid_info)
+    
+    return fluid
+
+
+def assess_image_quality(image, dicom_image):
+    """Assess the quality of the DICOM image"""
+    findings = {}
+    
+    # Signal-to-noise ratio estimation
+    noise_level = estimate_noise(image)
+    signal_level = np.mean(image)
+    snr = signal_level / (noise_level + 1e-6)
+    
+    findings['signal_to_noise_ratio'] = snr
+    findings['noise_level'] = noise_level
+    
+    # Contrast assessment
+    contrast = np.std(image)
+    findings['contrast'] = contrast
+    
+    # Sharpness assessment using Laplacian variance
+    laplacian = filters.laplace(image)
+    sharpness = np.var(laplacian)
+    findings['sharpness'] = sharpness
+    
+    # Quality classification
+    if snr > 10 and contrast > 0.1 and sharpness > 0.01:
+        findings['quality_rating'] = 'excellent'
+    elif snr > 5 and contrast > 0.05 and sharpness > 0.005:
+        findings['quality_rating'] = 'good'
+    else:
+        findings['quality_rating'] = 'poor'
+    
+    return findings
+
+
+def detect_artifacts(image, dicom_image):
+    """Detect imaging artifacts"""
+    findings = {}
+    
+    # Motion artifacts (streaking)
+    motion_artifacts = detect_motion_artifacts(image)
+    if motion_artifacts:
+        findings['motion_artifacts'] = motion_artifacts
+    
+    # Beam hardening artifacts
+    beam_artifacts = detect_beam_hardening(image)
+    if beam_artifacts:
+        findings['beam_hardening_artifacts'] = beam_artifacts
+    
+    # Ring artifacts
+    ring_artifacts = detect_ring_artifacts(image)
+    if ring_artifacts:
+        findings['ring_artifacts'] = ring_artifacts
+    
+    return findings
+
+
+def detect_motion_artifacts(image):
+    """Detect motion artifacts using directional analysis"""
+    artifacts = []
+    
+    # Apply directional filters
+    from skimage.filters import sobel_h, sobel_v
+    
+    horizontal_edges = sobel_h(image)
+    vertical_edges = sobel_v(image)
+    
+    # Look for strong horizontal streaks
+    h_streaks = horizontal_edges > np.percentile(horizontal_edges, 95)
+    v_streaks = vertical_edges > np.percentile(vertical_edges, 95)
+    
+    if np.sum(h_streaks) > 100 or np.sum(v_streaks) > 100:
+        artifacts.append({
+            'type': 'motion_artifact',
+            'direction': 'horizontal' if np.sum(h_streaks) > np.sum(v_streaks) else 'vertical',
+            'severity': 'moderate',
+            'confidence': 0.6
+        })
+    
+    return artifacts
+
+
+def detect_beam_hardening(image):
+    """Detect beam hardening artifacts"""
+    artifacts = []
+    
+    # Look for cupping artifacts (bright center, dark edges)
+    center_region = image[image.shape[0]//4:3*image.shape[0]//4, 
+                         image.shape[1]//4:3*image.shape[1]//4]
+    edge_region = image - center_region
+    
+    if np.mean(center_region) > np.mean(edge_region) * 1.2:
+        artifacts.append({
+            'type': 'beam_hardening',
+            'severity': 'mild',
+            'confidence': 0.5
+        })
+    
+    return artifacts
+
+
+def detect_ring_artifacts(image):
+    """Detect ring artifacts using circular Hough transform"""
+    artifacts = []
+    
+    # Edge detection
+    edges = feature.canny(image, sigma=1)
+    
+    # Look for circular patterns
+    from skimage.transform import hough_circle, hough_circle_peaks
+    
+    hough_radii = np.arange(10, 50, 2)
+    hough_res = hough_circle(edges, hough_radii)
+    
+    # Find peaks
+    accums, cx, cy, radii = hough_circle_peaks(hough_res, hough_radii, 
+                                               total_num_peaks=5)
+    
+    if len(accums) > 0:
+        artifacts.append({
+            'type': 'ring_artifact',
+            'count': len(accums),
+            'confidence': 0.7
+        })
+    
+    return artifacts
+
+
+def estimate_noise(image):
+    """Estimate noise level in the image"""
+    # Use Laplacian filter to estimate noise
+    laplacian = filters.laplace(image)
+    noise_level = np.std(laplacian)
+    return noise_level
+
+
+def calculate_confidence(findings):
+    """Calculate overall confidence based on findings"""
+    confidence = 0.5  # Base confidence
+    
+    # Increase confidence based on number and quality of findings
+    if 'anatomical_structures' in findings:
+        confidence += 0.2
+    
+    if 'potential_lesions' in findings:
+        confidence += 0.15
+    
+    if 'quality_rating' in findings and findings['quality_rating'] == 'excellent':
+        confidence += 0.1
+    
+    return min(0.95, confidence)
+
+
+def generate_ai_summary(findings, image):
+    """Generate a comprehensive AI analysis summary"""
+    summary_parts = []
+    
+    # Anatomical structures
+    if 'anatomical_structures' in findings:
+        structures = findings['anatomical_structures']
+        summary_parts.append(f"Identified {len(structures)} anatomical structures.")
+    
+    # Pathologies
+    pathologies = []
+    if 'potential_lesions' in findings:
+        pathologies.append(f"{len(findings['potential_lesions'])} potential lesions")
+    if 'calcifications' in findings:
+        pathologies.append(f"{len(findings['calcifications'])} calcifications")
+    if 'potential_fractures' in findings:
+        pathologies.append(f"{len(findings['potential_fractures'])} potential fractures")
+    if 'fluid_collections' in findings:
+        pathologies.append(f"{len(findings['fluid_collections'])} fluid collections")
+    
+    if pathologies:
+        summary_parts.append(f"Detected: {', '.join(pathologies)}.")
+    
+    # Quality assessment
+    if 'quality_rating' in findings:
+        summary_parts.append(f"Image quality: {findings['quality_rating']}.")
+    
+    # Artifacts
+    artifacts = []
+    if 'motion_artifacts' in findings:
+        artifacts.append("motion artifacts")
+    if 'beam_hardening_artifacts' in findings:
+        artifacts.append("beam hardening")
+    if 'ring_artifacts' in findings:
+        artifacts.append("ring artifacts")
+    
+    if artifacts:
+        summary_parts.append(f"Artifacts detected: {', '.join(artifacts)}.")
+    
+    if not summary_parts:
+        summary_parts.append("No significant findings detected.")
+    
+    return " ".join(summary_parts)
+
+
+def generate_recommendations(findings, image):
+    """Generate clinical recommendations based on findings"""
+    recommendations = []
+    
+    # Quality-based recommendations
+    if 'quality_rating' in findings:
+        if findings['quality_rating'] == 'poor':
+            recommendations.append("Consider repeating the study with improved technique.")
+    
+    # Pathology-based recommendations
+    if 'potential_lesions' in findings:
+        recommendations.append("Further evaluation recommended for detected lesions.")
+    
+    if 'potential_fractures' in findings:
+        recommendations.append("Orthopedic consultation recommended.")
+    
+    if 'fluid_collections' in findings:
+        recommendations.append("Consider additional imaging for fluid collection evaluation.")
+    
+    # Artifact-based recommendations
+    if 'motion_artifacts' in findings:
+        recommendations.append("Patient motion detected. Consider repeat acquisition.")
+    
+    if not recommendations:
+        recommendations.append("No immediate action required.")
+    
+    return recommendations
+
+
+def detect_ct_structures(image, labeled, num_features):
+    """Detect CT-specific anatomical structures"""
+    structures = []
+    
+    # Analyze each labeled region
+    for i in range(1, num_features + 1):
+        region = labeled == i
+        if np.sum(region) > 100:  # Minimum size
+            props = regionprops(region, image)[0]
+            
+            # Classify based on intensity and shape
+            intensity = props.mean_intensity
+            
+            if intensity > 0.7:
+                structure_type = 'bone'
+            elif intensity > 0.4:
+                structure_type = 'soft_tissue'
+            else:
+                structure_type = 'air'
+            
+            structures.append({
+                'type': structure_type,
+                'size': props.area,
+                'intensity': intensity,
+                'location': props.centroid
+            })
+    
+    return structures
+
+
+def detect_mr_structures(image, labeled, num_features):
+    """Detect MR-specific anatomical structures"""
+    structures = []
+    
+    # MR structures are more complex, use intensity-based classification
+    for i in range(1, num_features + 1):
+        region = labeled == i
+        if np.sum(region) > 50:
+            props = regionprops(region, image)[0]
+            
+            intensity = props.mean_intensity
+            
+            if intensity > 0.8:
+                structure_type = 'fat'
+            elif intensity > 0.6:
+                structure_type = 'muscle'
+            elif intensity > 0.3:
+                structure_type = 'fluid'
+            else:
+                structure_type = 'air'
+            
+            structures.append({
+                'type': structure_type,
+                'size': props.area,
+                'intensity': intensity,
+                'location': props.centroid
+            })
+    
+    return structures
+
+
+def detect_xray_structures(image, labeled, num_features):
+    """Detect X-ray specific anatomical structures"""
+    structures = []
+    
+    for i in range(1, num_features + 1):
+        region = labeled == i
+        if np.sum(region) > 100:
+            props = regionprops(region, image)[0]
+            
+            intensity = props.mean_intensity
+            
+            if intensity > 0.7:
+                structure_type = 'bone'
+            elif intensity > 0.4:
+                structure_type = 'soft_tissue'
+            else:
+                structure_type = 'air'
+            
+            structures.append({
+                'type': structure_type,
+                'size': props.area,
+                'intensity': intensity,
+                'location': props.centroid
+            })
+    
+    return structures
 
 
 @api_view(['GET'])
