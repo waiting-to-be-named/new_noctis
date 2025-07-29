@@ -16,6 +16,9 @@
                 <button class="btn btn-view" onclick="window.location.href='/home/'">
                     <i class="fas fa-home"></i> Home
                 </button>
+                <button class="btn btn-print" onclick="printWorklist()">
+                    <i class="fas fa-print"></i> Print Worklist
+                </button>
                 {% if is_admin or is_radiologist %}
                 <div class="notification-area">
                     <button id="notification-bell" class="notification-bell" onclick="toggleNotifications()">
@@ -724,6 +727,116 @@
         checkNotifications();
         setInterval(checkNotifications, 30000);
         {% endif %}
+        
+        // Print worklist functionality
+        function printWorklist() {
+            // Store original title
+            const originalTitle = document.title;
+            
+            // Set print-friendly title
+            document.title = 'Noctis Worklist - ' + new Date().toLocaleDateString();
+            
+            // Add print class to body
+            document.body.classList.add('printing');
+            
+            // Print
+            window.print();
+            
+            // Remove print class and restore title
+            document.body.classList.remove('printing');
+            document.title = originalTitle;
+        }
     </script>
+    
+    <style>
+        @media print {
+            /* Hide non-essential elements when printing */
+            .header-actions,
+            .upload-section,
+            .filters,
+            .pagination,
+            .clinical-modal,
+            .notifications-panel,
+            .chat-panel,
+            .btn-view,
+            .btn-clinical,
+            .btn-report,
+            .btn-print,
+            .btn-delete {
+                display: none !important;
+            }
+            
+            /* Reset colors for print */
+            body {
+                background: white;
+                color: black;
+            }
+            
+            .worklist-container {
+                padding: 0;
+                height: auto;
+            }
+            
+            .header {
+                background: white;
+                border-bottom: 2px solid black;
+                padding: 10px 0;
+            }
+            
+            .header h1 {
+                color: black;
+                font-size: 20px;
+            }
+            
+            /* Make table print-friendly */
+            .worklist-table-container {
+                overflow: visible;
+                height: auto;
+                margin: 0;
+            }
+            
+            .worklist-table {
+                border: 1px solid black;
+            }
+            
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 10pt;
+            }
+            
+            th, td {
+                border: 1px solid black;
+                padding: 5px;
+                background: white;
+                color: black;
+            }
+            
+            th {
+                background: #f0f0f0;
+                font-weight: bold;
+            }
+            
+            .status-badge {
+                background: none;
+                color: black;
+                padding: 2px 5px;
+                border: 1px solid black;
+            }
+            
+            /* Add print date/time */
+            .header::after {
+                content: "Printed: " attr(data-print-date);
+                display: block;
+                font-size: 12px;
+                margin-top: 5px;
+            }
+        }
+        
+        /* Add print date dynamically */
+        body.printing .header::after {
+            content: "Printed: " attr(data-print-date);
+        }
+    </style>
 </body>
 </html>

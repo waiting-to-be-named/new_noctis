@@ -137,6 +137,9 @@
                 <button class="btn btn-view" onclick="window.location.href='/worklist/'">
                     <i class="fas fa-arrow-left"></i> Back to Main Worklist
                 </button>
+                <button class="btn btn-print" onclick="printWorklist()">
+                    <i class="fas fa-print"></i> Print Worklist
+                </button>
                 <button class="btn btn-logout" onclick="window.location.href='/accounts/logout/'">
                     <i class="fas fa-sign-out-alt"></i> Logout
                 </button>
@@ -250,6 +253,24 @@
         function printReport(reportId) {
             window.open(`/worklist/report/${reportId}/print/`, '_blank');
         }
+
+        function printWorklist() {
+            // Store original title
+            const originalTitle = document.title;
+            
+            // Set print-friendly title
+            document.title = 'Facility Worklist - {{ facility.name }} - ' + new Date().toLocaleDateString();
+            
+            // Add print class to body
+            document.body.classList.add('printing');
+            
+            // Print
+            window.print();
+            
+            // Remove print class and restore title
+            document.body.classList.remove('printing');
+            document.title = originalTitle;
+        }
         
         // Highlight rows on hover
         document.querySelectorAll('.patient-row').forEach(row => {
@@ -264,5 +285,89 @@
             });
         });
     </script>
+    
+    <style>
+        @media print {
+            /* Hide non-essential elements when printing */
+            .header-actions,
+            .btn-view,
+            .btn-print {
+                display: none !important;
+            }
+            
+            /* Reset colors for print */
+            body {
+                background: white;
+                color: black;
+            }
+            
+            .worklist-container {
+                padding: 0;
+                height: auto;
+            }
+            
+            .facility-header {
+                background: white;
+                color: black;
+                border-bottom: 2px solid black;
+                margin-bottom: 10px;
+            }
+            
+            .facility-info {
+                color: black;
+            }
+            
+            .header {
+                background: white;
+                border-bottom: 1px solid black;
+                padding: 10px 0;
+            }
+            
+            .header h2 {
+                color: black;
+                font-size: 18px;
+            }
+            
+            /* Make table print-friendly */
+            .worklist-table {
+                border: 1px solid black;
+                overflow: visible;
+            }
+            
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 10pt;
+            }
+            
+            th, td {
+                border: 1px solid black;
+                padding: 5px;
+                background: white;
+                color: black;
+            }
+            
+            th {
+                background: #f0f0f0;
+                font-weight: bold;
+            }
+            
+            .status-badge,
+            .report-status {
+                background: none;
+                color: black;
+                padding: 2px 5px;
+                border: 1px solid black;
+            }
+            
+            /* Add print date/time */
+            .header::after {
+                content: "Printed: " attr(data-print-date);
+                display: block;
+                font-size: 12px;
+                margin-top: 5px;
+            }
+        }
+    </style>
 </body>
 </html>
