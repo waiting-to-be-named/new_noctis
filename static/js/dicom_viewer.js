@@ -104,7 +104,8 @@ class DicomViewer {
             this.canvas.style.width = displayWidth + 'px';
             this.canvas.style.height = displayHeight + 'px';
             
-            // Scale the canvas context to handle high-DPI displays
+            // Reset the context and scale for high-DPI displays
+            this.ctx.setTransform(1, 0, 0, 1, 0, 0);
             this.ctx.scale(devicePixelRatio, devicePixelRatio);
             
             this.redraw();
@@ -794,21 +795,14 @@ class DicomViewer {
         
         const displayWidth = img.width * scale;
         const displayHeight = img.height * scale;
-        const x = (this.canvas.width - displayWidth) / 2 + this.panX;
-        const y = (this.canvas.height - displayHeight) / 2 + this.panY;
+        // Use display dimensions for positioning
+        const canvasDisplayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const canvasDisplayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        const x = (canvasDisplayWidth - displayWidth) / 2 + this.panX;
+        const y = (canvasDisplayHeight - displayHeight) / 2 + this.panY;
         
         // Draw image
         this.ctx.drawImage(img, x, y, displayWidth, displayHeight);
-        
-        // Draw overlays
-        this.drawMeasurements();
-        this.drawAnnotations();
-        if (this.crosshair) {
-            this.drawCrosshair();
-        }
-        if (this.showAIHighlights) {
-            this.drawAIHighlights();
-        }
         
         // Update overlay labels
         this.updateOverlayLabels();
@@ -818,7 +812,10 @@ class DicomViewer {
     getScale() {
         if (!this.currentImage) return 1;
         const img = this.currentImage.image;
-        const baseScale = Math.min(this.canvas.width / img.width, this.canvas.height / img.height);
+        // Use the display size (style dimensions) instead of canvas dimensions for scaling
+        const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        const baseScale = Math.min(displayWidth / img.width, displayHeight / img.height);
         const clampedBase = baseScale > 1 ? 1 : baseScale; // never upscale automatically
         return this.zoomFactor * clampedBase;
     }
@@ -1339,8 +1336,11 @@ class DicomViewer {
         
         const displayWidth = img.width * scale;
         const displayHeight = img.height * scale;
-        const offsetX = (this.canvas.width - displayWidth) / 2 + this.panX;
-        const offsetY = (this.canvas.height - displayHeight) / 2 + this.panY;
+        // Use display dimensions for offset calculation
+        const canvasDisplayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const canvasDisplayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        const offsetX = (canvasDisplayWidth - displayWidth) / 2 + this.panX;
+        const offsetY = (canvasDisplayHeight - displayHeight) / 2 + this.panY;
         
         return {
             x: offsetX + (imageX * scale),
@@ -1356,8 +1356,11 @@ class DicomViewer {
         
         const displayWidth = img.width * scale;
         const displayHeight = img.height * scale;
-        const offsetX = (this.canvas.width - displayWidth) / 2 + this.panX;
-        const offsetY = (this.canvas.height - displayHeight) / 2 + this.panY;
+        // Use display dimensions for offset calculation
+        const canvasDisplayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const canvasDisplayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        const offsetX = (canvasDisplayWidth - displayWidth) / 2 + this.panX;
+        const offsetY = (canvasDisplayHeight - displayHeight) / 2 + this.panY;
         
         return {
             x: (canvasX - offsetX) / scale,
