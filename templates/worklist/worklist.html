@@ -217,6 +217,14 @@
             <button class="filter-btn" data-filter="system_upload">System Uploads</button>
             <button class="filter-btn" data-filter="user_chat">User Chats</button>
         </div>
+        <div class="chat-facility-filter">
+            <select id="chat-facility-filter" class="form-select" onchange="loadChatMessages()">
+                <option value="">All Facilities</option>
+                {% for facility in facilities %}
+                <option value="{{ facility.id }}">{{ facility.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
         <div class="chat-messages" id="chat-messages">
             <!-- Chat messages will be loaded here -->
         </div>
@@ -542,37 +550,69 @@
         }
         
         function loadChatMessages() {
-            fetch(`/worklist/api/chat/?filter=${currentChatFilter}`)
+            const facilityFilter = document.getElementById('chat-facility-filter') ? 
+                document.getElementById('chat-facility-filter').value : '';
+            let url = `/worklist/api/chat/?filter=${currentChatFilter}`;
+            if (facilityFilter) {
+                url += `&facility_id=${facilityFilter}`;
+            }
+            
+            fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     const list = document.getElementById('chat-messages');
                     list.innerHTML = '';
                     data.messages.forEach(msg => {
                         const item = document.createElement('div');
-                        item.className = `chat-message ${msg.message_type}`;
+                        item.className = `chat-message ${msg.message_type} ${msg.is_read ? 'read' : 'unread'}`;
                         item.innerHTML = `
                             <div class="message-header">
                                 <span class="message-sender">${msg.sender_name}</span>
+                                <span class="message-recipient">${msg.recipient_name}</span>
                                 <span class="message-type">${msg.message_type}</span>
                                 <span class="message-time">${new Date(msg.created_at).toLocaleString()}</span>
                             </div>
                             <div class="message-content">${msg.message}</div>
+                            ${msg.facility_name ? `<div class="message-facility">Facility: ${msg.facility_name}</div>` : ''}
+                            ${!msg.is_read && msg.recipient_name !== 'All' ? 
+                                `<button onclick="markChatMessageRead(${msg.id})" class="btn btn-sm">Mark Read</button>` : ''}
                         `;
                         list.appendChild(item);
                     });
                     // Scroll to bottom
                     list.scrollTop = list.scrollHeight;
+                    
+                    // Auto-mark messages as read when viewing them
+                    markVisibleMessagesAsRead(data.messages);
                 })
                 .catch(error => console.error('Error loading chat messages:', error));
         }
         
+        let sendingMessage = false; // Prevent double-sending
+        
         function sendMessage() {
+            if (sendingMessage) return; // Prevent double-sending
+            
             const messageInput = document.getElementById('chat-message-input');
             const facilitySelect = document.getElementById('chat-facility');
             const message = messageInput.value.trim();
             const facilityId = facilitySelect.value;
             
-            if (!message) return;
+            if (!message) {
+                showChatError('Message cannot be empty');
+                return;
+            }
+            
+            if (message.length > 1000) {
+                showChatError('Message is too long (max 1000 characters)');
+                return;
+            }
+            
+            sendingMessage = true;
+            const sendButton = document.querySelector('.message-input button');
+            const originalButtonText = sendButton.innerHTML;
+            sendButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            sendButton.disabled = true;
             
             fetch('/worklist/api/chat/send/', {
                 method: 'POST',
@@ -585,16 +625,62 @@
                     facility_id: facilityId
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     messageInput.value = '';
                     loadChatMessages();
+                    showChatSuccess('Message sent successfully');
                 } else {
-                    alert('Error sending message: ' + data.error);
+                    showChatError('Error sending message: ' + data.error);
                 }
             })
-            .catch(error => console.error('Error sending message:', error));
+            .catch(error => {
+                console.error('Error sending message:', error);
+                showChatError('Failed to send message. Please try again.');
+            })
+            .finally(() => {
+                sendingMessage = false;
+                sendButton.innerHTML = originalButtonText;
+                sendButton.disabled = false;
+            });
+        }
+        
+        function showChatError(message) {
+            // Create or update error message display
+            let errorDiv = document.getElementById('chat-error');
+            if (!errorDiv) {
+                errorDiv = document.createElement('div');
+                errorDiv.id = 'chat-error';
+                errorDiv.className = 'chat-error-message';
+                document.getElementById('chat-panel').appendChild(errorDiv);
+            }
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        function showChatSuccess(message) {
+            // Create or update success message display
+            let successDiv = document.getElementById('chat-success');
+            if (!successDiv) {
+                successDiv = document.createElement('div');
+                successDiv.id = 'chat-success';
+                successDiv.className = 'chat-success-message';
+                document.getElementById('chat-panel').appendChild(successDiv);
+            }
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            setTimeout(() => {
+                successDiv.style.display = 'none';
+            }, 3000);
         }
         
         function markAsRead(notificationId) {
@@ -715,14 +801,80 @@
                 .catch(error => console.error('Error checking notifications:', error));
         }
         
+        function markChatMessageRead(messageId) {
+            fetch(`/worklist/api/chat/${messageId}/read/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCSRFToken()
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadChatMessages();
+                    checkNotifications();
+                }
+            })
+            .catch(error => console.error('Error marking chat message as read:', error));
+        }
+        
+        function markVisibleMessagesAsRead(messages) {
+            // Auto-mark unread messages as read when they are viewed
+            const unreadMessages = messages.filter(msg => !msg.is_read && msg.recipient_name !== 'All');
+            
+            // Batch mark messages as read to avoid overwhelming the server
+            if (unreadMessages.length > 0) {
+                const messageIds = unreadMessages.map(msg => msg.id);
+                // Mark all unread messages after a short delay
+                setTimeout(() => {
+                    markMultipleChatMessagesRead(messageIds);
+                }, 3000); // Increased delay for better UX
+            }
+        }
+        
+        function markMultipleChatMessagesRead(messageIds) {
+            // Mark multiple messages as read in a single batch operation
+            messageIds.forEach((messageId, index) => {
+                setTimeout(() => {
+                    markChatMessageRead(messageId);
+                }, index * 200); // Stagger requests to avoid server overload
+            });
+        }
+        
         function checkChatMessages() {
             // This would be called when new chat messages arrive
             checkNotifications();
         }
         
-        // Check notifications every 30 seconds
+        // Check notifications with optimized intervals
         checkNotifications();
-        setInterval(checkNotifications, 30000);
+        
+        // Use a more intelligent polling strategy
+        let notificationCheckInterval = 30000; // Start with 30 seconds
+        let lastActivity = Date.now();
+        
+        function updateNotificationInterval() {
+            const timeSinceActivity = Date.now() - lastActivity;
+            if (timeSinceActivity > 300000) { // 5 minutes of inactivity
+                notificationCheckInterval = 60000; // Check every minute
+            } else {
+                notificationCheckInterval = 30000; // Check every 30 seconds
+            }
+        }
+        
+        // Track user activity
+        document.addEventListener('click', () => {
+            lastActivity = Date.now();
+        });
+        document.addEventListener('keypress', () => {
+            lastActivity = Date.now();
+        });
+        
+        // Adaptive notification checking
+        setInterval(() => {
+            updateNotificationInterval();
+            checkNotifications();
+        }, notificationCheckInterval);
         {% endif %}
     </script>
 </body>

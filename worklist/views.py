@@ -417,8 +417,8 @@ def api_notifications_count(request):
     ).count()
     
     unread_messages = ChatMessage.objects.filter(
-        recipient=request.user,
-        is_read=False
+        Q(recipient=request.user, is_read=False) |
+        Q(recipient__isnull=True, facility__isnull=False, is_read=False)  # Include facility-wide unread messages
     ).count()
     
     return JsonResponse({
@@ -468,13 +468,25 @@ def api_notifications_clear_old(request):
 def api_chat_messages(request):
     """API endpoint for chat messages with filtering"""
     filter_type = request.GET.get('filter', 'all')
+    facility_id = request.GET.get('facility_id')
     
-    messages = ChatMessage.objects.filter(
-        Q(sender=request.user) | Q(recipient=request.user)
+    # Base query - messages where user is sender or recipient
+    messages = ChatMessage.objects.select_related('sender', 'recipient', 'facility', 'related_study').filter(
+        Q(sender=request.user) | Q(recipient=request.user) | 
+        (Q(recipient__isnull=True) & Q(facility__isnull=False))  # Include facility-wide messages
     )
     
+    # Filter by message type
     if filter_type != 'all':
         messages = messages.filter(message_type=filter_type)
+    
+    # Filter by facility if specified
+    if facility_id:
+        try:
+            facility_id = int(facility_id)
+            messages = messages.filter(facility_id=facility_id)
+        except (ValueError, TypeError):
+            pass
     
     messages = messages.order_by('-created_at')[:50]
     
@@ -486,7 +498,8 @@ def api_chat_messages(request):
         'message': m.message,
         'is_read': m.is_read,
         'created_at': m.created_at.isoformat(),
-        'facility_name': m.facility.name if m.facility else None
+        'facility_name': m.facility.name if m.facility else None,
+        'related_study_id': m.related_study.id if m.related_study else None
     } for m in messages]
     
     return JsonResponse({'messages': data})
@@ -500,6 +513,7 @@ def api_chat_send(request):
         data = json.loads(request.body)
         message_text = data.get('message', '').strip()
         facility_id = data.get('facility_id')
+        recipient_id = data.get('recipient_id')
         
         if not message_text:
             return JsonResponse({'success': False, 'error': 'Message cannot be empty'})
@@ -507,13 +521,23 @@ def api_chat_send(request):
         facility = None
         recipient = None
         
+        # Handle facility-based messaging
         if facility_id:
             try:
                 facility = Facility.objects.get(id=facility_id)
-                # Find facility staff to send message to
-                # For now, we'll send to all facility users
+                # Find facility admin/staff as recipient
+                if hasattr(facility, 'admin_user') and facility.admin_user:
+                    recipient = facility.admin_user
             except Facility.DoesNotExist:
                 return JsonResponse({'success': False, 'error': 'Facility not found'})
+        
+        # Handle direct user messaging
+        if recipient_id:
+            try:
+                from django.contrib.auth.models import User
+                recipient = User.objects.get(id=recipient_id)
+            except User.DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Recipient not found'})
         
         # Create chat message
         chat_message = ChatMessage.objects.create(
@@ -530,10 +554,20 @@ def api_chat_send(request):
                 recipient=recipient,
                 notification_type='chat',
                 title='New Chat Message',
-                message=f'{request.user.get_full_name() or request.user.username}: {message_text[:50]}...'
+                message=f'{request.user.get_full_name() or request.user.username}: {message_text[:50]}{"..." if len(message_text) > 50 else ""}'
             )
         
-        return JsonResponse({'success': True})
+        # If facility message but no specific recipient, create a general notification
+        elif facility:
+            # Create notification for facility staff (this could be enhanced to find actual facility users)
+            create_notification(
+                user=None,  # Will need to be handled differently for facility-wide notifications
+                notification_type='chat',
+                title='New Facility Message',
+                message=f'Message for {facility.name}: {message_text[:50]}{"..." if len(message_text) > 50 else ""}'
+            )
+        
+        return JsonResponse({'success': True, 'message_id': chat_message.id})
         
     except json.JSONDecodeError:
         return JsonResponse({'success': False, 'error': 'Invalid JSON'})
@@ -552,25 +586,65 @@ def api_chat_clear(request):
     return JsonResponse({'success': True, 'deleted_count': deleted_count})
 
 
+@login_required
+@require_http_methods(['POST'])
+def api_chat_message_read(request, message_id):
+    """Mark a specific chat message as read"""
+    try:
+        message = ChatMessage.objects.get(
+            id=message_id,
+            recipient=request.user
+        )
+        message.is_read = True
+        message.save()
+        
+        return JsonResponse({'success': True})
+    except ChatMessage.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Message not found'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
 def create_notification(user, notification_type, title, message, related_study=None):
     """Helper function to create notifications"""
-    Notification.objects.create(
-        recipient=user,
-        notification_type=notification_type,
-        title=title,
-        message=message,
-        related_study=related_study
-    )
+    if user:  # Only create notification if user is specified
+        Notification.objects.create(
+            recipient=user,
+            notification_type=notification_type,
+            title=title,
+            message=message,
+            related_study=related_study
+        )
 
 
 def create_system_upload_message(study, user):
     """Create a system upload message when a study is uploaded"""
-    ChatMessage.objects.create(
-        sender=user,
-        message_type='system_upload',
-        message=f'New study uploaded: {study.patient_name} - {study.study_description or study.modality}',
-        related_study=study
-    )
+    # Create system upload message for all radiologists
+    from django.contrib.auth.models import User
+    radiologists = User.objects.filter(groups__name='radiologist')
+    
+    message_text = f'New study uploaded: {study.patient_name} - {study.study_description or study.modality}'
+    
+    # Create a chat message for each radiologist
+    for radiologist in radiologists:
+        ChatMessage.objects.create(
+            sender=user,
+            recipient=radiologist,
+            facility=getattr(study, 'facility', None),
+            message_type='system_upload',
+            message=message_text,
+            related_study=study
+        )
+    
+    # Also create a general system message if no specific radiologists
+    if not radiologists.exists():
+        ChatMessage.objects.create(
+            sender=user,
+            message_type='system_upload',
+            message=message_text,
+            related_study=study,
+            facility=getattr(study, 'facility', None)
+        )
 
 
 @login_required

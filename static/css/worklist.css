@@ -428,6 +428,22 @@ body {
     border-right: none;
 }
 
+.chat-facility-filter {
+    padding: 10px;
+    border-bottom: 1px solid #555;
+    background: #2a2a2a;
+}
+
+.chat-facility-filter select {
+    width: 100%;
+    background: #333;
+    color: #fff;
+    border: 1px solid #555;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
 .filter-btn.active, .filter-btn:hover {
     background: #00ff00;
     color: #000;
@@ -511,6 +527,12 @@ body {
     color: #00ff00;
 }
 
+.message-recipient {
+    font-weight: bold;
+    color: #ffaa00;
+    margin-left: 10px;
+}
+
 .message-type {
     background: #555;
     color: #fff;
@@ -527,6 +549,22 @@ body {
 .message-content {
     color: #fff;
     margin-top: 5px;
+}
+
+.message-facility {
+    color: #888;
+    font-size: 12px;
+    margin-top: 3px;
+    font-style: italic;
+}
+
+.chat-message.unread {
+    border-left: 4px solid #ff0000;
+    background: #3a2a2a;
+}
+
+.chat-message.read {
+    opacity: 0.8;
 }
 
 .chat-input-area {
@@ -575,6 +613,31 @@ body {
     padding: 10px;
     display: flex;
     gap: 10px;
+}
+
+.chat-error-message,
+.chat-success-message {
+    position: absolute;
+    top: 50px;
+    left: 10px;
+    right: 10px;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    display: none;
+    z-index: 1001;
+}
+
+.chat-error-message {
+    background: #ff4444;
+    color: white;
+    border: 1px solid #cc0000;
+}
+
+.chat-success-message {
+    background: #44ff44;
+    color: #000;
+    border: 1px solid #00cc00;
 }
 
 .btn-secondary {

@@ -497,6 +497,19 @@ class ChatMessage(models.Model):
     
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['recipient', 'is_read'], name='chat_recipient_read_idx'),
+            models.Index(fields=['sender', 'created_at'], name='chat_sender_date_idx'),
+            models.Index(fields=['facility', 'created_at'], name='chat_facility_date_idx'),
+            models.Index(fields=['message_type', 'created_at'], name='chat_type_date_idx'),
+        ]
+    
+    def clean(self):
+        """Validate that either recipient or facility is specified for user_chat messages"""
+        super().clean()
+        if self.message_type == 'user_chat' and not self.recipient and not self.facility:
+            from django.core.exceptions import ValidationError
+            raise ValidationError('User chat messages must have either a recipient or facility specified.')
     
     def __str__(self):
         return f"{self.sender.username} -> {self.recipient.username if self.recipient else 'Facility'}: {self.message[:50]}"
