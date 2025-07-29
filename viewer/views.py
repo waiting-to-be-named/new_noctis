@@ -448,7 +448,7 @@ def upload_dicom_files(request):
                                 procedure_description=study.study_description,
                                 facility=facility,
                                 study=study,
-                                status='completed'
+                                status='scheduled'
                             )
                             print(f"Created worklist entry for study {study.id}")
                         except Exception as e:
@@ -785,7 +785,7 @@ def upload_dicom_folder(request):
                             procedure_description=study.study_description,
                             facility=facility,
                             study=study,
-                            status='completed'
+                            status='scheduled'
                         )
                     except Exception as e:
                         print(f"Error creating worklist entry: {e}")
@@ -958,9 +958,12 @@ def get_study_images(request, study_id):
             'study': {
                 'id': study.id,
                 'patient_name': study.patient_name,
+                'patient_id': study.patient_id,
                 'study_date': study.study_date,
                 'modality': study.modality,
                 'study_description': study.study_description,
+                'institution_name': study.institution_name,
+                'accession_number': study.accession_number,
             },
             'images': images_data
         })
