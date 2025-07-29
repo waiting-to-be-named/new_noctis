@@ -177,3 +177,129 @@ DEBUG 2025-07-29 12:14:19,359 middleware 4822 139700427806400 Request duration: 
 INFO 2025-07-29 12:14:19,359 middleware 4822 139700427806400 API Response: GET /viewer/api/images/4/data/ - Status: 200
 DEBUG 2025-07-29 12:14:19,359 middleware 4822 139700427806400 Response size: 5813 bytes
 INFO 2025-07-29 12:14:19,359 basehttp 4822 139700427806400 "GET /viewer/api/images/4/data/ HTTP/1.1" 200 5813
+ERROR 2025-07-29 14:00:18,998 exception 2001 139734819905792 Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/http/request.py", line 151, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+WARNING 2025-07-29 14:00:19,371 log 2001 139734819905792 Bad Request: /viewer/api/studies/
+ERROR 2025-07-29 14:00:19,373 exception 2001 139734819905792 Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/http/request.py", line 151, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+WARNING 2025-07-29 14:00:19,381 log 2001 139734819905792 Bad Request: /viewer/api/studies/5/images/
+ERROR 2025-07-29 14:00:19,386 exception 2001 139734819905792 Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/http/request.py", line 151, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+WARNING 2025-07-29 14:00:19,394 log 2001 139734819905792 Bad Request: /viewer/api/images/1/data/
+ERROR 2025-07-29 14:00:19,447 exception 2001 139734819905792 Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/http/request.py", line 151, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+WARNING 2025-07-29 14:00:19,461 log 2001 139734819905792 Bad Request: /viewer/study/5/
+INFO 2025-07-29 14:00:35,124 middleware 2037 139923565900032 API Request: GET /viewer/api/studies/
+DEBUG 2025-07-29 14:00:35,489 middleware 2037 139923565900032 Request duration: GET /viewer/api/studies/ took 0.365s
+INFO 2025-07-29 14:00:35,489 middleware 2037 139923565900032 API Response: GET /viewer/api/studies/ - Status: 200
+DEBUG 2025-07-29 14:00:35,489 middleware 2037 139923565900032 Response size: 4209 bytes
+INFO 2025-07-29 14:00:35,491 middleware 2037 139923565900032 API Request: GET /viewer/api/studies/5/images/
+DEBUG 2025-07-29 14:00:35,493 middleware 2037 139923565900032 Request duration: GET /viewer/api/studies/5/images/ took 0.002s
+INFO 2025-07-29 14:00:35,493 middleware 2037 139923565900032 API Response: GET /viewer/api/studies/5/images/ - Status: 200
+DEBUG 2025-07-29 14:00:35,493 middleware 2037 139923565900032 Response size: 427 bytes
+INFO 2025-07-29 14:00:35,494 middleware 2037 139923565900032 API Request: GET /viewer/api/images/1/data/
+DEBUG 2025-07-29 14:00:35,505 middleware 2037 139923565900032 Request duration: GET /viewer/api/images/1/data/ took 0.011s
+INFO 2025-07-29 14:00:35,505 middleware 2037 139923565900032 API Response: GET /viewer/api/images/1/data/ - Status: 200
+DEBUG 2025-07-29 14:00:35,505 middleware 2037 139923565900032 Response size: 87497 bytes
+INFO 2025-07-29 14:00:53,468 autoreload 2239 139846539788544 Watching for file changes with StatReloader
+INFO 2025-07-29 14:00:57,790 basehttp 2239 139845943756480 "GET /viewer/study/5/ HTTP/1.1" 200 16348
+INFO 2025-07-29 14:01:00,964 middleware 2239 139845943756480 API Request: GET /viewer/api/studies/5/images/
+DEBUG 2025-07-29 14:01:00,969 middleware 2239 139845943756480 Request duration: GET /viewer/api/studies/5/images/ took 0.004s
+INFO 2025-07-29 14:01:00,969 middleware 2239 139845943756480 API Response: GET /viewer/api/studies/5/images/ - Status: 200
+DEBUG 2025-07-29 14:01:00,969 middleware 2239 139845943756480 Response size: 427 bytes
+INFO 2025-07-29 14:01:00,969 basehttp 2239 139845943756480 "GET /viewer/api/studies/5/images/ HTTP/1.1" 200 427
+INFO 2025-07-29 14:01:04,728 middleware 2239 139845943756480 API Request: GET /viewer/api/images/4/data/
+DEBUG 2025-07-29 14:01:04,738 middleware 2239 139845943756480 Request duration: GET /viewer/api/images/4/data/ took 0.010s
+INFO 2025-07-29 14:01:04,738 middleware 2239 139845943756480 API Response: GET /viewer/api/images/4/data/ - Status: 200
+DEBUG 2025-07-29 14:01:04,738 middleware 2239 139845943756480 Response size: 5813 bytes
+INFO 2025-07-29 14:01:04,739 basehttp 2239 139845943756480 "GET /viewer/api/images/4/data/?window_width=400&window_level=40 HTTP/1.1" 200 5813
+INFO 2025-07-29 14:01:31,867 basehttp 2239 139845943756480 "GET /viewer/study/5/ HTTP/1.1" 200 16348
+WARNING 2025-07-29 14:01:53,463 log 2239 139845943756480 Not Found: /debug_viewer.html
+WARNING 2025-07-29 14:01:53,463 basehttp 2239 139845943756480 "GET /debug_viewer.html HTTP/1.1" 404 2969
+INFO 2025-07-29 14:02:02,677 autoreload 2239 139846539788544 /workspace/viewer/views.py changed, reloading.
+INFO 2025-07-29 14:02:03,080 autoreload 2545 139656119468288 Watching for file changes with StatReloader
+INFO 2025-07-29 14:02:05,548 autoreload 2545 139656119468288 /workspace/viewer/urls.py changed, reloading.
+INFO 2025-07-29 14:02:05,897 autoreload 2571 140313236721920 Watching for file changes with StatReloader
+INFO 2025-07-29 14:02:07,753 basehttp 2571 140312640702144 "GET /viewer/debug/ HTTP/1.1" 200 2277
+INFO 2025-07-29 14:02:42,009 basehttp 2571 140312640702144 "GET / HTTP/1.1" 200 9008
+INFO 2025-07-29 14:02:42,016 basehttp 2571 140312631260864 "GET /viewer/study/5/ HTTP/1.1" 200 16348
+INFO 2025-07-29 14:02:42,019 middleware 2571 140312640702144 API Request: GET /viewer/api/studies/5/images/
+DEBUG 2025-07-29 14:02:42,024 middleware 2571 140312640702144 Request duration: GET /viewer/api/studies/5/images/ took 0.006s
+INFO 2025-07-29 14:02:42,025 middleware 2571 140312640702144 API Response: GET /viewer/api/studies/5/images/ - Status: 200
+DEBUG 2025-07-29 14:02:42,025 middleware 2571 140312640702144 Response size: 427 bytes
+INFO 2025-07-29 14:02:42,025 basehttp 2571 140312640702144 "GET /viewer/api/studies/5/images/ HTTP/1.1" 200 427
+INFO 2025-07-29 14:02:42,028 middleware 2571 140312631260864 API Request: GET /viewer/api/images/4/data/
+DEBUG 2025-07-29 14:02:42,042 middleware 2571 140312631260864 Request duration: GET /viewer/api/images/4/data/ took 0.014s
+INFO 2025-07-29 14:02:42,042 middleware 2571 140312631260864 API Response: GET /viewer/api/images/4/data/ - Status: 200
+DEBUG 2025-07-29 14:02:42,042 middleware 2571 140312631260864 Response size: 5813 bytes
+INFO 2025-07-29 14:02:42,043 basehttp 2571 140312631260864 "GET /viewer/api/images/4/data/?window_width=400&window_level=40 HTTP/1.1" 200 5813
+INFO 2025-07-29 14:03:05,170 basehttp 2571 140312631260864 "GET /viewer/debug/ HTTP/1.1" 200 5824
+INFO 2025-07-29 14:03:46,207 basehttp 2571 140312631260864 "GET /viewer/study/5/ HTTP/1.1" 200 16348
+INFO 2025-07-29 14:04:12,535 autoreload 2571 140313236721920 /workspace/viewer/urls.py changed, reloading.
+INFO 2025-07-29 14:04:12,938 autoreload 2856 139729192972544 Watching for file changes with StatReloader
+INFO 2025-07-29 14:04:17,361 autoreload 2856 139729192972544 /workspace/viewer/views.py changed, reloading.
+INFO 2025-07-29 14:04:17,745 autoreload 2879 140425383387392 Watching for file changes with StatReloader
+INFO 2025-07-29 14:04:19,452 basehttp 2879 140424785336000 "GET /viewer/test/ HTTP/1.1" 200 5961
+INFO 2025-07-29 14:05:06,136 basehttp 2879 140424785336000 "GET /viewer/study/5/ HTTP/1.1" 200 16348
+INFO 2025-07-29 14:05:27,465 basehttp 2879 140424785336000 "GET / HTTP/1.1" 200 9008
+INFO 2025-07-29 14:05:27,476 basehttp 2879 140424775894720 "GET /viewer/study/5/ HTTP/1.1" 200 16348
+INFO 2025-07-29 14:05:27,478 middleware 2879 140424785336000 API Request: GET /viewer/api/studies/5/images/
+DEBUG 2025-07-29 14:05:27,484 middleware 2879 140424785336000 Request duration: GET /viewer/api/studies/5/images/ took 0.006s
+INFO 2025-07-29 14:05:27,484 middleware 2879 140424785336000 API Response: GET /viewer/api/studies/5/images/ - Status: 200
+DEBUG 2025-07-29 14:05:27,484 middleware 2879 140424785336000 Response size: 427 bytes
+INFO 2025-07-29 14:05:27,484 basehttp 2879 140424785336000 "GET /viewer/api/studies/5/images/ HTTP/1.1" 200 427
+INFO 2025-07-29 14:05:27,486 middleware 2879 140424775894720 API Request: GET /viewer/api/images/1/data/
+DEBUG 2025-07-29 14:05:27,501 middleware 2879 140424775894720 Request duration: GET /viewer/api/images/1/data/ took 0.015s
+INFO 2025-07-29 14:05:27,501 middleware 2879 140424775894720 API Response: GET /viewer/api/images/1/data/ - Status: 200
+DEBUG 2025-07-29 14:05:27,501 middleware 2879 140424775894720 Response size: 87497 bytes
+INFO 2025-07-29 14:05:27,502 basehttp 2879 140424775894720 "GET /viewer/api/images/1/data/?window_width=400&window_level=40 HTTP/1.1" 200 87497
+INFO 2025-07-29 14:05:27,503 basehttp 2879 140424785336000 "GET /viewer/test/ HTTP/1.1" 200 5961
+INFO 2025-07-29 14:05:47,581 basehttp 2879 140424785336000 "GET / HTTP/1.1" 200 9008
+INFO 2025-07-29 14:05:47,590 basehttp 2879 140424775894720 "GET /viewer/study/5/ HTTP/1.1" 200 16348
+INFO 2025-07-29 14:05:47,592 middleware 2879 140424785336000 API Request: GET /viewer/api/studies/5/images/
+DEBUG 2025-07-29 14:05:47,594 middleware 2879 140424785336000 Request duration: GET /viewer/api/studies/5/images/ took 0.002s
+INFO 2025-07-29 14:05:47,594 middleware 2879 140424785336000 API Response: GET /viewer/api/studies/5/images/ - Status: 200
+DEBUG 2025-07-29 14:05:47,594 middleware 2879 140424785336000 Response size: 427 bytes
+INFO 2025-07-29 14:05:47,598 basehttp 2879 140424785336000 "GET /viewer/api/studies/5/images/ HTTP/1.1" 200 427
+INFO 2025-07-29 14:05:47,600 middleware 2879 140424693937856 API Request: GET /viewer/api/images/1/data/
+DEBUG 2025-07-29 14:05:47,609 middleware 2879 140424693937856 Request duration: GET /viewer/api/images/1/data/ took 0.008s
+INFO 2025-07-29 14:05:47,609 middleware 2879 140424693937856 API Response: GET /viewer/api/images/1/data/ - Status: 200
+DEBUG 2025-07-29 14:05:47,609 middleware 2879 140424693937856 Response size: 87497 bytes
+INFO 2025-07-29 14:05:47,610 basehttp 2879 140424693937856 "GET /viewer/api/images/1/data/?window_width=400&window_level=40 HTTP/1.1" 200 87497
+INFO 2025-07-29 14:05:47,611 basehttp 2879 140424785336000 "GET /viewer/test/ HTTP/1.1" 200 5961

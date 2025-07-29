@@ -25,6 +25,8 @@ urlpatterns = [
     path('api/studies/', views.get_studies, name='get_studies'),
     path('api/studies/<int:study_id>/images/', views.get_study_images, name='get_study_images'),
     path('api/images/<int:image_id>/data/', views.get_image_data, name='get_image_data'),
+    path('debug/', views.debug_viewer, name='debug_viewer'),
+    path('test/', views.test_viewer, name='test_viewer'),
     
     # Measurements and annotations
     path('api/measurements/save/', views.save_measurement, name='save_measurement'),

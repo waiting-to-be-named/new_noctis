@@ -3,6 +3,10 @@
 class DicomViewer {
     constructor(initialStudyId = null) {
         this.canvas = document.getElementById('dicom-canvas');
+        if (!this.canvas) {
+            console.error('Canvas element not found!');
+            return;
+        }
         this.ctx = this.canvas.getContext('2d');
         
         // State variables
@@ -88,6 +92,19 @@ class DicomViewer {
         // Set canvas size
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
+        
+        // Ensure canvas is visible and properly sized
+        console.log('Canvas setup - width:', this.canvas.width, 'height:', this.canvas.height);
+        console.log('Canvas style - width:', this.canvas.style.width, 'height:', this.canvas.style.height);
+        
+        // Draw a test pattern to ensure canvas is working
+        this.ctx.fillStyle = '#333';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.fillStyle = '#666';
+        this.ctx.font = '16px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText('Canvas Ready', this.canvas.width / 2, this.canvas.height / 2);
     }
     
     resizeCanvas() {
@@ -98,17 +115,32 @@ class DicomViewer {
             const displayWidth = viewport.clientWidth;
             const displayHeight = viewport.clientHeight;
             
-            this.canvas.width = displayWidth * devicePixelRatio;
-            this.canvas.height = displayHeight * devicePixelRatio;
+            // Ensure minimum dimensions
+            const minWidth = 512;
+            const minHeight = 512;
             
-            this.canvas.style.width = displayWidth + 'px';
-            this.canvas.style.height = displayHeight + 'px';
+            const finalWidth = Math.max(displayWidth, minWidth);
+            const finalHeight = Math.max(displayHeight, minHeight);
+            
+            this.canvas.width = finalWidth * devicePixelRatio;
+            this.canvas.height = finalHeight * devicePixelRatio;
+            
+            this.canvas.style.width = finalWidth + 'px';
+            this.canvas.style.height = finalHeight + 'px';
             
             // Reset the context and scale for high-DPI displays
             this.ctx.setTransform(1, 0, 0, 1, 0, 0);
             this.ctx.scale(devicePixelRatio, devicePixelRatio);
             
+            console.log('Canvas resized to:', finalWidth, 'x', finalHeight);
             this.redraw();
+        } else {
+            // Fallback if viewport not found
+            console.warn('Viewport element not found, using default canvas size');
+            this.canvas.width = 512;
+            this.canvas.height = 512;
+            this.canvas.style.width = '512px';
+            this.canvas.style.height = '512px';
         }
     }
     
@@ -601,6 +633,7 @@ class DicomViewer {
             this.ctx.textBaseline = 'middle';
             this.ctx.fillText('Loading study...', this.canvas.width / 2, this.canvas.height / 2);
             
+            console.log(`Fetching study images from: /viewer/api/studies/${studyId}/images/`);
             const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
             
             if (!response.ok) {
@@ -616,6 +649,7 @@ class DicomViewer {
             }
             
             const data = await response.json();
+            console.log('Study data received:', data);
             
             if (!data.images || data.images.length === 0) {
                 throw new Error('No images found in this study');
@@ -674,6 +708,7 @@ class DicomViewer {
         
         const imageData = this.currentImages[this.currentImageIndex];
         console.log(`Loading image ${this.currentImageIndex + 1}/${this.currentImages.length}, ID: ${imageData.id}`);
+        console.log('Image data:', imageData);
         
         try {
             const params = new URLSearchParams({
@@ -709,7 +744,7 @@ class DicomViewer {
                     };
                     // Ensure canvas is properly sized before drawing
                     this.resizeCanvas();
-                    this.updateDisplay();
+                    this.render(); // Call render to display the image
                     this.loadMeasurements();
                     this.loadAnnotations();
                     this.updatePatientInfo();
@@ -825,38 +860,8 @@ class DicomViewer {
     updateDisplay() {
         if (!this.currentImage) return;
         
-        // Clear canvas with black background
-        this.ctx.fillStyle = '#000';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        // Calculate display parameters
-        const img = this.currentImage.image;
-        const scale = this.getScale();
-        
-        const displayWidth = img.width * scale;
-        const displayHeight = img.height * scale;
-        // Use display dimensions for positioning
-        const canvasDisplayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
-        const canvasDisplayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
-        const x = (canvasDisplayWidth - displayWidth) / 2 + this.panX;
-        const y = (canvasDisplayHeight - displayHeight) / 2 + this.panY;
-        
-        // Draw image
-        this.ctx.drawImage(img, x, y, displayWidth, displayHeight);
-        
-        // Draw measurements after the image
-        this.drawMeasurements();
-        
-        // Draw annotations
-        this.drawAnnotations();
-        
-        // Draw crosshair if enabled
-        if (this.crosshair) {
-            this.drawCrosshair();
-        }
-        
-        // Update overlay labels
-        this.updateOverlayLabels();
+        // Call render method to display the image
+        this.render();
     }
     
     // New helper to calculate the current pixel scale while preventing unintended up-scaling
@@ -2619,8 +2624,7 @@ Pixel Count: ${data.pixel_count}`;
             
             // Load the first image
             if (this.currentImages.length > 0) {
-                await this.loadImage(0);
-                this.updateImageControls();
+                await this.loadCurrentImage();
             }
             
         } catch (error) {
@@ -2692,4 +2696,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Get initial study ID from global variable (if set by template)
     const initialStudyId = window.initialStudyId || null;
     viewer = new DicomViewer(initialStudyId);
+    
+    // Add a fallback to ensure the study loads
+    if (initialStudyId) {
+        setTimeout(() => {
+            if (viewer && (!viewer.currentStudy || !viewer.currentImages.length)) {
+                console.log('Fallback: Reloading initial study');
+                viewer.loadStudy(initialStudyId);
+            }
+        }, 2000);
+    }
 });

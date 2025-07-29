@@ -2324,3 +2324,12 @@ def generate_general_analysis(image, modality, body_part):
         ],
         'recommendations': 'Clinical correlation and comparison with prior imaging recommended.'
     }
+
+
+def debug_viewer(request):
+    """Debug view for testing DICOM viewer"""
+    return render(request, 'debug_viewer.html')
+
+def test_viewer(request):
+    """Test view for DICOM viewer"""
+    return render(request, 'test_viewer.html')
