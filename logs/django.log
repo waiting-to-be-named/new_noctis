@@ -1,0 +1,38 @@
+INFO 2025-07-29 07:13:30,880 autoreload 2460 140185064341760 Watching for file changes with StatReloader
+ERROR 2025-07-29 07:13:38,128 log 2460 140184788305600 Internal Server Error: /
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/core/handlers/base.py", line 185, in _get_response
+    response = middleware_method(
+        request, callback, callback_args, callback_kwargs
+    )
+  File "/workspace/noctisview/middleware.py", line 74, in process_view
+    csrf_middleware = CsrfViewMiddleware()
+TypeError: MiddlewareMixin.__init__() missing 1 required positional argument: 'get_response'
+ERROR 2025-07-29 07:13:38,128 basehttp 2460 140184788305600 "HEAD / HTTP/1.1" 500 0
+ERROR 2025-07-29 07:13:42,829 log 2460 140184788305600 Internal Server Error: /
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/core/handlers/base.py", line 185, in _get_response
+    response = middleware_method(
+        request, callback, callback_args, callback_kwargs
+    )
+  File "/workspace/noctisview/middleware.py", line 74, in process_view
+    csrf_middleware = CsrfViewMiddleware()
+TypeError: MiddlewareMixin.__init__() missing 1 required positional argument: 'get_response'
+ERROR 2025-07-29 07:13:42,830 basehttp 2460 140184788305600 "GET / HTTP/1.1" 500 62490
+INFO 2025-07-29 07:14:01,667 autoreload 2899 140179492512000 Watching for file changes with StatReloader
+ERROR 2025-07-29 07:14:06,723 log 2899 140179142604480 Internal Server Error: /
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/core/handlers/base.py", line 185, in _get_response
+    response = middleware_method(
+        request, callback, callback_args, callback_kwargs
+    )
+  File "/workspace/noctisview/middleware.py", line 74, in process_view
+    csrf_middleware = CsrfViewMiddleware()
+TypeError: MiddlewareMixin.__init__() missing 1 required positional argument: 'get_response'
+ERROR 2025-07-29 07:14:06,724 basehttp 2899 140179142604480 "HEAD / HTTP/1.1" 500 0

@@ -87,6 +87,17 @@ class DicomViewerView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['studies'] = DicomStudy.objects.all()[:10]  # Recent studies
+        
+        # Check if we have a study_id parameter
+        study_id = kwargs.get('study_id')
+        if study_id:
+            try:
+                study = DicomStudy.objects.get(id=study_id)
+                context['initial_study_id'] = study_id
+                context['initial_study'] = study
+            except DicomStudy.DoesNotExist:
+                context['initial_study_error'] = f'Study with ID {study_id} not found'
+        
         return context
 
 
