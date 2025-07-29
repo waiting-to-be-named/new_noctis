@@ -38,6 +38,13 @@
             font-size: 28px;
         }
         
+        .header .subtitle {
+            color: #ccc;
+            font-size: 16px;
+            margin-top: 8px;
+            font-weight: normal;
+        }
+        
         .breadcrumbs {
             margin-bottom: 20px;
             color: #ccc;
@@ -57,6 +64,28 @@
             border-radius: 8px;
             padding: 30px;
             border: 1px solid #333;
+        }
+        
+        .form-help {
+            background: #2d3748;
+            border: 1px solid #4299e1;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .form-help p {
+            margin: 0 0 8px 0;
+            color: #e2e8f0;
+        }
+        
+        .form-help p:last-child {
+            margin-bottom: 0;
+        }
+        
+        .form-help i {
+            color: #4299e1;
+            margin-right: 8px;
         }
         
         .form-group {
@@ -222,11 +251,16 @@
         </div>
         {% endif %}
         
-        <div class="header">
-            <h1><i class="fas fa-user-md"></i> Add New Radiologist</h1>
-        </div>
+            <div class="header">
+        <h1><i class="fas fa-user-md"></i> Add New Radiologist</h1>
+        <div class="subtitle">Create a real radiologist account for your facility</div>
+    </div>
         
         <div class="form-container">
+            <div class="form-help">
+                <p><i class="fas fa-info-circle"></i> <strong>Creating Real User Accounts</strong></p>
+                <p>Please provide accurate information for the radiologist. This will be their login credentials and contact information.</p>
+            </div>
             <form method="post">
                 {% csrf_token %}
                 
