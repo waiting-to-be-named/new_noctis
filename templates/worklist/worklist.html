@@ -132,11 +132,6 @@
                                     </button>
                                     {% endif %}
                                     {% endif %}
-                                    {% if entry.study.reports.exists %}
-                                    <button class="btn btn-print" onclick="printReport({{ entry.study.reports.first.id }})">
-                                        <i class="fas fa-print"></i> Print
-                                    </button>
-                                    {% endif %}
                                     {% if is_admin %}
                                     <button class="btn btn-delete" onclick="deleteEntry({{ entry.id }}, '{{ entry.patient_name }}', '{{ entry.accession_number }}')">
                                         <i class="fas fa-trash"></i> Delete
@@ -430,10 +425,6 @@
         
         function writeReport(studyId) {
             window.location.href = `/worklist/study/${studyId}/report/`;
-        }
-        
-        function printReport(reportId) {
-            window.open(`/worklist/report/${reportId}/print/`, '_blank');
         }
         
         function deleteEntry(entryId, patientName, accessionNumber) {
