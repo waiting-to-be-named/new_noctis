@@ -344,12 +344,17 @@ class DicomViewer {
         progressText.textContent = `Uploading ${validFiles.length} files...`;
         
         try {
+            const csrfToken = this.getCSRFToken();
+            const headers = {};
+            
+            if (csrfToken) {
+                headers['X-CSRFToken'] = csrfToken;
+            }
+            
             const response = await fetch('/viewer/api/upload/', {
                 method: 'POST',
                 body: formData,
-                headers: {
-                    'X-CSRFToken': this.getCSRFToken()
-                }
+                headers: headers
             });
             
             progressFill.style.width = '100%';
@@ -398,6 +403,8 @@ class DicomViewer {
                         errorMessage = 'File validation failed: ' + errorMessage;
                     } else if (errorData.error_type === 'csrf_error') {
                         errorMessage = 'Security token error. Please refresh the page and try again.';
+                        // Try to refresh CSRF token
+                        await this.fetchCSRFToken();
                     }
                 } catch (parseError) {
                     console.error('Failed to parse error response:', parseError);
@@ -485,12 +492,17 @@ class DicomViewer {
         progressText.textContent = `Uploading ${dicomFiles.length} DICOM files...`;
         
         try {
+            const csrfToken = this.getCSRFToken();
+            const headers = {};
+            
+            if (csrfToken) {
+                headers['X-CSRFToken'] = csrfToken;
+            }
+            
             const response = await fetch('/viewer/api/upload-folder/', {
                 method: 'POST',
                 body: formData,
-                headers: {
-                    'X-CSRFToken': this.getCSRFToken()
-                }
+                headers: headers
             });
             
             progressFill.style.width = '100%';
@@ -539,6 +551,8 @@ class DicomViewer {
                         errorMessage = 'File validation failed: ' + errorMessage;
                     } else if (errorData.error_type === 'csrf_error') {
                         errorMessage = 'Security token error. Please refresh the page and try again.';
+                        // Try to refresh CSRF token
+                        await this.fetchCSRFToken();
                     }
                 } catch (parseError) {
                     console.error('Failed to parse error response:', parseError);
@@ -1722,17 +1736,54 @@ class DicomViewer {
     }
     
     getCSRFToken() {
-        const token = this.getCookie('csrftoken');
+        // Try multiple methods to get CSRF token
+        let token = this.getCookie('csrftoken');
+        
         if (!token) {
-            console.warn('CSRF token not found. Upload may fail.');
             // Try to get token from meta tag as fallback
             const metaToken = document.querySelector('meta[name="csrf-token"]');
             if (metaToken) {
-                return metaToken.getAttribute('content');
+                token = metaToken.getAttribute('content');
             }
+        }
+        
+        if (!token) {
+            // Try to get token from Django's csrf_token template tag
+            const csrfInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
+            if (csrfInput) {
+                token = csrfInput.value;
+            }
+        }
+        
+        if (!token) {
+            console.warn('CSRF token not found. Upload may fail.');
+            // Try to fetch token from Django
+            this.fetchCSRFToken();
             return '';
         }
+        
         return token;
+    }
+    
+    async fetchCSRFToken() {
+        try {
+            const response = await fetch('/accounts/login/', {
+                method: 'GET',
+                credentials: 'same-origin'
+            });
+            
+            if (response.ok) {
+                const html = await response.text();
+                const match = html.match(/name="csrfmiddlewaretoken" value="([^"]+)"/);
+                if (match) {
+                    console.log('CSRF token fetched from login page');
+                    return match[1];
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch CSRF token:', error);
+        }
+        return '';
     }
     
     redraw() {
