@@ -843,6 +843,51 @@ def get_study_images(request, study_id):
         return Response({'error': 'Study not found'}, status=404)
 
 
+@csrf_exempt
+@require_http_methods(['POST'])
+def update_study_status(request, study_id):
+    """Update study status based on radiologist interaction"""
+    try:
+        study = DicomStudy.objects.get(id=study_id)
+        data = json.loads(request.body)
+        new_status = data.get('status')
+        
+        # Find related worklist entry and update its status
+        try:
+            worklist_entry = WorklistEntry.objects.get(study=study)
+            
+            # Validate status transition
+            valid_statuses = ['scheduled', 'in_progress', 'completed']
+            if new_status in valid_statuses:
+                worklist_entry.status = new_status
+                worklist_entry.save()
+                
+                print(f"Updated worklist entry {worklist_entry.id} status to: {new_status}")
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'Study status updated to {new_status}'
+                })
+            else:
+                return JsonResponse({
+                    'error': f'Invalid status: {new_status}'
+                }, status=400)
+                
+        except WorklistEntry.DoesNotExist:
+            # If no worklist entry exists, just log and return success
+            print(f"No worklist entry found for study {study_id}")
+            return JsonResponse({
+                'success': True,
+                'message': 'Study found but no worklist entry to update'
+            })
+            
+    except DicomStudy.DoesNotExist:
+        return JsonResponse({'error': 'Study not found'}, status=404)
+    except Exception as e:
+        print(f"Error updating study status: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 @api_view(['GET'])
 def get_image_data(request, image_id):
     """Get processed image data"""
