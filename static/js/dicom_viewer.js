@@ -92,9 +92,23 @@ class DicomViewer {
     
     resizeCanvas() {
         const viewport = document.querySelector('.viewport');
-        this.canvas.width = viewport.clientWidth;
-        this.canvas.height = viewport.clientHeight;
-        this.redraw();
+        if (viewport) {
+            // Use devicePixelRatio for high-DPI displays
+            const devicePixelRatio = window.devicePixelRatio || 1;
+            const displayWidth = viewport.clientWidth;
+            const displayHeight = viewport.clientHeight;
+            
+            this.canvas.width = displayWidth * devicePixelRatio;
+            this.canvas.height = displayHeight * devicePixelRatio;
+            
+            this.canvas.style.width = displayWidth + 'px';
+            this.canvas.style.height = displayHeight + 'px';
+            
+            // Scale the canvas context to handle high-DPI displays
+            this.ctx.scale(devicePixelRatio, devicePixelRatio);
+            
+            this.redraw();
+        }
     }
     
     setupEventListeners() {
@@ -152,13 +166,9 @@ class DicomViewer {
             this.showUploadModal();
         });
         
-        // Load from system (worklist)
-        document.getElementById('backend-studies').addEventListener('change', (e) => {
-            if (e.target.value === 'worklist') {
-                window.location.href = '/worklist/';
-            } else if (e.target.value) {
-                this.loadStudy(e.target.value);
-            }
+        // Worklist button
+        document.getElementById('worklist-btn').addEventListener('click', () => {
+            window.location.href = '/worklist/';
         });
         
         // Clear measurements
@@ -566,24 +576,14 @@ class DicomViewer {
             const response = await fetch('/viewer/api/studies/');
             const studies = await response.json();
             
-            const select = document.getElementById('backend-studies');
-            select.innerHTML = `
-                <option value="">Select DICOM from System</option>
-                <option value="worklist">📋 Open Worklist</option>
-                <option disabled>──────────────</option>
-            `;
+            // Store studies for future use (e.g., in a menu or list)
+            this.availableStudies = studies;
             
-            studies.forEach(study => {
-                const option = document.createElement('option');
-                option.value = study.id;
-                option.textContent = `${study.patient_name} - ${study.study_date} (${study.modality})`;
-                select.appendChild(option);
-            });
-            
-            // Update: Event listener is already set up in setupEventListeners()
+            console.log(`Loaded ${studies.length} studies from backend`);
             
         } catch (error) {
             console.error('Error loading studies:', error);
+            this.showError('Failed to load studies from backend');
         }
     }
     
@@ -616,17 +616,15 @@ class DicomViewer {
             // Load the first image
             await this.loadCurrentImage();
             
-            // Update study selector if available
-            const studySelect = document.getElementById('backend-studies');
-            if (studySelect) {
-                studySelect.value = studyId;
-            }
+            // Study loaded successfully - no need to update selector as it's removed
             
             console.log('Study loaded successfully');
             
         } catch (error) {
             console.error('Error loading study:', error);
-            alert('Error loading study: ' + error.message);
+            this.showError('Error loading study: ' + error.message);
+            // Reset patient info on error
+            this.updatePatientInfo();
         }
     }
     
@@ -669,13 +667,17 @@ class DicomViewer {
                         pixel_spacing: `${data.metadata.pixel_spacing_x},${data.metadata.pixel_spacing_y}`,
                         slice_thickness: data.metadata.slice_thickness
                     };
+                    // Ensure canvas is properly sized before drawing
+                    this.resizeCanvas();
                     this.updateDisplay();
                     this.loadMeasurements();
                     this.loadAnnotations();
+                    this.updatePatientInfo();
                 };
-                img.onerror = () => {
-                    console.error('Failed to load image data');
-                    alert('Failed to load image. Please try again.');
+                img.onerror = (error) => {
+                    console.error('Failed to load image data:', error);
+                    console.error('Image source:', img.src);
+                    this.showError('Failed to load image. Please try refreshing or selecting another image.');
                 };
                 img.src = data.image_data;
             } else {
@@ -684,24 +686,79 @@ class DicomViewer {
             
         } catch (error) {
             console.error('Error loading image:', error);
-            alert('Error loading image: ' + error.message);
+            this.showError('Error loading image: ' + error.message);
         }
     }
     
+    showError(message) {
+        console.error(message);
+        // Create a more user-friendly error display
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-message';
+        errorDiv.innerHTML = `
+            <div class="error-content">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>${message}</span>
+                <button onclick="this.parentElement.parentElement.remove()">×</button>
+            </div>
+        `;
+        errorDiv.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ff4444;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            z-index: 1000;
+            max-width: 400px;
+        `;
+        document.body.appendChild(errorDiv);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (errorDiv.parentElement) {
+                errorDiv.remove();
+            }
+        }, 5000);
+    }
+    
     updatePatientInfo() {
-        if (!this.currentStudy) return;
+        if (!this.currentStudy) {
+            const patientInfo = document.getElementById('patient-info');
+            if (patientInfo) {
+                patientInfo.textContent = 'Patient: - | Study Date: - | Modality: -';
+            }
+            return;
+        }
         
         const patientInfo = document.getElementById('patient-info');
-        patientInfo.textContent = `Patient: ${this.currentStudy.patient_name} | Study Date: ${this.currentStudy.study_date} | Modality: ${this.currentStudy.modality}`;
+        if (patientInfo) {
+            patientInfo.textContent = `Patient: ${this.currentStudy.patient_name} | Study Date: ${this.currentStudy.study_date} | Modality: ${this.currentStudy.modality}`;
+        }
         
-        // Update image info
+        // Update image info in right panel if elements exist
         const currentImageData = this.currentImages[this.currentImageIndex];
         if (currentImageData) {
-            document.getElementById('info-dimensions').textContent = `${currentImageData.columns}x${currentImageData.rows}`;
-            document.getElementById('info-pixel-spacing').textContent = 
-                `${currentImageData.pixel_spacing_x || 'Unknown'}\\${currentImageData.pixel_spacing_y || 'Unknown'}`;
-            document.getElementById('info-series').textContent = currentImageData.series_description || 'Unknown';
-            document.getElementById('info-institution').textContent = this.currentStudy.institution_name || 'Unknown';
+            const infoDimensions = document.getElementById('info-dimensions');
+            const infoPixelSpacing = document.getElementById('info-pixel-spacing');
+            const infoSeries = document.getElementById('info-series');
+            const infoInstitution = document.getElementById('info-institution');
+            
+            if (infoDimensions) {
+                infoDimensions.textContent = `${currentImageData.columns}x${currentImageData.rows}`;
+            }
+            if (infoPixelSpacing) {
+                infoPixelSpacing.textContent = 
+                    `${currentImageData.pixel_spacing_x || 'Unknown'}\\${currentImageData.pixel_spacing_y || 'Unknown'}`;
+            }
+            if (infoSeries) {
+                infoSeries.textContent = currentImageData.series_description || 'Unknown';
+            }
+            if (infoInstitution) {
+                infoInstitution.textContent = this.currentStudy.institution_name || 'Unknown';
+            }
         }
     }
     

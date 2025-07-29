@@ -130,12 +130,12 @@
                                     <button class="btn btn-report" onclick="writeReport({{ entry.study.id }})">
                                         <i class="fas fa-file-alt"></i> Report
                                     </button>
+                                    {% endif %}
+                                    {% endif %}
                                     {% if entry.study.reports.exists %}
                                     <button class="btn btn-print" onclick="printReport({{ entry.study.reports.first.id }})">
                                         <i class="fas fa-print"></i> Print
                                     </button>
-                                    {% endif %}
-                                    {% endif %}
                                     {% endif %}
                                 </div>
                             </td>
