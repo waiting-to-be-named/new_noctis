@@ -1675,3 +1675,17 @@ def parse_dicom_time(time_str):
         except:
             pass
     return None
+
+
+@api_view(['GET'])
+def get_clinical_info(request, study_id):
+    """Get clinical information for a study"""
+    try:
+        study = get_object_or_404(DicomStudy, id=study_id)
+        return Response({
+            'clinical_info': study.clinical_info or '',
+            'study_id': study.id,
+            'patient_name': study.patient_name
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)

@@ -18,7 +18,9 @@
                 </button>
                 {% if is_admin or is_radiologist %}
                 <div id="notification-count" class="notification-badge" style="display: none;">
-                    <i class="fas fa-bell"></i> <span>0</span> New Studies
+                    <a href="/worklist/notification-center/" style="text-decoration: none; color: inherit;">
+                        <i class="fas fa-bell"></i> <span>0</span> New Studies
+                    </a>
                 </div>
                 {% endif %}
             </div>
@@ -117,6 +119,9 @@
                                     {% if entry.study %}
                                     <button class="btn btn-report" onclick="writeReport({{ entry.study.id }})">
                                         <i class="fas fa-file-alt"></i> Report
+                                    </button>
+                                    <button class="btn btn-print" onclick="printStudy({{ entry.study.id }})">
+                                        <i class="fas fa-print"></i> Print
                                     </button>
                                     {% endif %}
                                     {% endif %}
@@ -352,6 +357,10 @@
         
         function writeReport(studyId) {
             window.location.href = `/worklist/study/${studyId}/report/`;
+        }
+        
+        function printStudy(studyId) {
+            window.open(`/worklist/study/${studyId}/print/`, '_blank');
         }
         
         function getCookie(name) {

@@ -18,9 +18,14 @@ urlpatterns = [
     
     # Report management
     path('study/<int:study_id>/report/', views.create_report, name='create_report'),
+    path('study/<int:study_id>/print/', views.print_study, name='print_study'),
     path('report/<int:report_id>/print/', views.print_report, name='print_report'),
     
     # Notifications
     path('notifications/', views.get_notifications, name='get_notifications'),
     path('notifications/<int:notification_id>/read/', views.mark_notification_read, name='mark_notification_read'),
+    path('notification-center/', views.notification_center, name='notification_center'),
+    path('send-message/', views.send_chat_message, name='send_chat_message'),
+    path('chat/<int:message_id>/read/', views.mark_chat_read, name='mark_chat_read'),
+    path('clear-messages/', views.clear_old_messages, name='clear_old_messages'),
 ]

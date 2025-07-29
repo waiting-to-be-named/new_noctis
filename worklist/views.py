@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.db.models import Q
 from viewer.models import (
     DicomStudy, WorklistEntry, Facility, Report, 
-    Notification, DicomSeries, DicomImage
+    Notification, DicomSeries, DicomImage, ChatMessage
 )
 import json
 from django.core.paginator import Paginator
@@ -355,6 +355,86 @@ def print_report(request, report_id):
 
 
 @login_required
+def print_study(request, study_id):
+    """Print study information as PDF"""
+    study = get_object_or_404(DicomStudy, id=study_id)
+    
+    # Check permissions
+    if not (request.user.is_superuser or 
+            request.user.groups.filter(name__in=['Radiologists', 'Technicians']).exists()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    
+    # Create PDF
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer, pagesize=letter)
+    
+    # Header
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(inch, 10*inch, "STUDY INFORMATION")
+    p.drawString(inch, 9.5*inch, f"Patient: {study.patient_name}")
+    p.drawString(inch, 9.2*inch, f"Patient ID: {study.patient_id}")
+    p.drawString(inch, 8.9*inch, f"Study Date: {study.study_date}")
+    p.drawString(inch, 8.6*inch, f"Modality: {study.modality}")
+    p.drawString(inch, 8.3*inch, f"Accession: {study.accession_number or 'N/A'}")
+    p.drawString(inch, 8.0*inch, f"Institution: {study.institution_name or 'N/A'}")
+    
+    y_position = 7.7*inch
+    
+    # Clinical Information
+    if study.clinical_info:
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(inch, y_position, "CLINICAL INFORMATION:")
+        y_position -= 0.25*inch
+        p.setFont("Helvetica", 10)
+        lines = study.clinical_info.split('\n')
+        for line in lines[:10]:  # Limit lines for simplicity
+            p.drawString(inch, y_position, line[:80])
+            y_position -= 0.2*inch
+        y_position -= 0.3*inch
+    
+    # Study Description
+    if study.study_description:
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(inch, y_position, "STUDY DESCRIPTION:")
+        y_position -= 0.25*inch
+        p.setFont("Helvetica", 10)
+        lines = study.study_description.split('\n')
+        for line in lines[:5]:
+            p.drawString(inch, y_position, line[:80])
+            y_position -= 0.2*inch
+        y_position -= 0.3*inch
+    
+    # Series Information
+    p.setFont("Helvetica-Bold", 12)
+    p.drawString(inch, y_position, "SERIES INFORMATION:")
+    y_position -= 0.25*inch
+    p.setFont("Helvetica", 10)
+    
+    for series in study.series.all()[:5]:  # Limit to first 5 series
+        p.drawString(inch, y_position, f"Series {series.series_number}: {series.series_description} ({series.modality})")
+        y_position -= 0.2*inch
+        p.drawString(inch + 0.5*inch, y_position, f"Images: {series.image_count}")
+        y_position -= 0.2*inch
+    
+    # Footer
+    y_position -= 0.5*inch
+    p.setFont("Helvetica", 10)
+    p.drawString(inch, y_position, f"Printed by: {request.user.get_full_name() or request.user.username}")
+    y_position -= 0.2*inch
+    p.drawString(inch, y_position, f"Date: {timezone.now().strftime('%Y-%m-%d %H:%M')}")
+    
+    p.showPage()
+    p.save()
+    
+    # Return PDF
+    buffer.seek(0)
+    response = HttpResponse(buffer, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="study_{study.patient_name}_{study.study_date}.pdf"'
+    
+    return response
+
+
+@login_required
 def get_notifications(request):
     """Get unread notifications for the current user"""
     notifications = Notification.objects.filter(
@@ -381,4 +461,102 @@ def mark_notification_read(request, notification_id):
     notification = get_object_or_404(Notification, id=notification_id, recipient=request.user)
     notification.is_read = True
     notification.save()
+    return JsonResponse({'success': True})
+
+
+@login_required
+def notification_center(request):
+    """Notification center view"""
+    notifications = Notification.objects.filter(recipient=request.user).order_by('-created_at')[:50]
+    chat_messages = ChatMessage.objects.filter(
+        models.Q(recipient=request.user) | models.Q(recipient__isnull=True)
+    ).order_by('-created_at')[:50]
+    
+    context = {
+        'notifications': notifications,
+        'chat_messages': chat_messages,
+        'is_radiologist': request.user.groups.filter(name='Radiologists').exists(),
+        'is_admin': request.user.is_superuser,
+    }
+    return render(request, 'worklist/notification_center.html', context)
+
+
+@login_required
+@require_http_methods(['POST'])
+def send_chat_message(request):
+    """Send a chat message"""
+    data = json.loads(request.body)
+    recipient_id = data.get('recipient_id')
+    title = data.get('title', '')
+    content = data.get('content', '')
+    message_type = data.get('message_type', 'chat')
+    
+    if not content:
+        return JsonResponse({'error': 'Message content is required'}, status=400)
+    
+    recipient = None
+    if recipient_id:
+        recipient = get_object_or_404(User, id=recipient_id)
+    
+    message = ChatMessage.objects.create(
+        sender=request.user,
+        recipient=recipient,
+        title=title,
+        content=content,
+        message_type=message_type
+    )
+    
+    # Create notification for recipient
+    if recipient:
+        Notification.objects.create(
+            recipient=recipient,
+            notification_type='chat',
+            title=f'New message from {request.user.get_full_name() or request.user.username}',
+            message=content[:100] + '...' if len(content) > 100 else content
+        )
+    
+    return JsonResponse({
+        'success': True,
+        'message_id': message.id,
+        'created_at': message.created_at.isoformat()
+    })
+
+
+@login_required
+@require_http_methods(['POST'])
+def mark_chat_read(request, message_id):
+    """Mark a chat message as read"""
+    message = get_object_or_404(ChatMessage, id=message_id)
+    
+    # Check if user is recipient or admin
+    if message.recipient and message.recipient != request.user:
+        if not request.user.is_superuser:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+    
+    message.is_read = True
+    message.save()
+    return JsonResponse({'success': True})
+
+
+@login_required
+@require_http_methods(['POST'])
+def clear_old_messages(request):
+    """Clear old messages based on type"""
+    message_type = request.POST.get('message_type', 'all')
+    days_old = int(request.POST.get('days', 30))
+    
+    cutoff_date = timezone.now() - timezone.timedelta(days=days_old)
+    
+    if message_type == 'all':
+        ChatMessage.objects.filter(created_at__lt=cutoff_date).delete()
+        Notification.objects.filter(created_at__lt=cutoff_date).delete()
+    elif message_type == 'chat':
+        ChatMessage.objects.filter(message_type='chat', created_at__lt=cutoff_date).delete()
+    elif message_type == 'system':
+        ChatMessage.objects.filter(message_type='system', created_at__lt=cutoff_date).delete()
+        Notification.objects.filter(notification_type='system', created_at__lt=cutoff_date).delete()
+    elif message_type == 'upload':
+        ChatMessage.objects.filter(message_type='upload', created_at__lt=cutoff_date).delete()
+        Notification.objects.filter(notification_type='new_study', created_at__lt=cutoff_date).delete()
+    
     return JsonResponse({'success': True})

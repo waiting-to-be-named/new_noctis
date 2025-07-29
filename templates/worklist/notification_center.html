@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Noctis - Notification Center</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/worklist.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .notification-center {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .center-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            border: none;
+            background: #f8f9fa;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .tab.active {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .message-list {
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+        }
+        
+        .message-item {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .message-item:hover {
+            background: #f8f9fa;
+        }
+        
+        .message-item.unread {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+        }
+        
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .message-sender {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .message-time {
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .message-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        
+        .message-content {
+            color: #666;
+            line-height: 1.4;
+        }
+        
+        .message-type {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .type-system { background: #ff9800; color: white; }
+        .type-chat { background: #2196F3; color: white; }
+        .type-upload { background: #4CAF50; color: white; }
+        .type-error { background: #f44336; color: white; }
+        
+        .compose-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .compose-form {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .form-group label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #45a049;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
+        .clear-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .clear-form {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        
+        .stat-label {
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="notification-center">
+        <div class="center-header">
+            <h1><i class="fas fa-bell"></i> Notification Center</h1>
+            <a href="/worklist/" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Worklist
+            </a>
+        </div>
+        
+        <!-- Statistics -->
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number">{{ notifications.count }}</div>
+                <div class="stat-label">Total Notifications</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ notifications|length }}</div>
+                <div class="stat-label">Unread Notifications</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ chat_messages.count }}</div>
+                <div class="stat-label">Chat Messages</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ chat_messages|length }}</div>
+                <div class="stat-label">Unread Messages</div>
+            </div>
+        </div>
+        
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('notifications')">
+                <i class="fas fa-bell"></i> Notifications
+            </button>
+            <button class="tab" onclick="showTab('chat')">
+                <i class="fas fa-comments"></i> Chat Messages
+            </button>
+            <button class="tab" onclick="showTab('compose')">
+                <i class="fas fa-edit"></i> Send Message
+            </button>
+            <button class="tab" onclick="showTab('clear')">
+                <i class="fas fa-trash"></i> Clear Messages
+            </button>
+        </div>
+        
+        <!-- Notifications Tab -->
+        <div id="notifications" class="tab-content active">
+            <div class="message-list">
+                {% for notification in notifications %}
+                <div class="message-item {% if not notification.is_read %}unread{% endif %}" 
+                     onclick="markNotificationRead({{ notification.id }})">
+                    <div class="message-header">
+                        <span class="message-sender">System</span>
+                        <span class="message-time">{{ notification.created_at|date:"M d, Y H:i" }}</span>
+                    </div>
+                    <div class="message-title">
+                        {{ notification.title }}
+                        <span class="message-type type-{{ notification.notification_type }}">{{ notification.get_notification_type_display }}</span>
+                    </div>
+                    <div class="message-content">{{ notification.message }}</div>
+                </div>
+                {% empty %}
+                <div class="message-item">
+                    <div class="message-content">No notifications found.</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Chat Messages Tab -->
+        <div id="chat" class="tab-content">
+            <div class="message-list">
+                {% for message in chat_messages %}
+                <div class="message-item {% if not message.is_read %}unread{% endif %}" 
+                     onclick="markChatRead({{ message.id }})">
+                    <div class="message-header">
+                        <span class="message-sender">{{ message.sender.get_full_name|default:message.sender.username }}</span>
+                        <span class="message-time">{{ message.created_at|date:"M d, Y H:i" }}</span>
+                    </div>
+                    <div class="message-title">
+                        {{ message.title }}
+                        <span class="message-type type-{{ message.message_type }}">{{ message.get_message_type_display }}</span>
+                    </div>
+                    <div class="message-content">{{ message.content }}</div>
+                </div>
+                {% empty %}
+                <div class="message-item">
+                    <div class="message-content">No chat messages found.</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Compose Message Tab -->
+        <div id="compose" class="tab-content">
+            <div class="compose-section">
+                <h3><i class="fas fa-edit"></i> Send New Message</h3>
+                <form class="compose-form" id="compose-form">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label for="recipient">Recipient (optional - leave empty for broadcast)</label>
+                        <select id="recipient" name="recipient">
+                            <option value="">Broadcast to All</option>
+                            {% if is_radiologist or is_admin %}
+                            <optgroup label="Facility Staff">
+                                {% for user in request.user.facility_staff.facility.staff.all %}
+                                <option value="{{ user.id }}">{{ user.get_full_name|default:user.username }}</option>
+                                {% endfor %}
+                            </optgroup>
+                            {% endif %}
+                            {% if is_admin %}
+                            <optgroup label="Radiologists">
+                                {% for user in radiologists %}
+                                <option value="{{ user.id }}">{{ user.get_full_name|default:user.username }}</option>
+                                {% endfor %}
+                            </optgroup>
+                            {% endif %}
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="message-type">Message Type</label>
+                        <select id="message-type" name="message_type">
+                            <option value="chat">Chat Message</option>
+                            <option value="system">System Message</option>
+                            <option value="upload">Upload Notification</option>
+                            <option value="error">Error Message</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="title">Title</label>
+                        <input type="text" id="title" name="title" placeholder="Message title">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="content">Message Content</label>
+                        <textarea id="content" name="content" placeholder="Enter your message..." required></textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-paper-plane"></i> Send Message
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Clear Messages Tab -->
+        <div id="clear" class="tab-content">
+            <div class="clear-section">
+                <h3><i class="fas fa-trash"></i> Clear Old Messages</h3>
+                <form class="clear-form" id="clear-form">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label for="clear-type">Message Type</label>
+                        <select id="clear-type" name="message_type">
+                            <option value="all">All Messages</option>
+                            <option value="chat">Chat Messages Only</option>
+                            <option value="system">System Messages Only</option>
+                            <option value="upload">Upload Notifications Only</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="days-old">Older Than (Days)</label>
+                        <input type="number" id="days-old" name="days" value="30" min="1" max="365">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Clear Messages
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function showTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+        
+        function markNotificationRead(notificationId) {
+            fetch(`/worklist/notifications/${notificationId}/read/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCSRFToken()
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Remove unread styling
+                    event.target.closest('.message-item').classList.remove('unread');
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+        
+        function markChatRead(messageId) {
+            fetch(`/worklist/chat/${messageId}/read/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCSRFToken()
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Remove unread styling
+                    event.target.closest('.message-item').classList.remove('unread');
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+        
+        // Handle compose form submission
+        document.getElementById('compose-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const data = {
+                recipient_id: formData.get('recipient') || null,
+                title: formData.get('title'),
+                content: formData.get('content'),
+                message_type: formData.get('message_type')
+            };
+            
+            fetch('/worklist/send-message/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken()
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Message sent successfully!');
+                    this.reset();
+                } else {
+                    alert('Error sending message: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error sending message');
+            });
+        });
+        
+        // Handle clear form submission
+        document.getElementById('clear-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            if (!confirm('Are you sure you want to clear old messages? This action cannot be undone.')) {
+                return;
+            }
+            
+            const formData = new FormData(this);
+            
+            fetch('/worklist/clear-messages/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCSRFToken()
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Messages cleared successfully!');
+                    location.reload();
+                } else {
+                    alert('Error clearing messages');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error clearing messages');
+            });
+        });
+        
+        function getCSRFToken() {
+            return document.querySelector('[name=csrfmiddlewaretoken]').value;
+        }
+    </script>
+</body>
+</html>

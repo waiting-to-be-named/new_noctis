@@ -194,6 +194,15 @@ body {
     color: #fff;
 }
 
+.btn-print {
+    background: #9c27b0;
+    color: #fff;
+}
+
+.btn-print:hover {
+    background: #7b1fa2;
+}
+
 .status-badge {
     padding: 4px 12px;
     border-radius: 12px;

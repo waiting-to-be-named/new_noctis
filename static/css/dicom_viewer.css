@@ -914,3 +914,102 @@ body {
     background: #aa0000;
     color: #fff;
 }
+
+/* Clinical Information Panel */
+.clinical-panel {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 500px;
+    max-height: 80vh;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    z-index: 1000;
+    display: none;
+}
+
+.clinical-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background: #4CAF50;
+    color: white;
+    border-radius: 8px 8px 0 0;
+}
+
+.clinical-header h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.close-btn:hover {
+    background: rgba(255,255,255,0.2);
+    border-radius: 50%;
+}
+
+.clinical-content {
+    padding: 20px;
+    max-height: 60vh;
+    overflow-y: auto;
+    line-height: 1.6;
+    color: #333;
+}
+
+.clinical-content p {
+    margin: 0 0 15px 0;
+}
+
+.clinical-content strong {
+    color: #4CAF50;
+}
+
+/* Print button styling */
+.btn-print {
+    background: #ff9800;
+    color: white;
+}
+
+.btn-print:hover {
+    background: #f57c00;
+}
+
+/* Notification badge styling */
+.notification-badge {
+    background: #f44336;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    animation: pulse 2s infinite;
+}
+
+.notification-badge:hover {
+    background: #d32f2f;
+    transform: scale(1.05);
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(244, 67, 54, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0); }
+}

@@ -51,6 +51,9 @@ class DicomViewer {
         this.reconstructionType = 'mpr';
         this.is3DEnabled = false;
         
+        // Clinical information
+        this.clinicalInfo = null;
+        
         // Window presets
         this.windowPresets = {
             'lung': { ww: 1500, wl: -600 },
@@ -175,6 +178,9 @@ class DicomViewer {
         
         // Upload modal events
         this.setupUploadModal();
+        
+        // Clinical information panel
+        this.setupClinicalPanel();
     }
     
     setupUploadModal() {
@@ -2344,6 +2350,9 @@ class DicomViewer {
             // Update the UI with study information
             this.updateStudyInfo(data.study);
             
+            // Load clinical information
+            await this.loadClinicalInfo(studyId);
+            
             // Load the first image
             if (this.currentImages.length > 0) {
                 await this.loadImage(0);
@@ -2353,6 +2362,66 @@ class DicomViewer {
         } catch (error) {
             console.error('Error loading study images:', error);
             this.showError(`Network error loading study: ${error.message}. Please check your connection and try again.`);
+        }
+    }
+    
+    setupClinicalPanel() {
+        // Clinical button click handler
+        const clinicalBtn = document.getElementById('clinical-btn');
+        if (clinicalBtn) {
+            clinicalBtn.addEventListener('click', () => {
+                this.showClinicalPanel();
+            });
+        }
+        
+        // Close button handler
+        const closeBtn = document.getElementById('close-clinical');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                this.hideClinicalPanel();
+            });
+        }
+        
+        // Close panel when clicking outside
+        document.addEventListener('click', (e) => {
+            const panel = document.getElementById('clinical-panel');
+            const btn = document.getElementById('clinical-btn');
+            if (panel && !panel.contains(e.target) && !btn.contains(e.target)) {
+                this.hideClinicalPanel();
+            }
+        });
+    }
+    
+    showClinicalPanel() {
+        const panel = document.getElementById('clinical-panel');
+        const content = document.getElementById('clinical-content');
+        
+        if (this.clinicalInfo) {
+            content.innerHTML = `
+                <p><strong>Clinical Information:</strong></p>
+                <p>${this.clinicalInfo.replace(/\n/g, '<br>')}</p>
+            `;
+        } else {
+            content.innerHTML = '<p>No clinical information available for this study.</p>';
+        }
+        
+        panel.style.display = 'block';
+    }
+    
+    hideClinicalPanel() {
+        const panel = document.getElementById('clinical-panel');
+        panel.style.display = 'none';
+    }
+    
+    async loadClinicalInfo(studyId) {
+        try {
+            const response = await fetch(`/viewer/api/study/${studyId}/clinical-info/`);
+            if (response.ok) {
+                const data = await response.json();
+                this.clinicalInfo = data.clinical_info;
+            }
+        } catch (error) {
+            console.error('Error loading clinical info:', error);
         }
     }
 }
