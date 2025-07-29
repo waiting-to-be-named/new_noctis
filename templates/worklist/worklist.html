@@ -120,6 +120,11 @@
                                     </button>
                                     {% endif %}
                                     {% endif %}
+                                    {% if entry.final_report_id %}
+                                    <button class="btn btn-print" onclick="printReport({{ entry.final_report_id }})">
+                                        <i class="fas fa-print"></i> Print
+                                    </button>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -352,6 +357,10 @@
         
         function writeReport(studyId) {
             window.location.href = `/worklist/study/${studyId}/report/`;
+        }
+        
+        function printReport(reportId) {
+            window.open(`/worklist/report/${reportId}/print/`, '_blank');
         }
         
         function getCookie(name) {

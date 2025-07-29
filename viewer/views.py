@@ -847,6 +847,7 @@ def get_study_images(request, study_id):
                 'study_date': study.study_date,
                 'modality': study.modality,
                 'study_description': study.study_description,
+                'clinical_info': study.clinical_info,
             },
             'images': images_data
         })

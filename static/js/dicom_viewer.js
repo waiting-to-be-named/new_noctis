@@ -688,6 +688,12 @@ class DicomViewer {
         const patientInfo = document.getElementById('patient-info');
         patientInfo.textContent = `Patient: ${this.currentStudy.patient_name} | Study Date: ${this.currentStudy.study_date} | Modality: ${this.currentStudy.modality}`;
         
+        // New: update clinical information
+        const clinicalInfoEl = document.getElementById('clinical-info');
+        if (clinicalInfoEl) {
+            clinicalInfoEl.textContent = `Clinical: ${this.currentStudy.clinical_info || 'N/A'}`;
+        }
+        
         // Update image info
         const currentImageData = this.currentImages[this.currentImageIndex];
         if (currentImageData) {

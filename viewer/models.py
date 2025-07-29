@@ -379,6 +379,7 @@ class Notification(models.Model):
         ('report_ready', 'Report Ready'),
         ('ai_complete', 'AI Analysis Complete'),
         ('system', 'System Message'),
+        ('chat', 'Chat Message'),  # Added chat notification type
     ]
     
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')

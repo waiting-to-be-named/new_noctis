@@ -81,6 +81,14 @@ class WorklistView(LoginRequiredMixin, ListView):
         context['modalities'] = ['CT', 'MR', 'CR', 'DX', 'US', 'MG', 'PT', 'NM']
         context['is_radiologist'] = self.request.user.groups.filter(name='Radiologists').exists()
         context['is_admin'] = self.request.user.is_superuser
+        
+        # Add final_report_id for each entry to enable print button
+        for entry in context['entries']:
+            entry.final_report_id = None
+            if entry.study:
+                final_report = Report.objects.filter(study=entry.study, status='finalized').order_by('-created_at').first()
+                if final_report:
+                    entry.final_report_id = final_report.id
         return context
 
 
