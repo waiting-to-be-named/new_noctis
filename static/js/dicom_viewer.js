@@ -287,7 +287,7 @@ class DicomViewer {
     
     async uploadFiles(files) {
         if (!files || files.length === 0) {
-            alert('Please select DICOM files to upload');
+            this.showWarningNotification('Please select DICOM files to upload');
             return;
         }
         
@@ -298,7 +298,7 @@ class DicomViewer {
             
             // Check file size (100MB limit)
             if (fileSize > 100 * 1024 * 1024) {
-                alert(`File ${file.name} is too large (max 100MB)`);
+                this.showErrorNotification(`File ${file.name} is too large (max 100MB)`);
                 return false;
             }
             
@@ -325,7 +325,7 @@ class DicomViewer {
         });
         
         if (validFiles.length === 0) {
-            alert('No valid files selected for upload');
+            this.showErrorNotification('No valid files selected for upload');
             return;
         }
         
@@ -360,9 +360,7 @@ class DicomViewer {
                 // Show warnings if any
                 if (result.warnings && result.warnings.length > 0) {
                     console.warn('Upload warnings:', result.warnings);
-                    setTimeout(() => {
-                        alert(`Upload completed with warnings:\n${result.warnings.join('\n')}`);
-                    }, 500);
+                    this.showWarningNotification(`Upload completed with warnings:<br>${result.warnings.slice(0, 3).join('<br>')}`);
                 }
                 
                 setTimeout(() => {
@@ -379,9 +377,9 @@ class DicomViewer {
                     if (result.uploaded_files && result.uploaded_files.length > 0) {
                         const message = `Successfully uploaded ${result.uploaded_files.length} DICOM file(s)`;
                         if (result.warnings && result.warnings.length > 0) {
-                            alert(message + '\n\nSome files had issues but were processed successfully.');
+                            this.showSuccessNotification(message + '<br><small>Some files had minor issues but were processed successfully.</small>');
                         } else {
-                            alert(message);
+                            this.showSuccessNotification(message);
                         }
                     }
                 }, 1000);
@@ -424,7 +422,7 @@ class DicomViewer {
             
             // Show error message to user
             setTimeout(() => {
-                alert('Upload failed: ' + error.message);
+                this.showErrorNotification('Upload failed: ' + error.message);
                 progressDiv.style.display = 'none';
             }, 2000);
         }
@@ -432,7 +430,7 @@ class DicomViewer {
     
     async uploadFolder(files) {
         if (!files || files.length === 0) {
-            alert('Please select a folder containing DICOM files');
+            this.showWarningNotification('Please select a folder containing DICOM files');
             return;
         }
         
@@ -466,7 +464,7 @@ class DicomViewer {
         });
         
         if (dicomFiles.length === 0) {
-            alert('No DICOM files found in the selected folder. Please ensure the folder contains DICOM files (.dcm, .dicom, .img, .ima, etc.)');
+            this.showErrorNotification('No DICOM files found in the selected folder. Please ensure the folder contains DICOM files (.dcm, .dicom, .img, .ima, etc.)');
             return;
         }
         
@@ -501,9 +499,7 @@ class DicomViewer {
                 // Show warnings if any
                 if (result.warnings && result.warnings.length > 0) {
                     console.warn('Upload warnings:', result.warnings);
-                    setTimeout(() => {
-                        alert(`Upload completed with warnings:\n${result.warnings.join('\n')}`);
-                    }, 500);
+                    this.showWarningNotification(`Upload completed with warnings:<br>${result.warnings.slice(0, 3).join('<br>')}`);
                 }
                 
                 setTimeout(() => {
@@ -520,9 +516,9 @@ class DicomViewer {
                     if (result.uploaded_files && result.uploaded_files.length > 0) {
                         const message = `Successfully uploaded ${result.uploaded_files.length} DICOM files from ${result.message.split(' ')[-2]} study(ies)`;
                         if (result.warnings && result.warnings.length > 0) {
-                            alert(message + '\n\nSome files had issues but were processed successfully.');
+                            this.showSuccessNotification(message + '<br><small>Some files had minor issues but were processed successfully.</small>');
                         } else {
-                            alert(message);
+                            this.showSuccessNotification(message);
                         }
                     }
                 }, 1000);
@@ -565,7 +561,7 @@ class DicomViewer {
             
             // Show error message to user
             setTimeout(() => {
-                alert('Upload failed: ' + error.message);
+                this.showErrorNotification('Upload failed: ' + error.message);
                 progressDiv.style.display = 'none';
             }, 2000);
         }
@@ -590,6 +586,8 @@ class DicomViewer {
     async loadStudy(studyId) {
         try {
             console.log(`Loading study ${studyId}...`);
+            this.showLoadingIndicator();
+            
             const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
             
             if (!response.ok) {
@@ -599,7 +597,9 @@ class DicomViewer {
             const data = await response.json();
             
             if (!data.images || data.images.length === 0) {
-                throw new Error('No images found in this study');
+                this.hideLoadingIndicator();
+                this.showWarningNotification('No images found in this study. The study may be corrupted or still uploading.');
+                return;
             }
             
             console.log(`Found ${data.images.length} images in study`);
@@ -616,13 +616,13 @@ class DicomViewer {
             // Load the first image
             await this.loadCurrentImage();
             
-            // Study loaded successfully - no need to update selector as it's removed
-            
+            this.showSuccessNotification(`Study loaded successfully with ${data.images.length} image(s)`);
             console.log('Study loaded successfully');
             
         } catch (error) {
             console.error('Error loading study:', error);
-            this.showError('Error loading study: ' + error.message);
+            this.hideLoadingIndicator();
+            this.showErrorNotification('Error loading study: ' + error.message);
             // Reset patient info on error
             this.updatePatientInfo();
         }
@@ -631,11 +631,15 @@ class DicomViewer {
     async loadCurrentImage() {
         if (!this.currentImages.length) {
             console.log('No images available');
+            this.showError('No images available to display');
             return;
         }
         
         const imageData = this.currentImages[this.currentImageIndex];
         console.log(`Loading image ${this.currentImageIndex + 1}/${this.currentImages.length}, ID: ${imageData.id}`);
+        
+        // Show loading indicator
+        this.showLoadingIndicator();
         
         try {
             const params = new URLSearchParams({
@@ -652,6 +656,10 @@ class DicomViewer {
             
             const data = await response.json();
             
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
             if (data.image_data) {
                 const img = new Image();
                 img.onload = () => {
@@ -667,6 +675,8 @@ class DicomViewer {
                         pixel_spacing: `${data.metadata.pixel_spacing_x},${data.metadata.pixel_spacing_y}`,
                         slice_thickness: data.metadata.slice_thickness
                     };
+                    // Hide loading indicator
+                    this.hideLoadingIndicator();
                     // Ensure canvas is properly sized before drawing
                     this.resizeCanvas();
                     this.updateDisplay();
@@ -677,65 +687,99 @@ class DicomViewer {
                 img.onerror = (error) => {
                     console.error('Failed to load image data:', error);
                     console.error('Image source:', img.src);
-                    this.showError('Failed to load image. Please try refreshing or selecting another image.');
+                    this.hideLoadingIndicator();
+                    this.showError('Failed to load image. The image data may be corrupted or invalid.');
                 };
                 img.src = data.image_data;
             } else {
-                throw new Error(data.error || 'No image data received');
+                throw new Error('No image data received from server');
             }
             
         } catch (error) {
             console.error('Error loading image:', error);
-            this.showError('Error loading image: ' + error.message);
+            this.hideLoadingIndicator();
+            this.showError(`Error loading image: ${error.message}`);
+            
+            // Try to load a placeholder or show empty canvas
+            this.showPlaceholderImage();
         }
     }
     
-    showError(message) {
-        console.error(message);
-        // Create a more user-friendly error display
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'error-message';
-        errorDiv.innerHTML = `
-            <div class="error-content">
-                <i class="fas fa-exclamation-triangle"></i>
-                <span>${message}</span>
-                <button onclick="this.parentElement.parentElement.remove()">×</button>
-            </div>
-        `;
-        errorDiv.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #ff4444;
-            color: white;
-            padding: 15px;
-            border-radius: 5px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-            z-index: 1000;
-            max-width: 400px;
-        `;
-        document.body.appendChild(errorDiv);
+    showLoadingIndicator() {
+        // Create loading overlay
+        let loadingOverlay = document.getElementById('loading-overlay');
+        if (!loadingOverlay) {
+            loadingOverlay = document.createElement('div');
+            loadingOverlay.id = 'loading-overlay';
+            loadingOverlay.className = 'loading-overlay';
+            loadingOverlay.innerHTML = `
+                <div class="loading-content">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Loading DICOM image...</p>
+                </div>
+            `;
+            this.canvas.parentElement.appendChild(loadingOverlay);
+        }
+        loadingOverlay.style.display = 'flex';
+    }
+    
+    hideLoadingIndicator() {
+        const loadingOverlay = document.getElementById('loading-overlay');
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'none';
+        }
+    }
+    
+    showPlaceholderImage() {
+        // Create a placeholder canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.fillStyle = '#333';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            if (errorDiv.parentElement) {
-                errorDiv.remove();
-            }
-        }, 5000);
+        this.ctx.fillStyle = '#666';
+        this.ctx.font = '24px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Image Not Available', this.canvas.width / 2, this.canvas.height / 2 - 20);
+        
+        this.ctx.font = '16px Arial';
+        this.ctx.fillText('Please try uploading the DICOM file again', this.canvas.width / 2, this.canvas.height / 2 + 20);
+        
+        this.ctx.textAlign = 'left'; // Reset text alignment
+    }
+    
+    showError(message) {
+        console.error('DICOM Viewer Error:', message);
+        
+        // Use the new notification system instead of creating a new error div
+        this.showErrorNotification(message, 8000); // Show for 8 seconds
     }
     
     updatePatientInfo() {
         if (!this.currentStudy) {
             const patientInfo = document.getElementById('patient-info');
             if (patientInfo) {
-                patientInfo.textContent = 'Patient: - | Study Date: - | Modality: -';
+                const patientText = patientInfo.querySelector('.patient-text');
+                if (patientText) {
+                    patientText.textContent = 'Patient: - | Study Date: - | Modality: -';
+                }
             }
             return;
         }
         
         const patientInfo = document.getElementById('patient-info');
         if (patientInfo) {
-            patientInfo.textContent = `Patient: ${this.currentStudy.patient_name} | Study Date: ${this.currentStudy.study_date} | Modality: ${this.currentStudy.modality}`;
+            const patientText = patientInfo.querySelector('.patient-text');
+            if (patientText) {
+                const formattedDate = this.currentStudy.study_date || '-';
+                const patientName = this.currentStudy.patient_name || 'Unknown';
+                const modality = this.currentStudy.modality || 'Unknown';
+                
+                patientText.innerHTML = `
+                    <strong>Patient:</strong> ${patientName} | 
+                    <strong>Study Date:</strong> ${formattedDate} | 
+                    <strong>Modality:</strong> ${modality}
+                `;
+            }
         }
         
         // Update image info in right panel if elements exist
@@ -747,11 +791,12 @@ class DicomViewer {
             const infoInstitution = document.getElementById('info-institution');
             
             if (infoDimensions) {
-                infoDimensions.textContent = `${currentImageData.columns}x${currentImageData.rows}`;
+                infoDimensions.textContent = `${currentImageData.columns || '-'}x${currentImageData.rows || '-'}`;
             }
             if (infoPixelSpacing) {
-                infoPixelSpacing.textContent = 
-                    `${currentImageData.pixel_spacing_x || 'Unknown'}\\${currentImageData.pixel_spacing_y || 'Unknown'}`;
+                const spacingX = currentImageData.pixel_spacing_x || 'Unknown';
+                const spacingY = currentImageData.pixel_spacing_y || 'Unknown';
+                infoPixelSpacing.textContent = `${spacingX}\\${spacingY}`;
             }
             if (infoSeries) {
                 infoSeries.textContent = currentImageData.series_description || 'Unknown';
@@ -760,6 +805,57 @@ class DicomViewer {
                 infoInstitution.textContent = this.currentStudy.institution_name || 'Unknown';
             }
         }
+        
+        // Load clinical information
+        if (this.currentStudy.id) {
+            this.loadClinicalInfo(this.currentStudy.id);
+        }
+    }
+    
+    // Function to load and display clinical information
+    loadClinicalInfo(studyId) {
+        fetch(`/viewer/api/study/${studyId}/clinical-info/`)
+            .then(response => response.json())
+            .then(data => {
+                const section = document.getElementById('clinical-info-section');
+                const textElement = document.getElementById('clinical-info-text');
+                const referringPhysicianText = document.getElementById('referring-physician-text');
+                const accessionNumberText = document.getElementById('accession-number-text');
+                
+                let hasInfo = false;
+                
+                if (data.clinical_info && data.clinical_info.trim()) {
+                    textElement.textContent = data.clinical_info;
+                    hasInfo = true;
+                } else {
+                    textElement.textContent = 'No clinical information available';
+                }
+
+                if (data.referring_physician && data.referring_physician.trim()) {
+                    referringPhysicianText.textContent = data.referring_physician;
+                    hasInfo = true;
+                } else {
+                    referringPhysicianText.textContent = '-';
+                }
+
+                if (data.accession_number && data.accession_number.trim()) {
+                    accessionNumberText.textContent = data.accession_number;
+                    hasInfo = true;
+                } else {
+                    accessionNumberText.textContent = '-';
+                }
+                
+                // Show the section if we have any clinical information
+                if (hasInfo) {
+                    section.style.display = 'block';
+                } else {
+                    section.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading clinical info:', error);
+                document.getElementById('clinical-info-section').style.display = 'none';
+            });
     }
     
     updateSliders() {
@@ -2504,6 +2600,65 @@ ${this.aiAnalysisResults.recommendations || 'None'}`;
             console.error('Error loading study images:', error);
             this.showError(`Network error loading study: ${error.message}. Please check your connection and try again.`);
         }
+    }
+
+    // Notification System
+    showNotification(type, title, message, duration = 5000) {
+        const notificationContainer = this.getOrCreateNotificationContainer();
+        
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.innerHTML = `
+            <div class="notification-header">
+                <h4>${title}</h4>
+                <button class="close-notif" onclick="this.parentElement.parentElement.remove()">×</button>
+            </div>
+            <div class="notification-body">
+                ${message}
+            </div>
+        `;
+        
+        notificationContainer.appendChild(notification);
+        
+        // Auto-remove after duration
+        if (duration > 0) {
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.style.opacity = '0';
+                    notification.style.transform = 'translateX(100%)';
+                    setTimeout(() => notification.remove(), 300);
+                }
+            }, duration);
+        }
+        
+        return notification;
+    }
+    
+    getOrCreateNotificationContainer() {
+        let container = document.getElementById('notification-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'notification-container';
+            container.className = 'notification-container';
+            document.body.appendChild(container);
+        }
+        return container;
+    }
+    
+    showSuccessNotification(message, duration = 4000) {
+        return this.showNotification('success', 'Success', message, duration);
+    }
+    
+    showWarningNotification(message, duration = 6000) {
+        return this.showNotification('warning', 'Warning', message, duration);
+    }
+    
+    showErrorNotification(message, duration = 8000) {
+        return this.showNotification('error', 'Error', message, duration);
+    }
+    
+    showInfoNotification(message, duration = 5000) {
+        return this.showNotification('info', 'Information', message, duration);
     }
 }
 

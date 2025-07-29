@@ -133,34 +133,69 @@ class DicomImage(models.Model):
                 # Check if it's a relative path, make it absolute
                 if not os.path.isabs(str(self.file_path)):
                     from django.conf import settings
-                    file_path = os.path.join(settings.MEDIA_ROOT, str(self.file_path))
+                    from django.core.files.storage import default_storage
+                    
+                    # Try multiple path combinations
+                    possible_paths = [
+                        default_storage.path(str(self.file_path)),
+                        os.path.join(settings.MEDIA_ROOT, str(self.file_path)),
+                        os.path.join(settings.BASE_DIR, 'media', str(self.file_path)),
+                        os.path.join(os.getcwd(), 'media', str(self.file_path)),
+                    ]
+                    
+                    # Check each possible path
+                    for path in possible_paths:
+                        if os.path.exists(path):
+                            file_path = path
+                            break
+                    else:
+                        # If still not found, try without dicom_files/ prefix
+                        base_filename = os.path.basename(str(self.file_path))
+                        fallback_paths = [
+                            os.path.join(settings.MEDIA_ROOT, 'dicom_files', base_filename),
+                            os.path.join(os.getcwd(), 'media', 'dicom_files', base_filename),
+                        ]
+                        
+                        for path in fallback_paths:
+                            if os.path.exists(path):
+                                file_path = path
+                                break
+                        else:
+                            file_path = str(self.file_path)
                 else:
                     file_path = str(self.file_path)
             
             # Check if file exists
             if not os.path.exists(file_path):
                 print(f"DICOM file not found: {file_path}")
+                print(f"Original file_path: {self.file_path}")
                 print(f"Current working directory: {os.getcwd()}")
-                print(f"File path from model: {self.file_path}")
-                # Try alternative paths
-                alt_paths = [
-                    os.path.join(os.getcwd(), 'media', str(self.file_path).replace('dicom_files/', '')),
-                    os.path.join(os.getcwd(), str(self.file_path)),
-                    str(self.file_path)
+                
+                # Try to find the file by searching in media directories
+                import glob
+                search_patterns = [
+                    os.path.join(settings.MEDIA_ROOT, '**', os.path.basename(str(self.file_path))),
+                    os.path.join(os.getcwd(), 'media', '**', os.path.basename(str(self.file_path))),
                 ]
-                for alt_path in alt_paths:
-                    if os.path.exists(alt_path):
-                        print(f"Found file at alternative path: {alt_path}")
-                        file_path = alt_path
+                
+                for pattern in search_patterns:
+                    matches = glob.glob(pattern, recursive=True)
+                    if matches:
+                        file_path = matches[0]  # Use first match
+                        print(f"Found file using glob search: {file_path}")
                         break
                 else:
-                    print(f"File not found in any of the attempted paths: {alt_paths}")
+                    print(f"File not found anywhere, searched patterns: {search_patterns}")
                     return None
                 
+            print(f"Loading DICOM from: {file_path}")
             return pydicom.dcmread(file_path)
+            
         except Exception as e:
             print(f"Error loading DICOM from {self.file_path}: {e}")
             print(f"Attempted file path: {file_path if 'file_path' in locals() else 'unknown'}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def get_pixel_array(self):
@@ -212,10 +247,55 @@ class DicomImage(models.Model):
                 print(f"Could not get pixel array for image {self.id}")
                 return None
             
+            # Handle different pixel array shapes and data types
+            if len(pixel_array.shape) > 2:
+                # If 3D or higher, take the first slice
+                if len(pixel_array.shape) == 3:
+                    pixel_array = pixel_array[0]
+                elif len(pixel_array.shape) == 4:
+                    pixel_array = pixel_array[0, 0]
+                else:
+                    pixel_array = pixel_array.squeeze()
+            
+            # Ensure we have a 2D array
+            if len(pixel_array.shape) != 2:
+                print(f"Invalid pixel array shape {pixel_array.shape} for image {self.id}")
+                return None
+            
+            # Handle different data types
+            original_dtype = pixel_array.dtype
+            if pixel_array.dtype == np.uint16:
+                # Convert to float for processing
+                pixel_array = pixel_array.astype(np.float32)
+            elif pixel_array.dtype == np.int16:
+                pixel_array = pixel_array.astype(np.float32)
+            elif pixel_array.dtype == np.uint8:
+                pixel_array = pixel_array.astype(np.float32)
+            
+            # Get DICOM metadata for rescaling
+            dicom_data = self.load_dicom_data()
+            if dicom_data:
+                # Apply rescale slope and intercept if available
+                rescale_slope = getattr(dicom_data, 'RescaleSlope', 1)
+                rescale_intercept = getattr(dicom_data, 'RescaleIntercept', 0)
+                
+                if rescale_slope != 1 or rescale_intercept != 0:
+                    pixel_array = pixel_array * rescale_slope + rescale_intercept
+                    print(f"Applied rescaling: slope={rescale_slope}, intercept={rescale_intercept}")
+            
             processed_array = self.apply_windowing(pixel_array, window_width, window_level, inverted)
             if processed_array is None:
-                print(f"Could not apply windowing for image {self.id}")
-                return None
+                print(f"Could not apply windowing for image {self.id}, trying fallback")
+                # Fallback: simple normalization
+                pixel_min = np.min(pixel_array)
+                pixel_max = np.max(pixel_array)
+                if pixel_max > pixel_min:
+                    processed_array = ((pixel_array - pixel_min) / (pixel_max - pixel_min) * 255).astype(np.uint8)
+                else:
+                    processed_array = np.zeros_like(pixel_array, dtype=np.uint8)
+                
+                if inverted:
+                    processed_array = 255 - processed_array
             
             # Convert to PIL Image
             pil_image = Image.fromarray(processed_array, mode='L')
@@ -225,10 +305,24 @@ class DicomImage(models.Model):
             pil_image.save(buffer, format='PNG')
             image_base64 = base64.b64encode(buffer.getvalue()).decode()
             
+            print(f"Successfully processed image {self.id} with shape {processed_array.shape}")
             return f"data:image/png;base64,{image_base64}"
+            
         except Exception as e:
             print(f"Error processing image {self.id}: {e}")
-            return None
+            import traceback
+            traceback.print_exc()
+            
+            # Try to create a placeholder image
+            try:
+                placeholder = np.zeros((512, 512), dtype=np.uint8)
+                pil_image = Image.fromarray(placeholder, mode='L')
+                buffer = io.BytesIO()
+                pil_image.save(buffer, format='PNG')
+                image_base64 = base64.b64encode(buffer.getvalue()).decode()
+                return f"data:image/png;base64,{image_base64}"
+            except:
+                return None
     
     def save_dicom_metadata(self):
         """Extract and save metadata from DICOM file"""
