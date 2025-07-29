@@ -182,6 +182,15 @@ def create_report(request, study_id):
             report.status = 'finalized'
             report.finalized_at = timezone.now()
             
+            # Update worklist entry status to completed when report is finalized
+            try:
+                worklist_entry = WorklistEntry.objects.get(study=study)
+                worklist_entry.status = 'completed'
+                worklist_entry.save()
+                print(f"Updated worklist entry {worklist_entry.id} status to completed after report finalization")
+            except WorklistEntry.DoesNotExist:
+                print(f"No worklist entry found for study {study.id}")
+            
             # Create notification for facility
             if study.facility:
                 facility_users = study.facility.staff.all()

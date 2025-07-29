@@ -3,6 +3,10 @@
 class DicomViewer {
     constructor() {
         this.canvas = document.getElementById('dicom-canvas');
+        if (!this.canvas) {
+            console.error('Canvas element not found!');
+            return;
+        }
         this.ctx = this.canvas.getContext('2d');
         
         // State variables
@@ -66,6 +70,12 @@ class DicomViewer {
     }
     
     init() {
+        // Ensure canvas is properly initialized before setting up other components
+        if (!this.canvas) {
+            console.error('Cannot initialize viewer - canvas not found');
+            return;
+        }
+        
         this.setupCanvas();
         this.setupEventListeners();
         this.loadBackendStudies();
@@ -73,18 +83,59 @@ class DicomViewer {
         this.setupMeasurementUnitSelector();
         this.setup3DControls();
         this.setupAIPanel();
+        
+        // Check if we have an initial study to load from URL parameters
+        this.checkInitialStudy();
+    }
+    
+    checkInitialStudy() {
+        // Check if there's an initial study to load
+        const urlParams = new URLSearchParams(window.location.search);
+        const studyId = urlParams.get('study_id');
+        
+        if (studyId) {
+            console.log('Loading initial study:', studyId);
+            this.loadStudy(studyId);
+        } else {
+            // Check if study ID is in the global context (from Django template)
+            if (typeof initialStudyId !== 'undefined' && initialStudyId) {
+                console.log('Loading study from template context:', initialStudyId);
+                this.loadStudy(initialStudyId);
+            }
+        }
     }
     
     setupCanvas() {
-        // Set canvas size
+        // Set canvas size with proper initialization
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
+        
+        // Ensure canvas has a minimum size
+        if (this.canvas.width === 0 || this.canvas.height === 0) {
+            console.log('Canvas has zero dimensions, setting default size');
+            this.canvas.width = 800;
+            this.canvas.height = 600;
+        }
+        
+        // Clear canvas with a visible background to debug
+        this.ctx.fillStyle = '#000000';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        console.log('Canvas initialized with size:', this.canvas.width, 'x', this.canvas.height);
     }
     
     resizeCanvas() {
         const viewport = document.querySelector('.viewport');
-        this.canvas.width = viewport.clientWidth;
-        this.canvas.height = viewport.clientHeight;
+        if (viewport) {
+            const rect = viewport.getBoundingClientRect();
+            this.canvas.width = rect.width || 800;
+            this.canvas.height = rect.height || 600;
+            console.log('Canvas resized to:', this.canvas.width, 'x', this.canvas.height);
+        } else {
+            console.warn('Viewport element not found, using default canvas size');
+            this.canvas.width = 800;
+            this.canvas.height = 600;
+        }
         this.redraw();
     }
     
@@ -579,6 +630,8 @@ class DicomViewer {
     }
     
     async loadStudy(studyId) {
+        console.log('Loading study with ID:', studyId);
+        
         try {
             const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
             
@@ -587,6 +640,7 @@ class DicomViewer {
             }
             
             const data = await response.json();
+            console.log('Study data received:', data);
             
             if (!data.images || data.images.length === 0) {
                 throw new Error('No images found in this study');
@@ -597,14 +651,21 @@ class DicomViewer {
             this.currentImages = data.images;
             this.currentImageIndex = 0;
             
+            console.log(`Loaded study with ${this.currentImages.length} images`);
+            
             // Update UI
             this.updatePatientInfo();
             this.updateSliders();
-            this.loadCurrentImage();
+            
+            // Update the status to "in_progress" when radiologist opens images
+            this.updateStudyStatus(studyId, 'in_progress');
+            
+            // Load first image
+            await this.loadCurrentImage();
             
         } catch (error) {
             console.error('Error loading study:', error);
-            alert('Error loading study: ' + error.message);
+            this.showError('Error loading study: ' + error.message);
         }
     }
     
@@ -615,6 +676,7 @@ class DicomViewer {
         }
         
         const imageData = this.currentImages[this.currentImageIndex];
+        console.log(`Loading image ${this.currentImageIndex + 1}/${this.currentImages.length}, ID: ${imageData.id}`);
         
         try {
             const params = new URLSearchParams({
@@ -630,10 +692,12 @@ class DicomViewer {
             }
             
             const data = await response.json();
+            console.log('Image data response received for image', imageData.id);
             
             if (data.image_data) {
                 const img = new Image();
                 img.onload = () => {
+                    console.log('Image loaded successfully, dimensions:', img.width, 'x', img.height);
                     this.currentImage = {
                         image: img,
                         metadata: data.metadata,
@@ -643,9 +707,9 @@ class DicomViewer {
                     this.loadMeasurements();
                     this.loadAnnotations();
                 };
-                img.onerror = () => {
-                    console.error('Failed to load image data');
-                    alert('Failed to load image. Please try again.');
+                img.onerror = (e) => {
+                    console.error('Failed to load image data:', e);
+                    this.showError('Failed to load image. Please try again.');
                 };
                 img.src = data.image_data;
             } else {
@@ -654,7 +718,7 @@ class DicomViewer {
             
         } catch (error) {
             console.error('Error loading image:', error);
-            alert('Error loading image: ' + error.message);
+            this.showError('Error loading image: ' + error.message);
         }
     }
     
@@ -696,7 +760,12 @@ class DicomViewer {
     }
     
     updateDisplay() {
-        if (!this.currentImage) return;
+        if (!this.currentImage) {
+            console.log('No current image to display');
+            return;
+        }
+        
+        console.log('Updating display for image:', this.currentImage.id);
         
         // Clear canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -713,8 +782,15 @@ class DicomViewer {
         const x = (this.canvas.width - displayWidth) / 2 + this.panX;
         const y = (this.canvas.height - displayHeight) / 2 + this.panY;
         
+        console.log(`Drawing image at position (${x}, ${y}) with size ${displayWidth}x${displayHeight}, scale: ${scale}`);
+        
         // Draw image
-        this.ctx.drawImage(img, x, y, displayWidth, displayHeight);
+        try {
+            this.ctx.drawImage(img, x, y, displayWidth, displayHeight);
+            console.log('Image drawn successfully');
+        } catch (error) {
+            console.error('Error drawing image to canvas:', error);
+        }
         
         // Draw overlays
         this.drawMeasurements();
@@ -2234,6 +2310,27 @@ class DicomViewer {
             }
         })
         .catch(error => console.error('Error saving annotation:', error));
+    }
+
+    async updateStudyStatus(studyId, status) {
+        try {
+            const response = await fetch(`/viewer/api/studies/${studyId}/status/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                },
+                body: JSON.stringify({ status: status })
+            });
+            
+            if (response.ok) {
+                console.log(`Study ${studyId} status updated to: ${status}`);
+            } else {
+                console.warn(`Failed to update study status: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('Error updating study status:', error);
+        }
     }
 
     showError(message) {
