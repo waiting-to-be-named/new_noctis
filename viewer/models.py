@@ -182,29 +182,54 @@ class DicomImage(models.Model):
             return None
     
     def get_processed_image_base64(self, window_width=None, window_level=None, inverted=False):
-        """Get processed image as base64 string"""
+        """Get processed image as base64 string with improved error handling"""
         try:
+            # Check if file exists
+            if not self.file_path or not self.file_path.storage.exists(self.file_path.name):
+                print(f"File does not exist for image {self.id}: {self.file_path}")
+                return None
+            
             pixel_array = self.get_pixel_array()
             if pixel_array is None:
                 print(f"Could not get pixel array for image {self.id}")
                 return None
+            
+            # Use default window values if not provided
+            if window_width is None:
+                window_width = self.window_width or 400
+            if window_level is None:
+                window_level = self.window_center or 40
             
             processed_array = self.apply_windowing(pixel_array, window_width, window_level, inverted)
             if processed_array is None:
                 print(f"Could not apply windowing for image {self.id}")
                 return None
             
+            # Ensure array is in correct format
+            if processed_array.dtype != np.uint8:
+                processed_array = processed_array.astype(np.uint8)
+            
             # Convert to PIL Image
-            pil_image = Image.fromarray(processed_array, mode='L')
+            try:
+                pil_image = Image.fromarray(processed_array, mode='L')
+            except Exception as e:
+                print(f"Error creating PIL image for {self.id}: {e}")
+                return None
             
             # Convert to base64
-            buffer = io.BytesIO()
-            pil_image.save(buffer, format='PNG')
-            image_base64 = base64.b64encode(buffer.getvalue()).decode()
-            
-            return f"data:image/png;base64,{image_base64}"
+            try:
+                buffer = io.BytesIO()
+                pil_image.save(buffer, format='PNG')
+                image_base64 = base64.b64encode(buffer.getvalue()).decode()
+                return f"data:image/png;base64,{image_base64}"
+            except Exception as e:
+                print(f"Error encoding image to base64 for {self.id}: {e}")
+                return None
+                
         except Exception as e:
             print(f"Error processing image {self.id}: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def save_dicom_metadata(self):
@@ -321,7 +346,7 @@ class WorklistEntry(models.Model):
     modality = models.CharField(max_length=10)
     scheduled_performing_physician = models.CharField(max_length=200)
     procedure_description = models.TextField()
-    facility = models.ForeignKey(Facility, on_delete=models.CASCADE)
+    facility = models.ForeignKey(Facility, on_delete=models.SET_NULL, null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='scheduled')
     study = models.ForeignKey(DicomStudy, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

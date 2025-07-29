@@ -297,6 +297,20 @@ def upload_dicom_files(request):
                     # Create worklist entry if study was created
                     if created:
                         try:
+                            # Ensure we have a facility
+                            facility = study.facility
+                            if not facility:
+                                # Try to get the first available facility
+                                facility = Facility.objects.first()
+                                if not facility:
+                                    # Create a default facility if none exists
+                                    facility = Facility.objects.create(
+                                        name="Default Facility",
+                                        address="Default Address",
+                                        phone="000-000-0000",
+                                        email="default@facility.com"
+                                    )
+                            
                             WorklistEntry.objects.create(
                                 patient_name=study.patient_name,
                                 patient_id=study.patient_id,
@@ -307,12 +321,32 @@ def upload_dicom_files(request):
                                 modality=study.modality,
                                 scheduled_performing_physician=study.referring_physician or "Unknown",
                                 procedure_description=study.study_description,
-                                facility=study.facility or Facility.objects.first(),
+                                facility=facility,
                                 study=study,
                                 status='completed'
                             )
+                            print(f"Successfully created worklist entry for study {study.id}")
                         except Exception as e:
                             print(f"Error creating worklist entry: {e}")
+                            # Try to create a minimal worklist entry without facility
+                            try:
+                                WorklistEntry.objects.create(
+                                    patient_name=study.patient_name,
+                                    patient_id=study.patient_id,
+                                    accession_number=study.accession_number or f"ACC{study.id:06d}",
+                                    scheduled_station_ae_title="UPLOAD",
+                                    scheduled_procedure_step_start_date=study.study_date or datetime.now().date(),
+                                    scheduled_procedure_step_start_time=study.study_time or datetime.now().time(),
+                                    modality=study.modality,
+                                    scheduled_performing_physician=study.referring_physician or "Unknown",
+                                    procedure_description=study.study_description,
+                                    facility=None,  # Allow null facility
+                                    study=study,
+                                    status='completed'
+                                )
+                                print(f"Created worklist entry without facility for study {study.id}")
+                            except Exception as e2:
+                                print(f"Failed to create worklist entry even without facility: {e2}")
                 
                 # Create or get series with fallback UID
                 series_uid = str(dicom_data.get('SeriesInstanceUID', ''))
@@ -596,6 +630,20 @@ def upload_dicom_folder(request):
                 # Create worklist entry if study was created
                 if created:
                     try:
+                        # Ensure we have a facility
+                        facility = study.facility
+                        if not facility:
+                            # Try to get the first available facility
+                            facility = Facility.objects.first()
+                            if not facility:
+                                # Create a default facility if none exists
+                                facility = Facility.objects.create(
+                                    name="Default Facility",
+                                    address="Default Address",
+                                    phone="000-000-0000",
+                                    email="default@facility.com"
+                                )
+                        
                         WorklistEntry.objects.create(
                             patient_name=study.patient_name,
                             patient_id=study.patient_id,
@@ -606,12 +654,32 @@ def upload_dicom_folder(request):
                             modality=study.modality,
                             scheduled_performing_physician=study.referring_physician or "Unknown",
                             procedure_description=study.study_description,
-                            facility=study.facility or Facility.objects.first(),
+                            facility=facility,
                             study=study,
                             status='completed'
                         )
+                        print(f"Successfully created worklist entry for study {study.id}")
                     except Exception as e:
                         print(f"Error creating worklist entry: {e}")
+                        # Try to create a minimal worklist entry without facility
+                        try:
+                            WorklistEntry.objects.create(
+                                patient_name=study.patient_name,
+                                patient_id=study.patient_id,
+                                accession_number=study.accession_number or f"ACC{study.id:06d}",
+                                scheduled_station_ae_title="UPLOAD",
+                                scheduled_procedure_step_start_date=study.study_date or datetime.now().date(),
+                                scheduled_procedure_step_start_time=study.study_time or datetime.now().time(),
+                                modality=study.modality,
+                                scheduled_performing_physician=study.referring_physician or "Unknown",
+                                procedure_description=study.study_description,
+                                facility=None,  # Allow null facility
+                                study=study,
+                                status='completed'
+                            )
+                            print(f"Created worklist entry without facility for study {study.id}")
+                        except Exception as e2:
+                            print(f"Failed to create worklist entry even without facility: {e2}")
                 
                 # Process each file in the study
                 for i, dicom_data in enumerate(study_data['dicom_data']):
@@ -779,20 +847,26 @@ def get_study_images(request, study_id):
 
 @api_view(['GET'])
 def get_image_data(request, image_id):
-    """Get processed image data"""
+    """Get processed image data with improved error handling"""
     try:
         image = DicomImage.objects.get(id=image_id)
         
-        # Get query parameters
-        window_width = request.GET.get('window_width', image.window_width)
-        window_level = request.GET.get('window_level', image.window_center)
+        # Get query parameters with defaults
+        window_width = request.GET.get('window_width')
+        window_level = request.GET.get('window_level')
         inverted = request.GET.get('inverted', 'false').lower() == 'true'
         
-        # Convert to appropriate types
+        # Convert to appropriate types if provided
         if window_width:
-            window_width = float(window_width)
+            try:
+                window_width = float(window_width)
+            except ValueError:
+                window_width = None
         if window_level:
-            window_level = float(window_level)
+            try:
+                window_level = float(window_level)
+            except ValueError:
+                window_level = None
         
         # Get processed image
         image_base64 = image.get_processed_image_base64(window_width, window_level, inverted)
@@ -811,10 +885,21 @@ def get_image_data(request, image_id):
                 }
             })
         else:
-            return Response({'error': 'Could not process image'}, status=500)
+            return Response({
+                'error': 'Could not process image',
+                'details': 'Image processing failed. Check if the DICOM file is valid and accessible.'
+            }, status=500)
             
     except DicomImage.DoesNotExist:
         return Response({'error': 'Image not found'}, status=404)
+    except Exception as e:
+        print(f"Error in get_image_data for image {image_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return Response({
+            'error': 'Server error while processing image',
+            'details': str(e)
+        }, status=500)
 
 
 @csrf_exempt
@@ -1586,3 +1671,49 @@ def parse_dicom_time(time_str):
         except:
             pass
     return None
+
+
+def ensure_worklist_entries():
+    """Ensure all studies have corresponding worklist entries"""
+    studies_without_entries = []
+    for study in DicomStudy.objects.all():
+        if not WorklistEntry.objects.filter(study=study).exists():
+            studies_without_entries.append(study)
+    
+    created_count = 0
+    for study in studies_without_entries:
+        try:
+            # Ensure we have a facility
+            facility = study.facility
+            if not facility:
+                facility = Facility.objects.first()
+                if not facility:
+                    facility = Facility.objects.create(
+                        name="Default Facility",
+                        address="Default Address",
+                        phone="000-000-0000",
+                        email="default@facility.com"
+                    )
+            
+            WorklistEntry.objects.create(
+                patient_name=study.patient_name,
+                patient_id=study.patient_id,
+                accession_number=study.accession_number or f"ACC{study.id:06d}",
+                scheduled_station_ae_title="UPLOAD",
+                scheduled_procedure_step_start_date=study.study_date or datetime.now().date(),
+                scheduled_procedure_step_start_time=study.study_time or datetime.now().time(),
+                modality=study.modality,
+                scheduled_performing_physician=study.referring_physician or "Unknown",
+                procedure_description=study.study_description,
+                facility=facility,
+                study=study,
+                status='completed'
+            )
+            created_count += 1
+            print(f"Created worklist entry for study {study.id}")
+        except Exception as e:
+            print(f"Failed to create worklist entry for study {study.id}: {e}")
+    
+    if created_count > 0:
+        print(f"Created {created_count} worklist entries for missing studies")
+    return created_count
