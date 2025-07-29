@@ -147,7 +147,7 @@ class FacilityCreateView(AdminRequiredMixin, CreateView):
     """Admin view to create new facility"""
     model = Facility
     template_name = 'admin/facility_form.html'
-    fields = ['name', 'address', 'phone', 'email', 'letterhead_logo']
+    fields = ['name', 'address', 'phone', 'email', 'ae_title', 'letterhead_logo']
     success_url = reverse_lazy('viewer:facility_list')
     
     def get_context_data(self, **kwargs):
@@ -191,7 +191,7 @@ class FacilityUpdateView(AdminRequiredMixin, UpdateView):
     """Admin view to update facility"""
     model = Facility
     template_name = 'admin/facility_form.html'
-    fields = ['name', 'address', 'phone', 'email', 'letterhead_logo']
+    fields = ['name', 'address', 'phone', 'email', 'ae_title', 'letterhead_logo']
     success_url = reverse_lazy('viewer:facility_list')
     
     def get_context_data(self, **kwargs):

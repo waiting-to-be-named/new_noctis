@@ -18,6 +18,7 @@ class Facility(models.Model):
     address = models.TextField()
     phone = models.CharField(max_length=20)
     email = models.EmailField()
+    ae_title = models.CharField(max_length=16, unique=True, help_text="DICOM AE Title for this facility")
     letterhead_logo = models.ImageField(upload_to='facility_logos/', null=True, blank=True)
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True, related_name='facility')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -28,6 +29,46 @@ class Facility(models.Model):
     
     def __str__(self):
         return self.name
+    
+    def generate_ae_title(self):
+        """Generate a unique AE title based on facility name"""
+        import re
+        import random
+        import string
+        
+        # Clean the facility name: remove special chars, convert to uppercase
+        clean_name = re.sub(r'[^a-zA-Z0-9]', '', self.name).upper()
+        
+        # Take first 8 characters (DICOM AE titles are typically 16 chars max)
+        base_title = clean_name[:8]
+        
+        # If base title is empty or too short, use a default
+        if len(base_title) < 3:
+            base_title = "FACILITY"
+        
+        # Generate a unique AE title
+        counter = 1
+        ae_title = base_title
+        
+        while Facility.objects.filter(ae_title=ae_title).exclude(pk=self.pk if self.pk else None).exists():
+            # Add a suffix if the title already exists
+            suffix = str(counter).zfill(2)
+            ae_title = f"{base_title[:6]}{suffix}"
+            counter += 1
+            
+            # If we've tried too many times, add random characters
+            if counter > 99:
+                random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=3))
+                ae_title = f"{base_title[:5]}{random_suffix}"
+                break
+        
+        return ae_title
+    
+    def save(self, *args, **kwargs):
+        # Generate AE title if not provided
+        if not self.ae_title:
+            self.ae_title = self.generate_ae_title()
+        super().save(*args, **kwargs)
 
 
 class DicomStudy(models.Model):
