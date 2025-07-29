@@ -345,7 +345,7 @@ class WorklistEntry(models.Model):
     procedure_description = models.TextField()
     facility = models.ForeignKey(Facility, on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='scheduled')
-    study = models.ForeignKey(DicomStudy, on_delete=models.SET_NULL, null=True, blank=True)
+    study = models.ForeignKey(DicomStudy, on_delete=models.SET_NULL, null=True, blank=True, related_name='worklist_entries')
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:

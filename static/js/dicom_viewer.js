@@ -580,6 +580,7 @@ class DicomViewer {
     
     async loadStudy(studyId) {
         try {
+            console.log('Loading study with ID:', studyId);
             const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
             
             if (!response.ok) {
@@ -587,6 +588,7 @@ class DicomViewer {
             }
             
             const data = await response.json();
+            console.log('Loaded study data:', data);
             
             if (!data.images || data.images.length === 0) {
                 throw new Error('No images found in this study');
@@ -596,6 +598,12 @@ class DicomViewer {
             this.currentSeries = data.series || null;
             this.currentImages = data.images;
             this.currentImageIndex = 0;
+            
+            console.log('Study loaded successfully:', {
+                study: this.currentStudy,
+                imageCount: this.currentImages.length,
+                firstImage: this.currentImages[0]
+            });
             
             // Update UI
             this.updatePatientInfo();
@@ -615,6 +623,7 @@ class DicomViewer {
         }
         
         const imageData = this.currentImages[this.currentImageIndex];
+        console.log('Loading image:', imageData);
         
         try {
             const params = new URLSearchParams({
@@ -623,6 +632,7 @@ class DicomViewer {
                 inverted: this.inverted
             });
             
+            console.log('Fetching image data from:', `/viewer/api/images/${imageData.id}/data/?${params}`);
             const response = await fetch(`/viewer/api/images/${imageData.id}/data/?${params}`);
             
             if (!response.ok) {
@@ -630,10 +640,12 @@ class DicomViewer {
             }
             
             const data = await response.json();
+            console.log('Received image data:', data);
             
             if (data.image_data) {
                 const img = new Image();
                 img.onload = () => {
+                    console.log('Image loaded successfully, dimensions:', img.width, 'x', img.height);
                     this.currentImage = {
                         image: img,
                         metadata: data.metadata,
@@ -643,8 +655,8 @@ class DicomViewer {
                     this.loadMeasurements();
                     this.loadAnnotations();
                 };
-                img.onerror = () => {
-                    console.error('Failed to load image data');
+                img.onerror = (error) => {
+                    console.error('Failed to load image data:', error);
                     alert('Failed to load image. Please try again.');
                 };
                 img.src = data.image_data;
