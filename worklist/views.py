@@ -194,9 +194,10 @@ def create_report(request, study_id):
                 for user in facility_users:
                     Notification.objects.create(
                         recipient=user,
+                        sender=request.user,
                         notification_type='report_ready',
                         title=f'Report Ready: {study.patient_name}',
-                        message=f'The radiology report for {study.patient_name} is now available.',
+                        message=f'{request.user.get_full_name() or request.user.username} has finalized the radiology report for {study.patient_name}.',
                         related_study=study
                     )
         
@@ -400,6 +401,7 @@ def api_notifications(request):
     
     data = [{
         'id': n.id,
+        'sender_name': n.sender.get_full_name() or n.sender.username if n.sender else 'System',
         'notification_type': n.notification_type,
         'title': n.title,
         'message': n.message,
@@ -531,6 +533,7 @@ def api_chat_send(request):
         if recipient:
             Notification.objects.create(
                 recipient=recipient,
+                sender=request.user,
                 notification_type='chat',
                 title='New Chat Message',
                 message=f'{request.user.get_full_name() or request.user.username}: {message_text[:50]}...'
@@ -555,10 +558,11 @@ def api_chat_clear(request):
     return JsonResponse({'success': True, 'deleted_count': deleted_count})
 
 
-def create_notification(user, notification_type, title, message, related_study=None):
+def create_notification(user, notification_type, title, message, related_study=None, sender=None):
     """Helper function to create notifications"""
     Notification.objects.create(
         recipient=user,
+        sender=sender,
         notification_type=notification_type,
         title=title,
         message=message,

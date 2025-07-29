@@ -21,7 +21,7 @@ from datetime import datetime
 import numpy as np
 from .models import (
     DicomStudy, DicomSeries, DicomImage, Measurement, Annotation,
-    Facility, Report, WorklistEntry, AIAnalysis, Notification
+    Facility, Report, WorklistEntry, AIAnalysis, Notification, ChatMessage
 )
 from django.contrib.auth.models import Group
 from .serializers import DicomStudySerializer, DicomImageSerializer
@@ -668,13 +668,21 @@ def upload_dicom_folder(request):
                         for radiologist in radiologist_group.user_set.all():
                             Notification.objects.create(
                                 recipient=radiologist,
+                                sender=request.user if request.user.is_authenticated else None,
                                 notification_type='new_study',
                                 title='New Study Uploaded',
-                                message=f'New {modality} study uploaded for {patient_name} - {study_description}',
+                                message=f'{request.user.get_full_name() if request.user.is_authenticated else "System"} uploaded a new {modality} study for {patient_name} - {study_description}',
                                 related_study=study
                             )
                     except Group.DoesNotExist:
                         pass
+                    # Log chat message for the upload
+                    ChatMessage.objects.create(
+                        sender=request.user if request.user.is_authenticated else None,
+                        message_type='system_upload',
+                        message=f'{request.user.get_full_name() if request.user.is_authenticated else "System"} uploaded a new {modality} study for {patient_name} - {study_description}',
+                        related_study=study
+                    )
                 
                 # Create worklist entry if study was created
                 if created:
@@ -1728,6 +1736,7 @@ def create_system_error_notification(error_message, user=None):
         for admin in admin_users:
             Notification.objects.create(
                 recipient=admin,
+                sender=user if user and user.is_authenticated else None,
                 notification_type='system_error',
                 title='System Error',
                 message=error_message
@@ -1737,6 +1746,7 @@ def create_system_error_notification(error_message, user=None):
         if user and user.is_authenticated:
             Notification.objects.create(
                 recipient=user,
+                sender=user,
                 notification_type='system_error',
                 title='Upload Error',
                 message=error_message
