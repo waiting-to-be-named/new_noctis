@@ -247,12 +247,9 @@ def print_report(request, report_id):
     report = get_object_or_404(Report, id=report_id)
     study = report.study
     
-    # Check permissions
-    if not (request.user.is_superuser or 
-            request.user.groups.filter(name='Radiologists').exists() or
-            (hasattr(request.user, 'facility_staff') and 
-             request.user.facility_staff.facility == study.facility)):
-        return HttpResponse('Permission denied', status=403)
+    # Check permissions - allow all authenticated users to print finalized reports
+    if report.status not in ['finalized', 'printed']:
+        return HttpResponse('Report is not finalized yet', status=403)
     
     # Create PDF
     buffer = io.BytesIO()

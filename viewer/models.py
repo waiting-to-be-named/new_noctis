@@ -24,6 +24,7 @@ class Facility(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True, related_name='facility')
     created_at = models.DateTimeField(auto_now_add=True)
     ae_title = models.CharField(max_length=16, unique=True, null=True, blank=True, help_text="DICOM AE Title automatically generated for this facility")
+    dicom_port = models.IntegerField(unique=True, null=True, blank=True, help_text="DICOM C-STORE SCP port automatically assigned for this facility")
     
     class Meta:
         verbose_name_plural = "Facilities"
@@ -40,6 +41,25 @@ class Facility(models.Model):
         remaining_len = 16 - len(base)
         suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=remaining_len))
         return (base + suffix)[:16]
+    
+    def generate_dicom_port(self):
+        """Generate a unique DICOM port number for this facility"""
+        # Start from port 11112 and find next available port
+        base_port = 11112
+        max_port = 11200  # Limit to reasonable range
+        
+        for port in range(base_port, max_port):
+            if not Facility.objects.filter(dicom_port=port).exclude(pk=self.pk).exists():
+                return port
+        
+        # If no ports available in range, use a random port in higher range
+        import random as rnd
+        for _ in range(50):  # Try 50 times to find a random port
+            port = rnd.randint(11200, 11299)
+            if not Facility.objects.filter(dicom_port=port).exclude(pk=self.pk).exists():
+                return port
+        
+        raise ValueError("No available DICOM ports found")
 
     def save(self, *args, **kwargs):
         # Auto-generate AE title if not provided
@@ -50,6 +70,11 @@ class Facility(models.Model):
                 if not Facility.objects.filter(ae_title=candidate).exclude(pk=self.pk).exists():
                     self.ae_title = candidate
                     break
+        
+        # Auto-generate DICOM port if not provided
+        if not self.dicom_port:
+            self.dicom_port = self.generate_dicom_port()
+        
         super().save(*args, **kwargs)
 
 
