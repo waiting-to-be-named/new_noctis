@@ -448,7 +448,8 @@ def upload_dicom_files(request):
                                 procedure_description=study.study_description,
                                 facility=facility,
                                 study=study,
-                                status='completed'
+                                # Set initial status to 'scheduled' – the exam has not yet been read
+                                status='scheduled'
                             )
                             print(f"Created worklist entry for study {study.id}")
                         except Exception as e:
@@ -785,7 +786,8 @@ def upload_dicom_folder(request):
                             procedure_description=study.study_description,
                             facility=facility,
                             study=study,
-                            status='completed'
+                            # Set initial status to 'scheduled' – the exam has not yet been read
+                            status='scheduled'
                         )
                     except Exception as e:
                         print(f"Error creating worklist entry: {e}")
@@ -937,15 +939,25 @@ def get_study_images(request, study_id):
         study = DicomStudy.objects.get(id=study_id)
         images = DicomImage.objects.filter(series__study=study).order_by('series__series_number', 'instance_number')
         
+        # Helper to safely convert values to int without raising exceptions
+        def safe_int(value):
+            try:
+                # Reject empty strings and non-numeric values early
+                if value is None or (isinstance(value, str) and value.strip() == ""):
+                    return None
+                return int(value)
+            except (ValueError, TypeError):
+                return None
+
         images_data = []
         for image in images:
             image_data = {
                 'id': image.id,
-                'instance_number': int(image.instance_number) if image.instance_number is not None else None,
-                'series_number': int(image.series.series_number) if image.series and image.series.series_number is not None else None,
-                'series_description': image.series.series_description,
-                'rows': int(image.rows) if image.rows is not None else None,
-                'columns': int(image.columns) if image.columns is not None else None,
+                'instance_number': safe_int(image.instance_number),
+                'series_number': safe_int(image.series.series_number) if image.series else None,
+                'series_description': image.series.series_description if image.series else None,
+                'rows': safe_int(image.rows),
+                'columns': safe_int(image.columns),
                 'pixel_spacing_x': float(image.pixel_spacing_x) if image.pixel_spacing_x is not None else None,
                 'pixel_spacing_y': float(image.pixel_spacing_y) if image.pixel_spacing_y is not None else None,
                 'slice_thickness': float(image.slice_thickness) if image.slice_thickness is not None else None,
