@@ -87,6 +87,17 @@ class DicomViewerView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['studies'] = DicomStudy.objects.all()[:10]  # Recent studies
+        
+        # If study_id is provided, include it in context
+        study_id = self.kwargs.get('study_id')
+        if study_id:
+            context['study_id'] = study_id
+            try:
+                study = DicomStudy.objects.get(id=study_id)
+                context['current_study'] = study
+            except DicomStudy.DoesNotExist:
+                pass
+                
         return context
 
 
@@ -792,6 +803,23 @@ def get_studies(request):
     studies = DicomStudy.objects.all()[:20]  # Limit to recent studies
     serializer = DicomStudySerializer(studies, many=True)
     return Response(serializer.data)
+
+
+@api_view(['GET'])
+def get_study_info(request, study_id):
+    """Get study information for report creation"""
+    try:
+        study = DicomStudy.objects.get(id=study_id)
+        return Response({
+            'patient_name': study.patient_name,
+            'patient_id': study.patient_id,
+            'study_date': study.study_date.strftime('%Y-%m-%d') if study.study_date else None,
+            'modality': study.modality,
+            'study_description': study.study_description,
+            'clinical_info': study.clinical_info,
+        })
+    except DicomStudy.DoesNotExist:
+        return Response({'error': 'Study not found'}, status=404)
 
 
 @api_view(['GET'])

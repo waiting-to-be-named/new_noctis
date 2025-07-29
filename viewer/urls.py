@@ -21,6 +21,7 @@ urlpatterns = [
     
     # Study and image data
     path('api/studies/', views.get_studies, name='get_studies'),
+    path('api/studies/<int:study_id>/info/', views.get_study_info, name='get_study_info'),
     path('api/studies/<int:study_id>/images/', views.get_study_images, name='get_study_images'),
     path('api/images/<int:image_id>/data/', views.get_image_data, name='get_image_data'),
     
