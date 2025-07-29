@@ -1238,16 +1238,40 @@ def measure_hu(request):
         # Apply rescaling to get HU values
         hu_values = roi_pixels * rescale_slope + rescale_intercept
         
-        # Calculate statistics
+        # Calculate comprehensive statistics following international standards
         mean_hu = float(np.mean(hu_values))
         min_hu = float(np.min(hu_values))
         max_hu = float(np.max(hu_values))
         std_hu = float(np.std(hu_values))
+        median_hu = float(np.median(hu_values))
+        
+        # Calculate percentiles for better distribution understanding
+        percentile_25 = float(np.percentile(hu_values, 25))
+        percentile_75 = float(np.percentile(hu_values, 75))
+        
+        # Coefficient of variation (CV) - useful for heterogeneity assessment
+        cv = (std_hu / abs(mean_hu) * 100) if mean_hu != 0 else 0
+        
+        # Calculate 95% confidence interval for the mean
+        sem = std_hu / np.sqrt(len(hu_values))  # Standard error of mean
+        ci_lower = mean_hu - 1.96 * sem
+        ci_upper = mean_hu + 1.96 * sem
         
         # Radiological interpretation based on HU values
         interpretation = get_hu_interpretation(mean_hu)
         
-        # Save measurement
+        # Create detailed notes with all statistics
+        detailed_notes = (
+            f"Interpretation: {interpretation}\n"
+            f"Mean HU: {mean_hu:.1f} (95% CI: {ci_lower:.1f} - {ci_upper:.1f})\n"
+            f"Median HU: {median_hu:.1f}\n"
+            f"Range: {min_hu:.1f} - {max_hu:.1f}\n"
+            f"IQR: {percentile_25:.1f} - {percentile_75:.1f}\n"
+            f"SD: {std_hu:.1f}, CV: {cv:.1f}%\n"
+            f"Pixels: {len(roi_pixels)}"
+        )
+        
+        # Save measurement with comprehensive statistics
         measurement = Measurement.objects.create(
             image=image,
             measurement_type='ellipse',
@@ -1258,7 +1282,14 @@ def measure_hu(request):
             hounsfield_min=min_hu,
             hounsfield_max=max_hu,
             hounsfield_std=std_hu,
-            notes=f"Interpretation: {interpretation}",
+            hounsfield_median=median_hu,
+            hounsfield_percentile_25=percentile_25,
+            hounsfield_percentile_75=percentile_75,
+            hounsfield_cv=cv,
+            hounsfield_ci_lower=ci_lower,
+            hounsfield_ci_upper=ci_upper,
+            hounsfield_pixel_count=len(roi_pixels),
+            notes=detailed_notes,
             created_by=request.user if request.user.is_authenticated else None
         )
         
@@ -1267,6 +1298,12 @@ def measure_hu(request):
             'min_hu': min_hu,
             'max_hu': max_hu,
             'std_hu': std_hu,
+            'median_hu': median_hu,
+            'percentile_25': percentile_25,
+            'percentile_75': percentile_75,
+            'cv': cv,
+            'ci_lower': ci_lower,
+            'ci_upper': ci_upper,
             'pixel_count': len(roi_pixels),
             'interpretation': interpretation,
             'measurement_id': measurement.id
@@ -1279,36 +1316,58 @@ def measure_hu(request):
 def get_hu_interpretation(hu_value):
     """
     Provide radiological interpretation based on Hounsfield Unit values
-    Based on standard radiological reference values
+    Following international radiological standards (ACR, EUR 16262)
+    
+    Reference: Based on standard CT attenuation values at 120 kVp
+    Note: Values may vary slightly with different kVp settings
     """
-    if hu_value < -900:
-        return "Air/Gas"
+    # Define tissue categories with standard HU ranges
+    if hu_value < -1000:
+        return "Air (extrathoracic)"
+    elif -1000 <= hu_value < -900:
+        return "Air/Gas (intrathoracic)"
     elif -900 <= hu_value < -500:
-        return "Lung tissue"
-    elif -500 <= hu_value < -100:
-        return "Fat tissue"
+        return "Lung parenchyma"
+    elif -500 <= hu_value < -250:
+        return "Fat tissue (adipose)"
+    elif -250 <= hu_value < -100:
+        return "Fat tissue (mixed density)"
     elif -100 <= hu_value < -50:
         return "Fat/Soft tissue interface"
-    elif -50 <= hu_value < 0:
-        return "Soft tissue (low density)"
-    elif 0 <= hu_value < 20:
-        return "Water/CSF"
-    elif 20 <= hu_value < 40:
-        return "Soft tissue (muscle)"
-    elif 40 <= hu_value < 80:
-        return "Soft tissue (liver, spleen)"
-    elif 80 <= hu_value < 120:
-        return "Soft tissue (kidney)"
-    elif 120 <= hu_value < 200:
-        return "Soft tissue (dense)"
-    elif 200 <= hu_value < 400:
-        return "Calcification/Contrast"
+    elif -50 <= hu_value < -10:
+        return "Fluid/Soft tissue (low density)"
+    elif -10 <= hu_value < 10:
+        return "Water/CSF (reference: 0 HU)"
+    elif 10 <= hu_value < 20:
+        return "Transudate/Simple fluid"
+    elif 20 <= hu_value < 30:
+        return "Blood (unclotted)"
+    elif 30 <= hu_value < 45:
+        return "Muscle tissue"
+    elif 45 <= hu_value < 55:
+        return "Gray matter (brain)"
+    elif 55 <= hu_value < 65:
+        return "White matter (brain)"
+    elif 65 <= hu_value < 75:
+        return "Liver (normal)"
+    elif 75 <= hu_value < 85:
+        return "Spleen/Pancreas"
+    elif 85 <= hu_value < 100:
+        return "Kidney (cortex)"
+    elif 100 <= hu_value < 150:
+        return "Soft tissue (high density)/Blood clot"
+    elif 150 <= hu_value < 300:
+        return "Contrast-enhanced tissue"
+    elif 300 <= hu_value < 400:
+        return "Bone (cancellous/trabecular)"
     elif 400 <= hu_value < 1000:
-        return "Bone (cancellous)"
+        return "Bone (mixed cortical/cancellous)"
     elif 1000 <= hu_value < 2000:
-        return "Bone (cortical)"
+        return "Bone (dense cortical)"
+    elif 2000 <= hu_value < 3000:
+        return "Bone (very dense)/Dental enamel"
     else:
-        return "Metal/Dense material"
+        return "Metal/Foreign body (>3000 HU)"
 
 
 @csrf_exempt

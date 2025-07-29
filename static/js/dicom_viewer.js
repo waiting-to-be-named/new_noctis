@@ -1653,21 +1653,124 @@ class DicomViewer {
             });
             if (response.ok) {
                 const result = await response.json();
+                
+                // Format comprehensive statistics following international standards
+                const statsText = [
+                    `Mean: ${result.mean_hu.toFixed(1)} HU (95% CI: ${result.ci_lower.toFixed(1)}-${result.ci_upper.toFixed(1)})`,
+                    `Median: ${result.median_hu.toFixed(1)} HU`,
+                    `Range: ${result.min_hu.toFixed(1)}-${result.max_hu.toFixed(1)} HU`,
+                    `IQR: ${result.percentile_25.toFixed(1)}-${result.percentile_75.toFixed(1)} HU`,
+                    `SD: ${result.std_hu.toFixed(1)}, CV: ${result.cv.toFixed(1)}%`,
+                    `Pixels: ${result.pixel_count}`,
+                    `Tissue: ${result.interpretation}`
+                ].join('\n');
+                
                 const measurement = {
                     image_id: this.currentImage.id,
                     type: 'ellipse',
                     coordinates: [payload], // store bounding box
                     value: result.mean_hu,
                     unit: 'HU',
-                    notes: `Min: ${result.min_hu.toFixed(1)} Max: ${result.max_hu.toFixed(1)}`
+                    notes: statsText,
+                    interpretation: result.interpretation
                 };
                 this.measurements.push(measurement);
                 this.updateMeasurementsList();
                 this.updateDisplay();
+                
+                // Show detailed results in a user-friendly alert
+                this.showHUResults(result);
             }
         } catch (error) {
             console.error('Error measuring HU:', error);
         }
+    }
+    
+    showHUResults(result) {
+        // Create a professional results display following international standards
+        const resultsHTML = `
+            <div style="font-family: Arial, sans-serif; padding: 10px;">
+                <h3 style="margin-bottom: 15px; color: #333;">Hounsfield Unit Analysis Results</h3>
+                
+                <div style="background-color: #f0f8ff; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                    <strong>Tissue Type:</strong> ${result.interpretation}
+                </div>
+                
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr style="background-color: #e9ecef;">
+                        <th style="padding: 8px; text-align: left; border-bottom: 2px solid #dee2e6;">Parameter</th>
+                        <th style="padding: 8px; text-align: right; border-bottom: 2px solid #dee2e6;">Value</th>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #dee2e6;">Mean HU</td>
+                        <td style="padding: 8px; text-align: right; border-bottom: 1px solid #dee2e6;">
+                            <strong>${result.mean_hu.toFixed(1)}</strong> 
+                            <small>(95% CI: ${result.ci_lower.toFixed(1)} - ${result.ci_upper.toFixed(1)})</small>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #dee2e6;">Median HU</td>
+                        <td style="padding: 8px; text-align: right; border-bottom: 1px solid #dee2e6;">${result.median_hu.toFixed(1)}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #dee2e6;">Range</td>
+                        <td style="padding: 8px; text-align: right; border-bottom: 1px solid #dee2e6;">
+                            ${result.min_hu.toFixed(1)} - ${result.max_hu.toFixed(1)}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #dee2e6;">Interquartile Range</td>
+                        <td style="padding: 8px; text-align: right; border-bottom: 1px solid #dee2e6;">
+                            ${result.percentile_25.toFixed(1)} - ${result.percentile_75.toFixed(1)}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #dee2e6;">Standard Deviation</td>
+                        <td style="padding: 8px; text-align: right; border-bottom: 1px solid #dee2e6;">${result.std_hu.toFixed(1)}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #dee2e6;">Coefficient of Variation</td>
+                        <td style="padding: 8px; text-align: right; border-bottom: 1px solid #dee2e6;">${result.cv.toFixed(1)}%</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px;">Sample Size</td>
+                        <td style="padding: 8px; text-align: right;">${result.pixel_count} pixels</td>
+                    </tr>
+                </table>
+                
+                <div style="margin-top: 15px; padding: 10px; background-color: #fff3cd; border-radius: 5px;">
+                    <small><strong>Note:</strong> HU values are based on standard CT calibration (Water = 0 HU, Air = -1000 HU).
+                    Values may vary with different kVp settings and scanner calibration.</small>
+                </div>
+            </div>
+        `;
+        
+        // Create a modal or alert to show results
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            z-index: 10000;
+        `;
+        
+        modal.innerHTML = resultsHTML + `
+            <button onclick="this.parentElement.remove()" 
+                    style="margin-top: 15px; padding: 8px 16px; background-color: #007bff; 
+                           color: white; border: none; border-radius: 5px; cursor: pointer;">
+                Close
+            </button>
+        `;
+        
+        document.body.appendChild(modal);
     }
     
     startVolumeCalculation() {

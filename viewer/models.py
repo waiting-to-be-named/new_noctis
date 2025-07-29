@@ -349,11 +349,18 @@ class Measurement(models.Model):
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
-    # For ellipse HU measurements
+    # For ellipse HU measurements - following international standards
     hounsfield_mean = models.FloatField(null=True, blank=True)
     hounsfield_min = models.FloatField(null=True, blank=True)
     hounsfield_max = models.FloatField(null=True, blank=True)
     hounsfield_std = models.FloatField(null=True, blank=True)
+    hounsfield_median = models.FloatField(null=True, blank=True)
+    hounsfield_percentile_25 = models.FloatField(null=True, blank=True)
+    hounsfield_percentile_75 = models.FloatField(null=True, blank=True)
+    hounsfield_cv = models.FloatField(null=True, blank=True)  # Coefficient of variation
+    hounsfield_ci_lower = models.FloatField(null=True, blank=True)  # 95% CI lower bound
+    hounsfield_ci_upper = models.FloatField(null=True, blank=True)  # 95% CI upper bound
+    hounsfield_pixel_count = models.IntegerField(null=True, blank=True)
     
     class Meta:
         ordering = ['-created_at']
