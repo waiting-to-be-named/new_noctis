@@ -1226,6 +1226,21 @@ def measure_hu(request):
         
         # Extract pixel values within ellipse
         roi_pixels = pixel_array[mask]
+        # New: compute ROI area in mm² (SI units) so results follow global recommendations
+        if image.pixel_spacing_x and image.pixel_spacing_y:
+            area_mm2 = len(roi_pixels) * image.pixel_spacing_x * image.pixel_spacing_y
+        else:
+            pixel_spacing = getattr(dicom_data, 'PixelSpacing', None)
+            if pixel_spacing and len(pixel_spacing) >= 2:
+                try:
+                    spacing_x = float(pixel_spacing[0])
+                    spacing_y = float(pixel_spacing[1])
+                except Exception:
+                    spacing_x = spacing_y = 1.0
+                area_mm2 = len(roi_pixels) * spacing_x * spacing_y
+            else:
+                # Fallback – area expressed in number of pixels when spacing is unavailable
+                area_mm2 = None
         
         if len(roi_pixels) == 0:
             return JsonResponse({'error': 'No pixels in ROI'}, status=400)
@@ -1258,7 +1273,7 @@ def measure_hu(request):
             hounsfield_min=min_hu,
             hounsfield_max=max_hu,
             hounsfield_std=std_hu,
-            notes=f"Interpretation: {interpretation}",
+            notes=f"Interpretation: {interpretation}; ROI area: {area_mm2:.2f} mm²" if area_mm2 else f"Interpretation: {interpretation}",
             created_by=request.user if request.user.is_authenticated else None
         )
         
@@ -1268,6 +1283,7 @@ def measure_hu(request):
             'max_hu': max_hu,
             'std_hu': std_hu,
             'pixel_count': len(roi_pixels),
+            'area_mm2': round(area_mm2, 2) if area_mm2 else None,
             'interpretation': interpretation,
             'measurement_id': measurement.id
         })

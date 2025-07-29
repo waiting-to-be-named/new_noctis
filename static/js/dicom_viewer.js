@@ -1549,6 +1549,9 @@ class DicomViewer {
                 case 'ellipse':
                     typeText = 'HU Analysis';
                     displayText = `${measurement.value.toFixed(1)} HU`;
+                    if (measurement.area_mm2 !== undefined && measurement.area_mm2 !== null) {
+                        displayText += ` | Area: ${measurement.area_mm2.toFixed(2)} mm²`;
+                    }
                     if (measurement.hounsfield_min !== undefined) {
                         displayText += ` (${measurement.hounsfield_min.toFixed(1)} - ${measurement.hounsfield_max.toFixed(1)})`;
                     }
@@ -1659,7 +1662,11 @@ class DicomViewer {
                     coordinates: [payload], // store bounding box
                     value: result.mean_hu,
                     unit: 'HU',
-                    notes: `Min: ${result.min_hu.toFixed(1)} Max: ${result.max_hu.toFixed(1)}`
+                    notes: `Min: ${result.min_hu.toFixed(1)} Max: ${result.max_hu.toFixed(1)}`,
+                    area_mm2: result.area_mm2, // ROI area in mm²
+                    hounsfield_min: result.min_hu,
+                    hounsfield_max: result.max_hu,
+                    hounsfield_std: result.std_hu
                 };
                 this.measurements.push(measurement);
                 this.updateMeasurementsList();
@@ -2451,7 +2458,11 @@ ${this.aiAnalysisResults.recommendations || 'None'}`;
                 
                 // Show HU values in alert
                 if (data.hounsfield_mean !== undefined) {
-                    alert(`Hounsfield Unit Measurements:\n\nMean: ${data.hounsfield_mean.toFixed(1)} HU\nMin: ${data.hounsfield_min.toFixed(1)} HU\nMax: ${data.hounsfield_max.toFixed(1)} HU\nStd Dev: ${data.hounsfield_std.toFixed(1)} HU`);
+                    let alertMsg = `Hounsfield Unit Measurements:\n\nMean: ${data.hounsfield_mean.toFixed(1)} HU\nMin: ${data.hounsfield_min.toFixed(1)} HU\nMax: ${data.hounsfield_max.toFixed(1)} HU\nStd Dev: ${data.hounsfield_std.toFixed(1)} HU`;
+                    if (data.area_mm2 !== null && data.area_mm2 !== undefined) {
+                        alertMsg += `\nROI Area: ${data.area_mm2.toFixed(2)} mm²`;
+                    }
+                    alert(alertMsg);
                 }
             }
         })
