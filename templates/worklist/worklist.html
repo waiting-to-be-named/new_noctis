@@ -16,6 +16,11 @@
                 <button class="btn btn-view" onclick="window.location.href='/home/'">
                     <i class="fas fa-home"></i> Home
                 </button>
+                {% if is_admin %}
+                <button class="btn btn-view" onclick="window.location.href='/worklist/users/'">
+                    <i class="fas fa-users"></i> Users
+                </button>
+                {% endif %}
                 {% if is_admin or is_radiologist %}
                 <div class="notification-area">
                     <button id="notification-bell" class="notification-bell" onclick="toggleNotifications()">
@@ -211,12 +216,29 @@
             <!-- Chat messages will be loaded here -->
         </div>
         <div class="chat-input-area">
+            <div class="message-type-selector">
+                <select id="chat-message-type" class="form-select">
+                    <option value="user_chat">Direct Message</option>
+                    <option value="facility_broadcast">Facility Broadcast</option>
+                    <option value="study_discussion">Study Discussion</option>
+                </select>
+            </div>
+            <div class="recipient-selector" id="recipient-selector">
+                <select id="chat-recipient" class="form-select">
+                    <option value="">Select Recipient</option>
+                </select>
+            </div>
             <div class="facility-selector">
                 <select id="chat-facility" class="form-select">
                     <option value="">Select Facility</option>
                     {% for facility in facilities %}
                     <option value="{{ facility.id }}">{{ facility.name }}</option>
                     {% endfor %}
+                </select>
+            </div>
+            <div class="study-selector" id="study-selector" style="display: none;">
+                <select id="chat-study" class="form-select">
+                    <option value="">Select Study (Optional)</option>
                 </select>
             </div>
             <div class="message-input">
@@ -516,13 +538,30 @@
                     data.messages.forEach(msg => {
                         const item = document.createElement('div');
                         item.className = `chat-message ${msg.message_type}`;
-                        item.innerHTML = `
+                        
+                        let messageHeader = `
                             <div class="message-header">
                                 <span class="message-sender">${msg.sender_name}</span>
-                                <span class="message-type">${msg.message_type}</span>
+                                <span class="sender-role">${msg.sender_role}</span>
                                 <span class="message-time">${new Date(msg.created_at).toLocaleString()}</span>
                             </div>
+                        `;
+                        
+                        if (msg.is_broadcast) {
+                            messageHeader = `
+                                <div class="message-header broadcast">
+                                    <span class="message-sender">${msg.sender_name}</span>
+                                    <span class="sender-role">${msg.sender_role}</span>
+                                    <span class="broadcast-badge">📢 Broadcast</span>
+                                    <span class="message-time">${new Date(msg.created_at).toLocaleString()}</span>
+                                </div>
+                            `;
+                        }
+                        
+                        item.innerHTML = `
+                            ${messageHeader}
                             <div class="message-content">${msg.message}</div>
+                            ${msg.facility_name ? `<div class="message-facility">Facility: ${msg.facility_name}</div>` : ''}
                         `;
                         list.appendChild(item);
                     });
@@ -535,8 +574,15 @@
         function sendMessage() {
             const messageInput = document.getElementById('chat-message-input');
             const facilitySelect = document.getElementById('chat-facility');
+            const recipientSelect = document.getElementById('chat-recipient');
+            const messageTypeSelect = document.getElementById('chat-message-type');
+            const studySelect = document.getElementById('chat-study');
+            
             const message = messageInput.value.trim();
             const facilityId = facilitySelect.value;
+            const recipientId = recipientSelect.value;
+            const messageType = messageTypeSelect.value;
+            const studyId = studySelect.value;
             
             if (!message) return;
             
@@ -548,7 +594,10 @@
                 },
                 body: JSON.stringify({
                     message: message,
-                    facility_id: facilityId
+                    facility_id: facilityId,
+                    recipient_id: recipientId,
+                    message_type: messageType,
+                    study_id: studyId
                 })
             })
             .then(response => response.json())
@@ -561,6 +610,64 @@
                 }
             })
             .catch(error => console.error('Error sending message:', error));
+        }
+        
+        // Handle message type changes
+        document.getElementById('chat-message-type').addEventListener('change', function() {
+            const messageType = this.value;
+            const recipientSelector = document.getElementById('recipient-selector');
+            const studySelector = document.getElementById('study-selector');
+            
+            if (messageType === 'user_chat') {
+                recipientSelector.style.display = 'block';
+                studySelector.style.display = 'none';
+                loadUsers();
+            } else if (messageType === 'facility_broadcast') {
+                recipientSelector.style.display = 'none';
+                studySelector.style.display = 'none';
+            } else if (messageType === 'study_discussion') {
+                recipientSelector.style.display = 'none';
+                studySelector.style.display = 'block';
+                loadStudies();
+            }
+        });
+        
+        // Handle facility changes for user loading
+        document.getElementById('chat-facility').addEventListener('change', function() {
+            const messageType = document.getElementById('chat-message-type').value;
+            if (messageType === 'user_chat') {
+                loadUsers();
+            }
+        });
+        
+        function loadUsers() {
+            const facilityId = document.getElementById('chat-facility').value;
+            const recipientSelect = document.getElementById('chat-recipient');
+            
+            let url = '/worklist/api/users/';
+            if (facilityId) {
+                url += `?facility_id=${facilityId}`;
+            }
+            
+            fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                recipientSelect.innerHTML = '<option value="">Select Recipient</option>';
+                data.users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.id;
+                    option.textContent = `${user.display_name} (${user.role_display})`;
+                    recipientSelect.appendChild(option);
+                });
+            })
+            .catch(error => console.error('Error loading users:', error));
+        }
+        
+        function loadStudies() {
+            const studySelect = document.getElementById('chat-study');
+            // This would need to be implemented based on available studies
+            // For now, we'll leave it empty
+            studySelect.innerHTML = '<option value="">Select Study (Optional)</option>';
         }
         
         function markAsRead(notificationId) {

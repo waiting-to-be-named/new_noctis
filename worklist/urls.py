@@ -32,7 +32,15 @@ urlpatterns = [
     path('api/notifications/clear-old/', views.api_notifications_clear_old, name='api_notifications_clear_old'),
     
     # Chat API endpoints
-    path('api/chat/', views.api_chat_messages, name='api_chat_messages'),
-    path('api/chat/send/', views.api_chat_send, name='api_chat_send'),
-    path('api/chat/clear/', views.api_chat_clear, name='api_chat_clear'),
+path('api/chat/', views.api_chat_messages, name='api_chat_messages'),
+path('api/chat/send/', views.api_chat_send, name='api_chat_send'),
+path('api/chat/clear/', views.api_chat_clear, name='api_chat_clear'),
+
+# User management API endpoints
+path('api/users/', views.api_users_list, name='api_users_list'),
+path('api/users/<int:user_id>/profile/', views.api_user_profile, name='api_user_profile'),
+path('api/facilities/<int:facility_id>/staff/', views.api_facility_staff, name='api_facility_staff'),
+
+# User management pages
+path('users/', views.user_management, name='user_management'),
 ]

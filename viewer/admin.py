@@ -3,14 +3,57 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from .models import (
-    Facility, DicomStudy, DicomSeries, DicomImage, Measurement, 
-    Annotation, Report, WorklistEntry, AIAnalysis, Notification
+    UserProfile, Facility, DicomStudy, DicomSeries, DicomImage, Measurement, 
+    Annotation, Report, WorklistEntry, AIAnalysis, Notification, ChatMessage
 )
 
 # Register your models here.
 admin.site.site_header = "Noctis Administration"
 admin.site.site_title = "Noctis Admin"
 admin.site.index_title = "Noctis Medical Imaging Platform"
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ['user', 'user_type', 'facility', 'is_active_staff', 'created_at']
+    list_filter = ['user_type', 'facility', 'is_active_staff', 'created_at']
+    search_fields = ['user__username', 'user__first_name', 'user__last_name', 'medical_license']
+    readonly_fields = ['created_at', 'updated_at']
+    
+    fieldsets = (
+        ('User Information', {
+            'fields': ('user', 'user_type', 'is_active_staff')
+        }),
+        ('Professional Information', {
+            'fields': ('facility', 'medical_license', 'specialization', 'phone', 'bio')
+        }),
+        ('Profile', {
+            'fields': ('profile_picture',)
+        }),
+        ('System Information', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+
+
+@admin.register(ChatMessage)
+class ChatMessageAdmin(admin.ModelAdmin):
+    list_display = ['sender', 'recipient', 'facility', 'message_type', 'created_at', 'is_read']
+    list_filter = ['message_type', 'facility', 'is_read', 'created_at']
+    search_fields = ['sender__username', 'recipient__username', 'message', 'facility__name']
+    readonly_fields = ['created_at']
+    
+    fieldsets = (
+        ('Message Information', {
+            'fields': ('sender', 'recipient', 'facility', 'message_type', 'message')
+        }),
+        ('Related Content', {
+            'fields': ('related_study',)
+        }),
+        ('Status', {
+            'fields': ('is_read', 'created_at')
+        }),
+    )
 
 
 @admin.register(DicomStudy)
@@ -106,5 +149,25 @@ class AnnotationAdmin(admin.ModelAdmin):
         }),
         ('System Information', {
             'fields': ('created_by', 'created_at')
+        }),
+    )
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ['recipient', 'sender', 'notification_type', 'title', 'is_read', 'created_at']
+    list_filter = ['notification_type', 'is_read', 'created_at']
+    search_fields = ['recipient__username', 'sender__username', 'title', 'message']
+    readonly_fields = ['created_at']
+    
+    fieldsets = (
+        ('Notification Information', {
+            'fields': ('recipient', 'sender', 'notification_type', 'title', 'message')
+        }),
+        ('Related Content', {
+            'fields': ('related_study', 'related_facility')
+        }),
+        ('Status', {
+            'fields': ('is_read', 'created_at')
         }),
     )
