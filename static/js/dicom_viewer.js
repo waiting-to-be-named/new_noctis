@@ -80,7 +80,7 @@ class DicomViewer {
         // Load initial study if provided
         if (this.initialStudyId) {
             console.log('Loading initial study:', this.initialStudyId);
-            await this.loadStudy(this.initialStudyId);
+            await this.loadStudyImages(this.initialStudyId);
         }
     }
     
@@ -356,7 +356,8 @@ class DicomViewer {
             
             if (response.ok) {
                 const result = await response.json();
-                progressText.textContent = 'Upload complete!';
+                progressText.textContent = 'Upload complete! Processing files...';
+                progressFill.style.backgroundColor = '#28a745'; // Green for success
                 
                 // Show warnings if any
                 if (result.warnings && result.warnings.length > 0) {
@@ -371,7 +372,8 @@ class DicomViewer {
                     progressDiv.style.display = 'none';
                     
                     if (result.study_id) {
-                        this.loadStudy(result.study_id);
+                        progressText.textContent = 'Loading study...';
+                        this.loadStudyImages(result.study_id);
                         // Refresh the studies list
                         this.loadBackendStudies();
                     }
@@ -379,11 +381,7 @@ class DicomViewer {
                     // Show success message
                     if (result.uploaded_files && result.uploaded_files.length > 0) {
                         const message = `Successfully uploaded ${result.uploaded_files.length} DICOM file(s)`;
-                        if (result.warnings && result.warnings.length > 0) {
-                            alert(message + '\n\nSome files had issues but were processed successfully.');
-                        } else {
-                            alert(message);
-                        }
+                        this.showSuccess(message);
                     }
                 }, 1000);
             } else {
@@ -398,6 +396,13 @@ class DicomViewer {
                         errorMessage = 'File validation failed: ' + errorMessage;
                     } else if (errorData.error_type === 'csrf_error') {
                         errorMessage = 'Security token error. Please refresh the page and try again.';
+                    } else if (response.status === 400) {
+                        // Bad request - likely validation error
+                        errorMessage = 'Invalid file format or corrupted DICOM file: ' + errorMessage;
+                    } else if (response.status === 413) {
+                        errorMessage = 'File too large. Maximum file size is 100MB.';
+                    } else if (response.status === 500) {
+                        errorMessage = 'Server error occurred. Please try again later or contact support.';
                     }
                 } catch (parseError) {
                     console.error('Failed to parse error response:', parseError);
@@ -420,14 +425,26 @@ class DicomViewer {
                 throw new Error(errorMessage);
             }
         } catch (error) {
-            progressText.textContent = 'Upload failed: ' + error.message;
+            progressText.textContent = 'Upload failed';
+            progressFill.style.width = '0%';
+            progressFill.style.backgroundColor = '#dc3545'; // Red color for error
             console.error('Upload error:', error);
             
-            // Show error message to user
+            // Show detailed error message to user
+            let userMessage = error.message;
+            if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+                userMessage = 'Network error: Please check your internet connection and try again.';
+            } else if (error.message.includes('413')) {
+                userMessage = 'File too large: Please ensure all files are under 100MB.';
+            }
+            
             setTimeout(() => {
-                alert('Upload failed: ' + error.message);
+                alert('Upload Error:\n\n' + userMessage + '\n\nPlease check:\n• File format is DICOM (.dcm, .dicom)\n• File size is under 100MB\n• Your internet connection is stable');
                 progressDiv.style.display = 'none';
-            }, 2000);
+                // Reset progress bar
+                progressFill.style.width = '0%';
+                progressFill.style.backgroundColor = '#007bff';
+            }, 1000);
         }
     }
     
@@ -512,7 +529,7 @@ class DicomViewer {
                     progressDiv.style.display = 'none';
                     
                     if (result.study_id) {
-                        this.loadStudy(result.study_id);
+                        this.loadStudyImages(result.study_id);
                         // Refresh the studies list
                         this.loadBackendStudies();
                     }
@@ -539,6 +556,13 @@ class DicomViewer {
                         errorMessage = 'File validation failed: ' + errorMessage;
                     } else if (errorData.error_type === 'csrf_error') {
                         errorMessage = 'Security token error. Please refresh the page and try again.';
+                    } else if (response.status === 400) {
+                        // Bad request - likely validation error
+                        errorMessage = 'Invalid file format or corrupted DICOM file: ' + errorMessage;
+                    } else if (response.status === 413) {
+                        errorMessage = 'File too large. Maximum file size is 100MB.';
+                    } else if (response.status === 500) {
+                        errorMessage = 'Server error occurred. Please try again later or contact support.';
                     }
                 } catch (parseError) {
                     console.error('Failed to parse error response:', parseError);
@@ -561,14 +585,26 @@ class DicomViewer {
                 throw new Error(errorMessage);
             }
         } catch (error) {
-            progressText.textContent = 'Upload failed: ' + error.message;
-            console.error('Upload error:', error);
+            progressText.textContent = 'Upload failed';
+            progressFill.style.width = '0%';
+            progressFill.style.backgroundColor = '#dc3545'; // Red color for error
+            console.error('Folder upload error:', error);
             
-            // Show error message to user
+            // Show detailed error message to user
+            let userMessage = error.message;
+            if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+                userMessage = 'Network error: Please check your internet connection and try again.';
+            } else if (error.message.includes('413')) {
+                userMessage = 'Files too large: Please ensure all files are under 100MB each.';
+            }
+            
             setTimeout(() => {
-                alert('Upload failed: ' + error.message);
+                alert('Folder Upload Error:\n\n' + userMessage + '\n\nPlease check:\n• All files in the folder are DICOM format\n• Each file is under 100MB\n• Your internet connection is stable');
                 progressDiv.style.display = 'none';
-            }, 2000);
+                // Reset progress bar
+                progressFill.style.width = '0%';
+                progressFill.style.backgroundColor = '#007bff';
+            }, 1000);
         }
     }
     
@@ -721,6 +757,40 @@ class DicomViewer {
         setTimeout(() => {
             if (errorDiv.parentElement) {
                 errorDiv.remove();
+            }
+        }, 5000);
+    }
+    
+    showSuccess(message) {
+        console.log(message);
+        // Create a success notification
+        const successDiv = document.createElement('div');
+        successDiv.className = 'success-message';
+        successDiv.innerHTML = `
+            <div class="success-content">
+                <i class="fas fa-check-circle"></i>
+                <span>${message}</span>
+                <button onclick="this.parentElement.parentElement.remove()">×</button>
+            </div>
+        `;
+        successDiv.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            z-index: 1000;
+            max-width: 400px;
+        `;
+        document.body.appendChild(successDiv);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (successDiv.parentElement) {
+                successDiv.remove();
             }
         }, 5000);
     }
@@ -2495,12 +2565,12 @@ ${this.aiAnalysisResults.recommendations || 'None'}`;
             this.currentImageIndex = 0;
             
             // Update the UI with study information
-            this.updateStudyInfo(data.study);
+            this.updatePatientInfo();
+            this.updateSliders();
             
             // Load the first image
             if (this.currentImages.length > 0) {
-                await this.loadImage(0);
-                this.updateImageControls();
+                await this.loadCurrentImage();
             }
             
         } catch (error) {
