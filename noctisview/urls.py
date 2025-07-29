@@ -28,6 +28,7 @@ urlpatterns = [
     path('home/', HomeView.as_view(), name='home_alt'),
     path('viewer/', include('viewer.urls')),
     path('worklist/', include('worklist.urls')),
+    path('dicom-server/', include('dicom_server.urls')),
     
     # Authentication URLs
     path('accounts/login/', auth_views.LoginView.as_view(template_name='registration/login.html'), name='login'),
