@@ -71,7 +71,8 @@ class DicomViewer {
     async init() {
         this.setupCanvas();
         this.setupEventListeners();
-        await this.loadBackendStudies();
+        // Remove await from loadBackendStudies to prevent blocking
+        this.loadBackendStudies(); // Don't await this
         this.setupNotifications();
         this.setupMeasurementUnitSelector();
         this.setup3DControls();
@@ -80,7 +81,15 @@ class DicomViewer {
         // Load initial study if provided
         if (this.initialStudyId) {
             console.log('Loading initial study:', this.initialStudyId);
-            await this.loadStudy(this.initialStudyId);
+            // Add a small delay to ensure canvas is ready
+            setTimeout(async () => {
+                try {
+                    await this.loadStudy(this.initialStudyId);
+                } catch (error) {
+                    console.error('Failed to load initial study:', error);
+                    this.showError('Failed to load the requested study. Please try refreshing the page.');
+                }
+            }, 100);
         }
     }
     
@@ -592,6 +601,13 @@ class DicomViewer {
         try {
             console.log(`Loading study ${studyId}...`);
             
+            // Clear previous study data
+            this.currentStudy = null;
+            this.currentSeries = null;
+            this.currentImages = [];
+            this.currentImageIndex = 0;
+            this.currentImage = null;
+            
             // Show loading indicator
             this.ctx.fillStyle = '#000';
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -603,6 +619,8 @@ class DicomViewer {
             
             const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
             
+            console.log(`API Response status: ${response.status}`);
+            
             if (!response.ok) {
                 const errorText = await response.text();
                 let errorMessage;
@@ -612,12 +630,15 @@ class DicomViewer {
                 } catch (e) {
                     errorMessage = `HTTP ${response.status}: ${response.statusText}`;
                 }
+                console.error('API Error:', errorMessage);
                 throw new Error(errorMessage);
             }
             
             const data = await response.json();
+            console.log('API Response data:', data);
             
             if (!data.images || data.images.length === 0) {
+                console.error('No images in study data');
                 throw new Error('No images found in this study');
             }
             
@@ -638,6 +659,7 @@ class DicomViewer {
             this.updateSliders();
             
             // Load the first image
+            console.log('Loading first image...');
             await this.loadCurrentImage();
             
             // Load clinical info if available
@@ -676,6 +698,15 @@ class DicomViewer {
         console.log(`Loading image ${this.currentImageIndex + 1}/${this.currentImages.length}, ID: ${imageData.id}`);
         
         try {
+            // Show loading indicator
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '16px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText('Loading image...', this.canvas.width / 2, this.canvas.height / 2);
+            
             const params = new URLSearchParams({
                 window_width: this.windowWidth,
                 window_level: this.windowLevel,
@@ -684,11 +715,15 @@ class DicomViewer {
             
             const response = await fetch(`/viewer/api/images/${imageData.id}/data/?${params}`);
             
+            console.log(`Image API Response status: ${response.status}`);
+            
             if (!response.ok) {
+                console.error(`Failed to load image: HTTP ${response.status}`);
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
             const data = await response.json();
+            console.log('Image data received, has image_data:', !!data.image_data);
             
             if (data.image_data) {
                 const img = new Image();
@@ -714,17 +749,26 @@ class DicomViewer {
                 };
                 img.onerror = (error) => {
                     console.error('Failed to load image data:', error);
-                    console.error('Image source:', img.src);
+                    console.error('Image source:', img.src ? img.src.substring(0, 100) + '...' : 'No source');
                     this.showError('Failed to load image. Please try refreshing or selecting another image.');
                 };
                 img.src = data.image_data;
             } else {
-                throw new Error(data.error || 'No image data received');
+                console.error('No image_data in response');
+                throw new Error('No image data received from server');
             }
             
         } catch (error) {
             console.error('Error loading image:', error);
             this.showError('Error loading image: ' + error.message);
+            // Clear the canvas with error message
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.fillStyle = '#ff0000';
+            this.ctx.font = '14px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText('Failed to load image', this.canvas.width / 2, this.canvas.height / 2);
         }
     }
     
