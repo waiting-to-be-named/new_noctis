@@ -71,7 +71,10 @@ class DicomViewer {
     async init() {
         this.setupCanvas();
         this.setupEventListeners();
-        await this.loadBackendStudies();
+        // Only attempt to populate backend studies if the selector is present
+        if (document.getElementById('backend-studies')) {
+            await this.loadBackendStudies();
+        }
         this.setupNotifications();
         this.setupMeasurementUnitSelector();
         this.setup3DControls();
@@ -114,6 +117,18 @@ class DicomViewer {
             });
         }
         
+        // Optionally listen for study selector changes (if present)
+        const studySelect = document.getElementById('backend-studies');
+        if (studySelect) {
+            studySelect.addEventListener('change', (e) => {
+                if (e.target.value === 'worklist') {
+                    window.location.href = '/worklist/';
+                } else if (e.target.value) {
+                    this.loadStudy(e.target.value);
+                }
+            });
+        }
+        
         // Sliders
         document.getElementById('ww-slider').addEventListener('input', (e) => {
             this.windowWidth = parseInt(e.target.value);
@@ -153,13 +168,16 @@ class DicomViewer {
         });
         
         // Load from system (worklist)
-        document.getElementById('backend-studies').addEventListener('change', (e) => {
-            if (e.target.value === 'worklist') {
-                window.location.href = '/worklist/';
-            } else if (e.target.value) {
-                this.loadStudy(e.target.value);
-            }
-        });
+        const bsElement = document.getElementById('backend-studies');
+        if (bsElement) {
+            bsElement.addEventListener('change', (e) => {
+                if (e.target.value === 'worklist') {
+                    window.location.href = '/worklist/';
+                } else if (e.target.value) {
+                    this.loadStudy(e.target.value);
+                }
+            });
+        }
         
         // Clear measurements
         document.getElementById('clear-measurements').addEventListener('click', () => {
@@ -563,10 +581,14 @@ class DicomViewer {
     
     async loadBackendStudies() {
         try {
+            const select = document.getElementById('backend-studies');
+            if (!select) {
+                // Selector not present – nothing to do
+                return;
+            }
             const response = await fetch('/viewer/api/studies/');
             const studies = await response.json();
             
-            const select = document.getElementById('backend-studies');
             select.innerHTML = `
                 <option value="">Select DICOM from System</option>
                 <option value="worklist">📋 Open Worklist</option>

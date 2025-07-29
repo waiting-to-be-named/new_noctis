@@ -120,48 +120,45 @@ class DicomImage(models.Model):
         return f"Image {self.instance_number}"
     
     def load_dicom_data(self):
-        """Load and return pydicom dataset"""
+        """Load and return pydicom dataset with robust storage fallbacks"""
+        # BEGIN EDIT: improve fallback mechanisms when resolving the stored file
+        from django.core.files.storage import default_storage
+        
         if not self.file_path:
             print(f"No file path for DicomImage {self.id}")
             return None
-            
+        
         try:
-            # Handle both FileField and string paths
-            if hasattr(self.file_path, 'path'):
+            # Determine absolute path if possible
+            if hasattr(self.file_path, 'path') and os.path.exists(self.file_path.path):
                 file_path = self.file_path.path
-            else:
-                # Check if it's a relative path, make it absolute
-                if not os.path.isabs(str(self.file_path)):
-                    from django.conf import settings
-                    file_path = os.path.join(settings.MEDIA_ROOT, str(self.file_path))
-                else:
-                    file_path = str(self.file_path)
+                return pydicom.dcmread(file_path)
             
-            # Check if file exists
-            if not os.path.exists(file_path):
-                print(f"DICOM file not found: {file_path}")
-                print(f"Current working directory: {os.getcwd()}")
-                print(f"File path from model: {self.file_path}")
-                # Try alternative paths
-                alt_paths = [
-                    os.path.join(os.getcwd(), 'media', str(self.file_path).replace('dicom_files/', '')),
-                    os.path.join(os.getcwd(), str(self.file_path)),
-                    str(self.file_path)
-                ]
-                for alt_path in alt_paths:
-                    if os.path.exists(alt_path):
-                        print(f"Found file at alternative path: {alt_path}")
-                        file_path = alt_path
-                        break
-                else:
-                    print(f"File not found in any of the attempted paths: {alt_paths}")
-                    return None
-                
-            return pydicom.dcmread(file_path)
-        except Exception as e:
-            print(f"Error loading DICOM from {self.file_path}: {e}")
-            print(f"Attempted file path: {file_path if 'file_path' in locals() else 'unknown'}")
+            # Build absolute path from MEDIA_ROOT + relative path
+            candidate_path = os.path.join(settings.MEDIA_ROOT, str(self.file_path))
+            if os.path.exists(candidate_path):
+                return pydicom.dcmread(candidate_path)
+            
+            # Try opening with Django's default storage (works on remote/object storages)
+            if default_storage.exists(str(self.file_path)):
+                with default_storage.open(str(self.file_path), 'rb') as f:
+                    return pydicom.dcmread(f)
+            
+            # Original extensive fallback search
+            alt_paths = [
+                os.path.join(os.getcwd(), 'media', str(self.file_path).replace('dicom_files/', '')),
+                os.path.join(os.getcwd(), str(self.file_path)),
+                str(self.file_path)
+            ]
+            for alt_path in alt_paths:
+                if os.path.exists(alt_path):
+                    return pydicom.dcmread(alt_path)
+            print(f"DICOM file not found for image {self.id}. Checked paths: {[candidate_path] + alt_paths}")
             return None
+        except Exception as e:
+            print(f"Error loading DICOM for image {self.id}: {e}")
+            return None
+        # END EDIT
     
     def get_pixel_array(self):
         """Get pixel array from DICOM file"""
