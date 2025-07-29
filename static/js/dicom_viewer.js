@@ -80,7 +80,35 @@ class DicomViewer {
         // Load initial study if provided
         if (this.initialStudyId) {
             console.log('Loading initial study:', this.initialStudyId);
-            await this.loadStudy(this.initialStudyId);
+            try {
+                await this.loadStudy(this.initialStudyId);
+            } catch (error) {
+                console.error('Failed to load initial study:', error);
+                this.showError('Failed to load study: ' + error.message);
+                
+                // Show detailed error message on canvas
+                this.ctx.fillStyle = '#000';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                this.ctx.fillStyle = '#ff0000';
+                this.ctx.font = '16px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText('Failed to load study', this.canvas.width / 2, this.canvas.height / 2 - 40);
+                this.ctx.fillText('Study ID: ' + this.initialStudyId, this.canvas.width / 2, this.canvas.height / 2 - 20);
+                this.ctx.fillText('Error: ' + error.message, this.canvas.width / 2, this.canvas.height / 2);
+                this.ctx.fillText('Check browser console for details', this.canvas.width / 2, this.canvas.height / 2 + 20);
+            }
+        } else {
+            console.log('No initial study ID provided');
+            // Show welcome message
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '20px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText('No study selected', this.canvas.width / 2, this.canvas.height / 2 - 20);
+            this.ctx.fillText('Upload DICOM files or select from worklist', this.canvas.width / 2, this.canvas.height / 2 + 20);
         }
     }
     
@@ -601,23 +629,30 @@ class DicomViewer {
             this.ctx.textBaseline = 'middle';
             this.ctx.fillText('Loading study...', this.canvas.width / 2, this.canvas.height / 2);
             
+            console.log(`Fetching study data from: /viewer/api/studies/${studyId}/images/`);
             const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
+            
+            console.log(`Response status: ${response.status} ${response.statusText}`);
             
             if (!response.ok) {
                 const errorText = await response.text();
+                console.error('Error response text:', errorText);
                 let errorMessage;
                 try {
                     const errorData = JSON.parse(errorText);
                     errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
                 } catch (e) {
                     errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                    console.error('Failed to parse error response:', e);
                 }
                 throw new Error(errorMessage);
             }
             
             const data = await response.json();
+            console.log('Received study data:', data);
             
             if (!data.images || data.images.length === 0) {
+                console.error('No images found in study data:', data);
                 throw new Error('No images found in this study');
             }
             
@@ -638,6 +673,7 @@ class DicomViewer {
             this.updateSliders();
             
             // Load the first image
+            console.log('Loading first image...');
             await this.loadCurrentImage();
             
             // Load clinical info if available
@@ -663,6 +699,9 @@ class DicomViewer {
             
             // Reset patient info on error
             this.updatePatientInfo();
+            
+            // Re-throw the error so it can be caught by the caller
+            throw error;
         }
     }
     
@@ -674,6 +713,7 @@ class DicomViewer {
         
         const imageData = this.currentImages[this.currentImageIndex];
         console.log(`Loading image ${this.currentImageIndex + 1}/${this.currentImages.length}, ID: ${imageData.id}`);
+        console.log('Image data:', imageData);
         
         try {
             const params = new URLSearchParams({
@@ -682,18 +722,26 @@ class DicomViewer {
                 inverted: this.inverted
             });
             
-            const response = await fetch(`/viewer/api/images/${imageData.id}/data/?${params}`);
+            const imageUrl = `/viewer/api/images/${imageData.id}/data/?${params}`;
+            console.log(`Fetching image data from: ${imageUrl}`);
+            
+            const response = await fetch(imageUrl);
+            console.log(`Image response status: ${response.status} ${response.statusText}`);
             
             if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Image error response:', errorText);
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
             const data = await response.json();
+            console.log('Received image data response:', data);
             
             if (data.image_data) {
+                console.log('Creating image element...');
                 const img = new Image();
                 img.onload = () => {
-                    console.log('Image loaded successfully');
+                    console.log('Image loaded successfully, dimensions:', img.width, 'x', img.height);
                     this.currentImage = {
                         image: img,
                         metadata: data.metadata,
@@ -716,12 +764,18 @@ class DicomViewer {
                 };
                 img.onerror = (error) => {
                     console.error('Failed to load image data:', error);
-                    console.error('Image source:', img.src);
+                    console.error('Image source length:', img.src.length);
+                    console.error('Image source preview:', img.src.substring(0, 100));
                     this.showError('Failed to load image. Please try refreshing or selecting another image.');
                 };
+                console.log('Setting image source...');
                 img.src = data.image_data;
+            } else if (data.error) {
+                console.error('Server returned error:', data.error);
+                throw new Error(data.error);
             } else {
-                throw new Error(data.error || 'No image data received');
+                console.error('No image data in response:', data);
+                throw new Error('No image data received');
             }
             
         } catch (error) {

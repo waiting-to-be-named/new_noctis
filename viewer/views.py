@@ -985,7 +985,7 @@ def get_study_images(request, study_id):
     """Get all images for a study"""
     try:
         study = DicomStudy.objects.get(id=study_id)
-        images = DicomImage.objects.filter(series__study=study).order_by('series__series_number', 'instance_number')
+        images = DicomImage.objects.filter(series__study=study).order_by('series__series_number', 'image_number', 'instance_number')
         
         images_data = []
         for image in images:

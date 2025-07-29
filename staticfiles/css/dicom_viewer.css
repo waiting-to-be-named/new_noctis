@@ -11,12 +11,16 @@ body {
     background: #1a1a1a;
     color: #e0e0e0;
     overflow: hidden;
+    height: 100vh;
+    width: 100vw;
 }
 
 /* Layout */
 .dicom-viewer {
     display: flex;
     height: 100vh;
+    width: 100vw;
+    position: relative;
 }
 
 .toolbar {
@@ -27,18 +31,123 @@ body {
     flex-direction: column;
     align-items: center;
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
+    position: relative;
+    z-index: 100;
 }
 
 .main-content {
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-height: 0; /* Fix flex overflow */
 }
 
 .top-bar {
     background: #252525;
     padding: 15px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    min-height: auto;
+    max-height: 120px; /* Prevent excessive height */
+}
+
+.top-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.study-info {
+    flex: 1;
+    margin-left: 20px;
+    min-width: 300px;
+}
+
+.patient-info {
+    font-weight: bold;
+    font-size: 14px;
+    margin-bottom: 5px;
+    color: #fff;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .right-panel {
+        width: 250px;
+    }
+    
+    .toolbar {
+        width: 70px;
+    }
+    
+    .tool-btn {
+        width: 50px;
+        height: 50px;
+    }
+    
+    .tool-btn i {
+        font-size: 16px;
+    }
+    
+    .tool-btn span {
+        font-size: 9px;
+    }
+}
+
+@media (max-width: 768px) {
+    .top-bar {
+        padding: 10px;
+        flex-direction: column;
+        gap: 10px;
+        max-height: none;
+    }
+    
+    .top-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .study-info {
+        margin-left: 0;
+        min-width: auto;
+        width: 100%;
+    }
+    
+    .patient-info {
+        font-size: 12px;
+    }
+    
+    .right-panel {
+        width: 200px;
+    }
+}
+
+@media (max-width: 480px) {
+    .toolbar {
+        width: 60px;
+    }
+    
+    .tool-btn {
+        width: 40px;
+        height: 40px;
+        margin: 3px 0;
+    }
+    
+    .tool-btn i {
+        font-size: 14px;
+    }
+    
+    .tool-btn span {
+        font-size: 8px;
+    }
+    
+    .right-panel {
+        display: none; /* Hide on very small screens or make it collapsible */
+    }
 }
 
 .viewport {
@@ -46,6 +155,7 @@ body {
     position: relative;
     background: #000;
     overflow: hidden;
+    min-height: 0; /* Ensure proper flex sizing */
 }
 
 .right-panel {
@@ -91,6 +201,119 @@ body {
 
 .tool-btn span {
     font-size: 10px;
+}
+
+/* Dropdown Tools */
+.dropdown-tool {
+    position: relative;
+    width: 60px;
+}
+
+.dropdown-toggle {
+    position: relative;
+}
+
+.dropdown-arrow {
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    font-size: 8px;
+    opacity: 0.7;
+}
+
+.dropdown-menu {
+    position: absolute;
+    left: 70px;
+    top: 0;
+    background: #1a1a1a;
+    border: 2px solid #00ff00;
+    border-radius: 8px;
+    min-width: 250px;
+    display: none;
+    z-index: 1000;
+    box-shadow: 0 4px 20px rgba(0, 255, 0, 0.2);
+}
+
+.dropdown-tool:hover .dropdown-menu,
+.dropdown-menu:hover {
+    display: block;
+}
+
+.dropdown-menu h4 {
+    margin: 0;
+    padding: 15px 20px;
+    border-bottom: 1px solid #333;
+    color: #00ff00;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.dropdown-item {
+    padding: 12px 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.dropdown-item:hover {
+    background: rgba(0, 255, 0, 0.1);
+    color: #00ff00;
+    padding-left: 25px;
+}
+
+.dropdown-item i {
+    width: 20px;
+    text-align: center;
+    opacity: 0.8;
+}
+
+.dropdown-item:hover i {
+    opacity: 1;
+    color: #00ff00;
+}
+
+/* Progress Overlay */
+.reconstruction-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.progress-content {
+    background: #1a1a1a;
+    border: 2px solid #00ff00;
+    border-radius: 12px;
+    padding: 40px;
+    text-align: center;
+    box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
+}
+
+.progress-content i {
+    font-size: 48px;
+    color: #00ff00;
+    margin-bottom: 20px;
+}
+
+.progress-content p {
+    font-size: 18px;
+    color: #fff;
+    margin: 0;
 }
 
 /* Canvas */
@@ -211,6 +434,27 @@ body {
 
 .secondary-btn:hover {
     background: #555;
+}
+
+.logout-btn {
+    background: #dc3545;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.logout-btn:hover {
+    background: #c82333;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
 }
 
 /* Preset Buttons */
@@ -629,17 +873,57 @@ body {
     max-height: 200px;
     overflow-y: auto;
     margin-top: 10px;
+    background: rgba(40, 40, 40, 0.8);
+    border-radius: 4px;
+    padding: 5px;
+}
+
+.measurements-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.measurements-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.measurements-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+.measurements-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
 }
 
 .measurement-item {
-    padding: 8px;
+    padding: 10px;
     margin-bottom: 5px;
-    background: #333;
+    background: rgba(50, 50, 50, 0.9);
     border-radius: 4px;
-    font-size: 12px;
+    font-size: 13px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.measurement-item:hover {
+    background: rgba(60, 60, 60, 0.9);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.measurement-item.highlighted {
+    background: rgba(80, 80, 80, 0.9);
+    border-color: #4CAF50;
+}
+
+.measurement-item strong {
+    color: #4CAF50;
+    margin-right: 8px;
 }
 
 .measurement-item .delete-btn {
@@ -913,4 +1197,69 @@ body {
 .3d-status.error {
     background: #aa0000;
     color: #fff;
+}
+
+/* Clinical Information Section */
+.clinical-info-section {
+    background: #2a2a2a;
+    border: 1px solid #555;
+    border-radius: 5px;
+    margin-top: 10px;
+    overflow: hidden;
+}
+
+.clinical-info-header {
+    background: #333;
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+}
+
+.clinical-info-header h4 {
+    margin: 0;
+    font-size: 14px;
+    color: #00ff00;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-toggle {
+    background: none;
+    border: none;
+    color: #ccc;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px;
+    border-radius: 3px;
+}
+
+.btn-toggle:hover {
+    color: #fff;
+    background: #555;
+}
+
+.clinical-info-content {
+    padding: 12px;
+    border-top: 1px solid #555;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.clinical-info-content p {
+    margin: 0;
+    color: #ccc;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.clinical-info-content.collapsed {
+    display: none;
+}
+
+.clinical-info.expanded {
+    background: #1a3a1a;
+    border-color: #00ff00;
 }
