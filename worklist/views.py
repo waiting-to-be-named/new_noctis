@@ -112,6 +112,11 @@ def view_study_from_worklist(request, entry_id):
     entry = get_object_or_404(WorklistEntry, id=entry_id)
     
     if entry.study:
+        # Update status to in_progress if radiologist is viewing
+        if request.user.groups.filter(name='Radiologists').exists():
+            entry.status = 'in_progress'
+            entry.save()
+        
         # Redirect to viewer with study ID
         return redirect('viewer:viewer_with_study', study_id=entry.study.id)
     else:

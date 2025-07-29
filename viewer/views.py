@@ -108,7 +108,7 @@ class DicomViewerView(TemplateView):
                 context['initial_study'] = study
                 
                 # Update worklist entry status to in_progress if radiologist is viewing
-                if self.request.user.is_authenticated:
+                if self.request.user.is_authenticated and self.request.user.groups.filter(name='Radiologists').exists():
                     worklist_entries = WorklistEntry.objects.filter(
                         study=study,
                         status='scheduled'
@@ -448,7 +448,7 @@ def upload_dicom_files(request):
                                 procedure_description=study.study_description,
                                 facility=facility,
                                 study=study,
-                                status='completed'
+                                status='scheduled'
                             )
                             print(f"Created worklist entry for study {study.id}")
                         except Exception as e:
@@ -785,7 +785,7 @@ def upload_dicom_folder(request):
                             procedure_description=study.study_description,
                             facility=facility,
                             study=study,
-                            status='completed'
+                            status='scheduled'
                         )
                     except Exception as e:
                         print(f"Error creating worklist entry: {e}")

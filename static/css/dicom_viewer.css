@@ -17,6 +17,8 @@ body {
 .dicom-viewer {
     display: flex;
     height: 100vh;
+    width: 100vw;
+    overflow: hidden;
 }
 
 .toolbar {
@@ -29,18 +31,21 @@ body {
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
     position: relative;
     z-index: 100;
+    flex-shrink: 0;
 }
 
 .main-content {
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-width: 0;
 }
 
 .top-bar {
     background: #252525;
     padding: 15px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    flex-shrink: 0;
 }
 
 .viewport {
@@ -48,6 +53,7 @@ body {
     position: relative;
     background: #000;
     overflow: hidden;
+    min-height: 0;
 }
 
 .right-panel {
@@ -56,6 +62,7 @@ body {
     padding: 20px;
     overflow-y: auto;
     box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
+    flex-shrink: 0;
 }
 
 /* Tool Buttons */
@@ -816,6 +823,18 @@ body {
     align-items: center;
     gap: 15px;
     flex-wrap: wrap;
+    justify-content: space-between;
+}
+
+.patient-info {
+    flex: 1;
+    min-width: 200px;
+    font-size: 14px;
+    color: #e0e0e0;
+    background: #333;
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin: 0 10px;
 }
 
 #worklist-btn {
@@ -976,6 +995,14 @@ body {
     .top-controls {
         flex-direction: column;
         align-items: stretch;
+        gap: 10px;
+    }
+    
+    .patient-info {
+        min-width: auto;
+        width: 100%;
+        text-align: center;
+        margin: 5px 0;
     }
     
     .modal-content.large {
@@ -984,7 +1011,8 @@ body {
     }
     
     .right-panel {
-        width: 250px;
+        width: 100%;
+        max-height: 200px;
     }
     
     .toolbar {
