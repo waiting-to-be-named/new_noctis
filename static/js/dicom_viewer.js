@@ -848,7 +848,7 @@ class DicomViewer {
                 this.ctx.restore();
 
                 // Display HU value
-                const text = `${measurement.value.toFixed(1)} HU`;
+                const text = (typeof measurement.value === 'number' && !isNaN(measurement.value)) ? `${measurement.value.toFixed(1)} HU` : 'HU: -';
                 const textMetrics = this.ctx.measureText(text);
                 this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
                 this.ctx.fillRect(centerX - textMetrics.width/2 - 4, centerY - 8, textMetrics.width + 8, 16);
@@ -883,12 +883,12 @@ class DicomViewer {
                 centroidY /= coords.length;
                 
                 // Draw volume text
-                const text = `${measurement.value.toFixed(2)} ${measurement.unit}`;
-                const textMetrics = this.ctx.measureText(text);
+                const volText = (typeof measurement.value === 'number' && !isNaN(measurement.value)) ? `${measurement.value.toFixed(2)} ${measurement.unit || ''}` : 'Vol: -';
+                const textMetrics = this.ctx.measureText(volText);
                 this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
                 this.ctx.fillRect(centroidX - textMetrics.width/2 - 4, centroidY - 8, textMetrics.width + 8, 16);
                 this.ctx.fillStyle = 'blue';
-                this.ctx.fillText(text, centroidX - textMetrics.width/2, centroidY + 4);
+                this.ctx.fillText(volText, centroidX - textMetrics.width/2, centroidY + 4);
             } else if (measurement.type === 'line' && coords && coords.length >= 2) {
                 // Draw distance/line measurement
                 const start = this.imageToCanvasCoords(coords[0].x, coords[0].y);
@@ -902,15 +902,15 @@ class DicomViewer {
                 // Draw measurement text
                 const midX = (start.x + end.x) / 2;
                 const midY = (start.y + end.y) / 2;
-                const text = `${measurement.value.toFixed(1)} ${measurement.unit}`;
+                const distanceText = (typeof measurement.value === 'number' && !isNaN(measurement.value)) ? `${measurement.value.toFixed(1)} ${measurement.unit || ''}` : '-';
+                const textMetrics = this.ctx.measureText(distanceText);
                 
                 // Background for text
-                const textMetrics = this.ctx.measureText(text);
                 this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
                 this.ctx.fillRect(midX - textMetrics.width/2 - 4, midY - 8, textMetrics.width + 8, 16);
                 
                 this.ctx.fillStyle = 'red';
-                this.ctx.fillText(text, midX - textMetrics.width/2, midY + 4);
+                this.ctx.fillText(distanceText, midX - textMetrics.width/2, midY + 4);
             }
         });
         
@@ -1482,12 +1482,21 @@ class DicomViewer {
             let displayText;
             let typeText;
             
+            const hasNumericValue = typeof measurement.value === 'number' && !isNaN(measurement.value);
+            const safeValue = hasNumericValue ? measurement.value : null;
+            const minVal = typeof measurement.hounsfield_min === 'number' ? measurement.hounsfield_min : null;
+            const maxVal = typeof measurement.hounsfield_max === 'number' ? measurement.hounsfield_max : null;
+            
             switch(measurement.type) {
                 case 'ellipse':
                     typeText = 'HU Analysis';
-                    displayText = `${measurement.value.toFixed(1)} HU`;
-                    if (measurement.hounsfield_min !== undefined) {
-                        displayText += ` (${measurement.hounsfield_min.toFixed(1)} - ${measurement.hounsfield_max.toFixed(1)})`;
+                    if (safeValue !== null) {
+                        displayText = `${safeValue.toFixed(1)} HU`;
+                    } else {
+                        displayText = '-';
+                    }
+                    if (minVal !== null && maxVal !== null) {
+                        displayText += ` (${minVal.toFixed(1)} - ${maxVal.toFixed(1)})`;
                     }
                     if (measurement.notes) {
                         displayText += ` - ${measurement.notes}`;
@@ -1495,23 +1504,23 @@ class DicomViewer {
                     break;
                 case 'volume':
                     typeText = 'Volume';
-                    displayText = `${measurement.value.toFixed(2)} ${measurement.unit}`;
+                    displayText = safeValue !== null ? `${safeValue.toFixed(2)} ${measurement.unit || ''}` : '-';
                     break;
                 case 'line':
                     typeText = 'Distance';
-                    displayText = `${measurement.value.toFixed(1)} ${measurement.unit}`;
+                    displayText = safeValue !== null ? `${safeValue.toFixed(1)} ${measurement.unit || ''}` : '-';
                     break;
                 case 'area':
                     typeText = 'Area';
-                    displayText = `${measurement.value.toFixed(2)} ${measurement.unit}`;
+                    displayText = safeValue !== null ? `${safeValue.toFixed(2)} ${measurement.unit || ''}` : '-';
                     break;
                 case 'angle':
                     typeText = 'Angle';
-                    displayText = `${measurement.value.toFixed(1)}°`;
+                    displayText = safeValue !== null ? `${safeValue.toFixed(1)}°` : '-';
                     break;
                 default:
                     typeText = 'Measurement';
-                    displayText = `${measurement.value.toFixed(1)} ${measurement.unit}`;
+                    displayText = safeValue !== null ? `${safeValue.toFixed(1)} ${measurement.unit || ''}` : '-';
             }
             
             item.innerHTML = `<strong>${typeText} ${index + 1}:</strong> ${displayText}`;
