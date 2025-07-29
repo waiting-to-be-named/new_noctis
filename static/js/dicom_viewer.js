@@ -632,11 +632,15 @@ class DicomViewer {
     async loadCurrentImage() {
         if (!this.currentImages.length) {
             console.log('No images available');
+            this.showError('No images available in this study');
             return;
         }
         
         const imageData = this.currentImages[this.currentImageIndex];
         console.log(`Loading image ${this.currentImageIndex + 1}/${this.currentImages.length}, ID: ${imageData.id}`);
+        
+        // Show loading indicator
+        this.showLoadingIndicator(true);
         
         try {
             const params = new URLSearchParams({
@@ -655,6 +659,8 @@ class DicomViewer {
             
             if (data.image_data) {
                 const img = new Image();
+                img.crossOrigin = 'anonymous'; // Handle CORS issues
+                
                 img.onload = () => {
                     console.log('Image loaded successfully');
                     this.currentImage = {
@@ -668,19 +674,31 @@ class DicomViewer {
                         pixel_spacing: `${data.metadata.pixel_spacing_x},${data.metadata.pixel_spacing_y}`,
                         slice_thickness: data.metadata.slice_thickness
                     };
+                    
                     // Ensure canvas is properly sized before drawing
                     this.resizeCanvas();
                     this.updateDisplay();
                     this.loadMeasurements();
                     this.loadAnnotations();
                     this.updatePatientInfo();
+                    this.updateImageInfo();
+                    
+                    // Hide loading indicator
+                    this.showLoadingIndicator(false);
+                    
+                    console.log('Image display updated successfully');
                 };
+                
                 img.onerror = (error) => {
                     console.error('Failed to load image data:', error);
                     console.error('Image source:', img.src);
                     this.showError('Failed to load image. Please try refreshing or selecting another image.');
+                    this.showLoadingIndicator(false);
                 };
+                
+                // Set image source after setting up event handlers
                 img.src = data.image_data;
+                
             } else {
                 throw new Error(data.error || 'No image data received');
             }
@@ -688,6 +706,69 @@ class DicomViewer {
         } catch (error) {
             console.error('Error loading image:', error);
             this.showError('Error loading image: ' + error.message);
+            this.showLoadingIndicator(false);
+        }
+    }
+    
+    showLoadingIndicator(show) {
+        let indicator = document.getElementById('loading-indicator');
+        
+        if (!indicator && show) {
+            indicator = document.createElement('div');
+            indicator.id = 'loading-indicator';
+            indicator.innerHTML = `
+                <div style="
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: rgba(0, 0, 0, 0.8);
+                    color: white;
+                    padding: 20px;
+                    border-radius: 8px;
+                    z-index: 1000;
+                    text-align: center;
+                ">
+                    <div style="margin-bottom: 10px;">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                    <div>Loading image...</div>
+                </div>
+            `;
+            document.querySelector('.viewport').appendChild(indicator);
+        } else if (indicator && !show) {
+            indicator.remove();
+        }
+    }
+    
+    updateImageInfo() {
+        if (!this.currentImage || !this.currentImage.metadata) return;
+        
+        const metadata = this.currentImage.metadata;
+        
+        // Update image info panel
+        const dimensionsElement = document.getElementById('info-dimensions');
+        if (dimensionsElement) {
+            dimensionsElement.textContent = `${metadata.columns} × ${metadata.rows}`;
+        }
+        
+        const pixelSpacingElement = document.getElementById('info-pixel-spacing');
+        if (pixelSpacingElement) {
+            if (metadata.pixel_spacing_x && metadata.pixel_spacing_y) {
+                pixelSpacingElement.textContent = `${metadata.pixel_spacing_x} × ${metadata.pixel_spacing_y} mm`;
+            } else {
+                pixelSpacingElement.textContent = 'Not available';
+            }
+        }
+        
+        const seriesElement = document.getElementById('info-series');
+        if (seriesElement) {
+            seriesElement.textContent = metadata.series_description || metadata.series_number || 'Unknown';
+        }
+        
+        const institutionElement = document.getElementById('info-institution');
+        if (institutionElement) {
+            institutionElement.textContent = metadata.institution_name || 'Unknown';
         }
     }
     
@@ -804,8 +885,16 @@ class DicomViewer {
         // Draw image
         this.ctx.drawImage(img, x, y, displayWidth, displayHeight);
         
+        // Draw measurements, annotations, and other overlays
+        this.drawMeasurements();
+        this.drawAnnotations();
+        this.drawAIHighlights();
+        this.drawCrosshair();
+        
         // Update overlay labels
         this.updateOverlayLabels();
+        
+        console.log('Display updated with', this.measurements.length, 'measurements');
     }
     
     // New helper to calculate the current pixel scale while preventing unintended up-scaling
@@ -821,17 +910,21 @@ class DicomViewer {
     }
     
     drawMeasurements() {
-        if (!this.currentImage) return;
+        if (!this.currentImage || !this.measurements.length) return;
         
-        this.ctx.strokeStyle = 'red';
+        this.ctx.strokeStyle = '#FF4444';
         this.ctx.lineWidth = 2;
-        this.ctx.fillStyle = 'red';
+        this.ctx.fillStyle = '#FF4444';
         this.ctx.font = '12px Arial';
+        this.ctx.textAlign = 'center';
         
-        this.measurements.forEach(measurement => {
+        this.measurements.forEach((measurement, index) => {
+            if (!measurement.coordinates) return;
+            
             const coords = measurement.coordinates;
-            if (measurement.type === 'ellipse' && measurement.coordinates) {
-                const c = Array.isArray(measurement.coordinates) ? measurement.coordinates[0] : measurement.coordinates;
+            
+            if (measurement.type === 'ellipse' && coords) {
+                const c = Array.isArray(coords) ? coords[0] : coords;
                 const start = this.imageToCanvasCoords(c.x0, c.y0);
                 const end = this.imageToCanvasCoords(c.x1, c.y1);
                 const width = end.x - start.x;
@@ -1474,17 +1567,44 @@ class DicomViewer {
     
     updateMeasurementsList() {
         const list = document.getElementById('measurements-list');
+        if (!list) {
+            console.warn('Measurements list element not found');
+            return;
+        }
+        
         list.innerHTML = '';
+        
+        if (this.measurements.length === 0) {
+            const noMeasurements = document.createElement('div');
+            noMeasurements.className = 'no-measurements';
+            noMeasurements.innerHTML = '<em>No measurements yet</em>';
+            noMeasurements.style.cssText = 'color: #666; font-style: italic; padding: 10px; text-align: center;';
+            list.appendChild(noMeasurements);
+            return;
+        }
         
         this.measurements.forEach((measurement, index) => {
             const item = document.createElement('div');
             item.className = 'measurement-item';
+            item.style.cssText = `
+                padding: 8px 12px;
+                margin: 4px 0;
+                background: #f8f9fa;
+                border: 1px solid #e9ecef;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: background-color 0.2s;
+                font-size: 14px;
+            `;
+            
             let displayText;
             let typeText;
+            let icon = '';
             
             switch(measurement.type) {
                 case 'ellipse':
                     typeText = 'HU Analysis';
+                    icon = '🔍';
                     displayText = `${measurement.value.toFixed(1)} HU`;
                     if (measurement.hounsfield_min !== undefined) {
                         displayText += ` (${measurement.hounsfield_min.toFixed(1)} - ${measurement.hounsfield_max.toFixed(1)})`;
@@ -1495,38 +1615,120 @@ class DicomViewer {
                     break;
                 case 'volume':
                     typeText = 'Volume';
+                    icon = '📊';
                     displayText = `${measurement.value.toFixed(2)} ${measurement.unit}`;
                     break;
                 case 'line':
                     typeText = 'Distance';
+                    icon = '📏';
                     displayText = `${measurement.value.toFixed(1)} ${measurement.unit}`;
                     break;
                 case 'area':
                     typeText = 'Area';
+                    icon = '📐';
                     displayText = `${measurement.value.toFixed(2)} ${measurement.unit}`;
                     break;
                 case 'angle':
                     typeText = 'Angle';
+                    icon = '📐';
                     displayText = `${measurement.value.toFixed(1)}°`;
                     break;
                 default:
                     typeText = 'Measurement';
+                    icon = '📏';
                     displayText = `${measurement.value.toFixed(1)} ${measurement.unit}`;
             }
             
-            item.innerHTML = `<strong>${typeText} ${index + 1}:</strong> ${displayText}`;
+            item.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span style="margin-right: 8px;">${icon}</span>
+                        <strong>${typeText} ${index + 1}:</strong> ${displayText}
+                    </div>
+                    <button class="delete-measurement" data-index="${index}" style="
+                        background: #dc3545;
+                        color: white;
+                        border: none;
+                        border-radius: 3px;
+                        padding: 2px 6px;
+                        font-size: 12px;
+                        cursor: pointer;
+                        opacity: 0.7;
+                        transition: opacity 0.2s;
+                    " title="Delete measurement">×</button>
+                </div>
+            `;
+            
+            // Add hover effects
+            item.addEventListener('mouseenter', () => {
+                item.style.backgroundColor = '#e9ecef';
+                item.querySelector('.delete-measurement').style.opacity = '1';
+            });
+            
+            item.addEventListener('mouseleave', () => {
+                item.style.backgroundColor = '#f8f9fa';
+                item.querySelector('.delete-measurement').style.opacity = '0.7';
+            });
             
             // Add click handler to highlight measurement
-            item.addEventListener('click', () => {
+            item.addEventListener('click', (e) => {
+                if (e.target.classList.contains('delete-measurement')) {
+                    return; // Don't highlight if clicking delete button
+                }
                 // Remove highlighting from all measurements
                 document.querySelectorAll('.measurement-item').forEach(m => m.classList.remove('highlighted'));
                 // Highlight this measurement
                 item.classList.add('highlighted');
-                // TODO: Could add highlighting on canvas as well
+                item.style.backgroundColor = '#007bff';
+                item.style.color = 'white';
+            });
+            
+            // Add delete functionality
+            const deleteBtn = item.querySelector('.delete-measurement');
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteMeasurement(index);
             });
             
             list.appendChild(item);
         });
+        
+        // Update measurement count
+        const countElement = document.getElementById('measurement-count');
+        if (countElement) {
+            countElement.textContent = this.measurements.length;
+        }
+    }
+    
+    async deleteMeasurement(index) {
+        if (index >= 0 && index < this.measurements.length) {
+            const measurement = this.measurements[index];
+            
+            try {
+                // Delete from server if it has an ID
+                if (measurement.id) {
+                    const response = await fetch(`/viewer/api/measurements/${measurement.id}/delete/`, {
+                        method: 'DELETE',
+                        headers: {
+                            'X-CSRFToken': this.getCSRFToken()
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        console.error('Failed to delete measurement from server');
+                    }
+                }
+                
+                // Remove from local array
+                this.measurements.splice(index, 1);
+                this.updateMeasurementsList();
+                this.updateDisplay(); // Redraw to remove from canvas
+                
+            } catch (error) {
+                console.error('Error deleting measurement:', error);
+                this.showError('Failed to delete measurement');
+            }
+        }
     }
     
     async clearMeasurements() {
@@ -2506,6 +2708,99 @@ ${this.aiAnalysisResults.recommendations || 'None'}`;
         } catch (error) {
             console.error('Error loading study images:', error);
             this.showError(`Network error loading study: ${error.message}. Please check your connection and try again.`);
+        }
+    }
+
+    setupMeasurementUnitSelector() {
+        const unitSelector = document.getElementById('measurement-unit');
+        if (unitSelector) {
+            unitSelector.addEventListener('change', (e) => {
+                this.measurementUnit = e.target.value;
+                // Update existing measurements display
+                this.updateMeasurementsList();
+            });
+        }
+        
+        // Setup clear measurements button
+        const clearBtn = document.getElementById('clear-measurements');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                this.clearMeasurements();
+            });
+        }
+    }
+    
+    setup3DControls() {
+        // Setup 3D reconstruction controls
+        const dropdowns = document.querySelectorAll('.dropdown-toggle');
+        dropdowns.forEach(dropdown => {
+            dropdown.addEventListener('click', (e) => {
+                e.preventDefault();
+                const menu = dropdown.nextElementSibling;
+                if (menu) {
+                    menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+                }
+            });
+        });
+        
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.dropdown-tool')) {
+                document.querySelectorAll('.dropdown-menu').forEach(menu => {
+                    menu.style.display = 'none';
+                });
+            }
+        });
+    }
+    
+    setupAIPanel() {
+        // Setup AI analysis panel controls
+        const aiResults = document.getElementById('ai-results');
+        if (aiResults) {
+            const copyBtn = aiResults.querySelector('.copy-btn');
+            if (copyBtn) {
+                copyBtn.addEventListener('click', () => {
+                    this.copyAIResults();
+                });
+            }
+            
+            const saveBtn = aiResults.querySelector('.save-btn');
+            if (saveBtn) {
+                saveBtn.addEventListener('click', () => {
+                    this.saveAIReport();
+                });
+            }
+        }
+    }
+    
+    setupNotifications() {
+        // Setup notification checking
+        this.notificationCheckInterval = setInterval(() => {
+            this.checkForNotifications();
+        }, 30000); // Check every 30 seconds
+    }
+    
+    async checkForNotifications() {
+        try {
+            const response = await fetch('/worklist/api/notifications/count/');
+            if (response.ok) {
+                const data = await response.json();
+                this.updateNotificationBadge(data.count);
+            }
+        } catch (error) {
+            console.error('Error checking notifications:', error);
+        }
+    }
+    
+    updateNotificationBadge(count) {
+        const badge = document.getElementById('notification-badge');
+        if (badge) {
+            if (count > 0) {
+                badge.textContent = count;
+                badge.style.display = 'block';
+            } else {
+                badge.style.display = 'none';
+            }
         }
     }
 }

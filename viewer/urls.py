@@ -28,6 +28,7 @@ urlpatterns = [
     
     # Measurements and annotations
     path('api/measurements/save/', views.save_measurement, name='save_measurement'),
+    path('api/measurements/<int:measurement_id>/delete/', views.delete_measurement, name='delete_measurement'),
     path('api/annotations/save/', views.save_annotation, name='save_annotation'),
     path('api/images/<int:image_id>/measurements/', views.get_measurements, name='get_measurements'),
     path('api/images/<int:image_id>/annotations/', views.get_annotations, name='get_annotations'),

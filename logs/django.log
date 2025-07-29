@@ -177,3 +177,94 @@ DEBUG 2025-07-29 12:14:19,359 middleware 4822 139700427806400 Request duration: 
 INFO 2025-07-29 12:14:19,359 middleware 4822 139700427806400 API Response: GET /viewer/api/images/4/data/ - Status: 200
 DEBUG 2025-07-29 12:14:19,359 middleware 4822 139700427806400 Response size: 5813 bytes
 INFO 2025-07-29 12:14:19,359 basehttp 4822 139700427806400 "GET /viewer/api/images/4/data/ HTTP/1.1" 200 5813
+ERROR 2025-07-29 13:01:28,886 exception 2324 139966553137408 Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/workspace/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/workspace/venv/lib/python3.13/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/workspace/venv/lib/python3.13/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/workspace/venv/lib/python3.13/site-packages/django/http/request.py", line 151, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+WARNING 2025-07-29 13:01:28,942 log 2324 139966553137408 Bad Request: /viewer/api/measurements/save/
+ERROR 2025-07-29 13:01:28,947 exception 2324 139966553137408 Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/workspace/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/workspace/venv/lib/python3.13/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/workspace/venv/lib/python3.13/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/workspace/venv/lib/python3.13/site-packages/django/http/request.py", line 151, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+WARNING 2025-07-29 13:01:28,957 log 2324 139966553137408 Bad Request: /viewer/api/images/5/measurements/
+ERROR 2025-07-29 13:01:28,973 exception 2324 139966553137408 Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/workspace/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/workspace/venv/lib/python3.13/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/workspace/venv/lib/python3.13/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/workspace/venv/lib/python3.13/site-packages/django/http/request.py", line 151, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+WARNING 2025-07-29 13:01:28,981 log 2324 139966553137408 Bad Request: /viewer/study/6/
+ERROR 2025-07-29 13:01:32,178 exception 2348 140424464838912 Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/workspace/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/workspace/venv/lib/python3.13/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/workspace/venv/lib/python3.13/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/workspace/venv/lib/python3.13/site-packages/django/http/request.py", line 151, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+WARNING 2025-07-29 13:01:32,219 log 2348 140424464838912 Bad Request: /viewer/api/measurements/save/
+ERROR 2025-07-29 13:01:32,220 exception 2348 140424464838912 Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/workspace/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/workspace/venv/lib/python3.13/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/workspace/venv/lib/python3.13/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/workspace/venv/lib/python3.13/site-packages/django/http/request.py", line 151, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+WARNING 2025-07-29 13:01:32,231 log 2348 140424464838912 Bad Request: /viewer/api/images/5/measurements/
+ERROR 2025-07-29 13:01:32,232 exception 2348 140424464838912 Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/workspace/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/workspace/venv/lib/python3.13/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/workspace/venv/lib/python3.13/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/workspace/venv/lib/python3.13/site-packages/django/http/request.py", line 151, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+WARNING 2025-07-29 13:01:32,240 log 2348 140424464838912 Bad Request: /viewer/study/6/
+INFO 2025-07-29 13:01:57,996 middleware 2384 139733608231168 API Request: GET /viewer/api/images/1/measurements/
+DEBUG 2025-07-29 13:01:57,998 middleware 2384 139733608231168 Request duration: GET /viewer/api/images/1/measurements/ took 0.002s
+INFO 2025-07-29 13:01:57,998 middleware 2384 139733608231168 API Response: GET /viewer/api/images/1/measurements/ - Status: 200
+DEBUG 2025-07-29 13:01:57,998 middleware 2384 139733608231168 Response size: 2 bytes
+INFO 2025-07-29 13:01:58,005 middleware 2384 139733608231168 API Request: POST /viewer/api/images/1/measurements/
+DEBUG 2025-07-29 13:01:58,005 middleware 2384 139733608231168 Request body size: 140 bytes
+DEBUG 2025-07-29 13:01:58,005 middleware 2384 139733608231168 Request duration: POST /viewer/api/images/1/measurements/ took 0.000s
+INFO 2025-07-29 13:01:58,005 middleware 2384 139733608231168 API Response: POST /viewer/api/images/1/measurements/ - Status: 405
+DEBUG 2025-07-29 13:01:58,005 middleware 2384 139733608231168 Response size: 41 bytes
+WARNING 2025-07-29 13:01:58,005 log 2384 139733608231168 Method Not Allowed: /viewer/api/images/1/measurements/
+INFO 2025-07-29 13:02:18,802 middleware 2420 140318529933568 API Request: GET /viewer/api/images/1/measurements/
+DEBUG 2025-07-29 13:02:18,804 middleware 2420 140318529933568 Request duration: GET /viewer/api/images/1/measurements/ took 0.002s
+INFO 2025-07-29 13:02:18,804 middleware 2420 140318529933568 API Response: GET /viewer/api/images/1/measurements/ - Status: 200
+DEBUG 2025-07-29 13:02:18,804 middleware 2420 140318529933568 Response size: 2 bytes
+INFO 2025-07-29 13:02:18,810 middleware 2420 140318529933568 API Request: POST /viewer/api/images/1/measurements/
+DEBUG 2025-07-29 13:02:18,810 middleware 2420 140318529933568 Request body size: 140 bytes
+DEBUG 2025-07-29 13:02:18,816 middleware 2420 140318529933568 Request duration: POST /viewer/api/images/1/measurements/ took 0.006s
+INFO 2025-07-29 13:02:18,816 middleware 2420 140318529933568 API Response: POST /viewer/api/images/1/measurements/ - Status: 201
+DEBUG 2025-07-29 13:02:18,816 middleware 2420 140318529933568 Response size: 179 bytes

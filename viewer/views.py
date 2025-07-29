@@ -1333,38 +1333,70 @@ def save_annotation(request):
         return JsonResponse({'error': str(e)}, status=400)
 
 
-@api_view(['GET'])
+@api_view(['GET', 'POST'])
 def get_measurements(request, image_id):
-    """Get measurements for an image"""
-    try:
-        measurements = Measurement.objects.filter(image_id=image_id)
-        data = []
-        
-        for m in measurements:
-            measurement_data = {
-                'id': m.id,
-                'type': m.measurement_type,
-                'coordinates': m.coordinates,
-                'value': m.value,
-                'unit': m.unit,
-                'notes': m.notes,
-                'created_at': m.created_at.isoformat()
-            }
+    """Get or create measurements for an image"""
+    if request.method == 'GET':
+        try:
+            measurements = Measurement.objects.filter(image_id=image_id)
+            data = []
             
-            # Add HU-specific data if available
-            if m.measurement_type == 'ellipse' and m.hounsfield_mean is not None:
-                measurement_data.update({
-                    'hounsfield_mean': m.hounsfield_mean,
-                    'hounsfield_min': m.hounsfield_min,
-                    'hounsfield_max': m.hounsfield_max,
-                    'hounsfield_std': m.hounsfield_std,
-                })
+            for m in measurements:
+                measurement_data = {
+                    'id': m.id,
+                    'type': m.measurement_type,
+                    'coordinates': m.coordinates,
+                    'value': m.value,
+                    'unit': m.unit,
+                    'notes': m.notes,
+                    'created_at': m.created_at.isoformat()
+                }
+                
+                # Add HU-specific data if available
+                if m.measurement_type == 'ellipse' and m.hounsfield_mean is not None:
+                    measurement_data.update({
+                        'hounsfield_mean': m.hounsfield_mean,
+                        'hounsfield_min': m.hounsfield_min,
+                        'hounsfield_max': m.hounsfield_max,
+                        'hounsfield_std': m.hounsfield_std,
+                    })
+                
+                data.append(measurement_data)
             
-            data.append(measurement_data)
-        
-        return Response(data)
-    except Exception as e:
-        return Response({'error': str(e)}, status=400)
+            return Response(data)
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
+    
+    elif request.method == 'POST':
+        try:
+            data = request.data
+            measurement_type = data.get('type', 'distance')
+            coordinates = data.get('coordinates', {})
+            value = data.get('value', 0.0)
+            unit = data.get('unit', 'mm')
+            notes = data.get('notes', '')
+            
+            # Create new measurement
+            measurement = Measurement.objects.create(
+                image_id=image_id,
+                measurement_type=measurement_type,
+                coordinates=coordinates,
+                value=value,
+                unit=unit,
+                notes=notes
+            )
+            
+            return Response({
+                'id': measurement.id,
+                'type': measurement.measurement_type,
+                'coordinates': measurement.coordinates,
+                'value': measurement.value,
+                'unit': measurement.unit,
+                'notes': measurement.notes,
+                'created_at': measurement.created_at.isoformat()
+            }, status=201)
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
 
 
 @api_view(['GET'])
@@ -1395,6 +1427,18 @@ def clear_measurements(request, image_id):
         Measurement.objects.filter(image_id=image_id).delete()
         Annotation.objects.filter(image_id=image_id).delete()
         return JsonResponse({'message': 'Measurements cleared'})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@csrf_exempt
+@require_http_methods(['DELETE'])
+def delete_measurement(request, measurement_id):
+    """Delete a specific measurement"""
+    try:
+        measurement = get_object_or_404(Measurement, id=measurement_id)
+        measurement.delete()
+        return JsonResponse({'message': 'Measurement deleted successfully'})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
 

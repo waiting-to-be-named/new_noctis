@@ -248,7 +248,10 @@
 
                 <!-- Measurements Section -->
                 <div class="panel-section">
-                    <h3 class="section-title">Measurements</h3>
+                    <h3 class="section-title">
+                        Measurements 
+                        <span id="measurement-count" style="font-size: 12px; color: #666; font-weight: normal;">(0)</span>
+                    </h3>
                     <div class="control-group" style="margin-bottom:8px;">
                         <label for="measurement-unit">Unit:</label>
                         <select id="measurement-unit" class="form-select small" style="width:80px;">
@@ -257,7 +260,7 @@
                         </select>
                     </div>
                     <button id="clear-measurements" class="secondary-btn">Clear All</button>
-                    <div id="measurements-list" class="measurements-list"></div>
+                    <div id="measurements-list" class="measurements-list" style="max-height: 300px; overflow-y: auto;"></div>
                 </div>
 
             </div>
