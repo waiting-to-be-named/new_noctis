@@ -314,6 +314,26 @@
                     <div class="helptext">Upload an image file (PNG, JPG, GIF) for the facility letterhead. Recommended size: 200x100px</div>
                 </div>
                 
+                <div class="form-group">
+                    <label for="{{ form.ae_title.id_for_label }}">AE Title (DICOM Application Entity)</label>
+                    {{ form.ae_title.errors }}
+                    <input type="text" 
+                           name="{{ form.ae_title.name }}" 
+                           id="{{ form.ae_title.id_for_label }}"
+                           class="form-control" 
+                           placeholder="Auto-generated from facility name"
+                           value="{{ form.ae_title.value|default:'' }}"
+                           maxlength="16"
+                           {% if is_create %}readonly{% endif %}>
+                    <div class="helptext">
+                        {% if is_create %}
+                        The AE Title will be automatically generated based on the facility name. This is used by DICOM modalities to send studies to this PACS.
+                        {% else %}
+                        The AE Title is used by DICOM modalities to identify this PACS server. Maximum 16 characters, alphanumeric only.
+                        {% endif %}
+                    </div>
+                </div>
+                
                 {% if is_create %}
                 <div class="form-group">
                     <h3 style="color: #00ff00; margin-bottom: 20px; margin-top: 30px;">
@@ -371,6 +391,34 @@
                 label.style.background = '#333';
             }
         });
+        
+        {% if is_create %}
+        // Auto-generate AE Title preview based on facility name
+        function generateAETitle(facilityName) {
+            // Remove special characters and spaces, convert to uppercase
+            let aeTitle = facilityName.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+            
+            // Truncate to 16 characters (DICOM AE Title limit)
+            aeTitle = aeTitle.substring(0, 16);
+            
+            // If empty after cleaning, use a default
+            if (!aeTitle) {
+                aeTitle = 'FACILITY';
+            }
+            
+            return aeTitle;
+        }
+        
+        const nameInput = document.getElementById('{{ form.name.id_for_label }}');
+        const aeTitleInput = document.getElementById('{{ form.ae_title.id_for_label }}');
+        
+        if (nameInput && aeTitleInput) {
+            nameInput.addEventListener('input', function(e) {
+                const generatedAETitle = generateAETitle(e.target.value);
+                aeTitleInput.value = generatedAETitle;
+            });
+        }
+        {% endif %}
     </script>
 </body>
 </html>
