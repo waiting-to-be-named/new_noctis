@@ -3,14 +3,108 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from .models import (
-    Facility, DicomStudy, DicomSeries, DicomImage, Measurement, 
-    Annotation, Report, WorklistEntry, AIAnalysis, Notification
+    Facility, FacilityStaff, DicomStudy, DicomSeries, DicomImage, Measurement, 
+    Annotation, Report, WorklistEntry, AIAnalysis, Notification, ChatMessage
 )
 
 # Register your models here.
 admin.site.site_header = "Noctis Administration"
 admin.site.site_title = "Noctis Admin"
 admin.site.index_title = "Noctis Medical Imaging Platform"
+
+
+class FacilityStaffInline(admin.TabularInline):
+    """Inline admin for facility staff"""
+    model = FacilityStaff
+    extra = 1
+    fields = ['user', 'role', 'is_primary_contact']
+
+
+@admin.register(Facility)
+class FacilityAdmin(admin.ModelAdmin):
+    """Admin interface for Facility model"""
+    list_display = ['name', 'email', 'phone', 'staff_count', 'created_at']
+    list_filter = ['created_at']
+    search_fields = ['name', 'email', 'address']
+    readonly_fields = ['created_at']
+    inlines = [FacilityStaffInline]
+    
+    def staff_count(self, obj):
+        return obj.staff.count()
+    staff_count.short_description = 'Staff Count'
+
+
+@admin.register(FacilityStaff)
+class FacilityStaffAdmin(admin.ModelAdmin):
+    """Admin interface for FacilityStaff model"""
+    list_display = ['user', 'facility', 'role', 'is_primary_contact', 'created_at']
+    list_filter = ['role', 'facility', 'is_primary_contact', 'created_at']
+    search_fields = ['user__username', 'user__first_name', 'user__last_name', 'facility__name']
+    readonly_fields = ['created_at']
+    
+    fieldsets = (
+        ('User Assignment', {
+            'fields': ('user', 'facility')
+        }),
+        ('Role Information', {
+            'fields': ('role', 'is_primary_contact')
+        }),
+        ('System Information', {
+            'fields': ('created_at',)
+        }),
+    )
+
+
+@admin.register(ChatMessage)
+class ChatMessageAdmin(admin.ModelAdmin):
+    """Admin interface for ChatMessage model"""
+    list_display = ['sender', 'recipient', 'facility', 'message_type', 'message_preview', 'is_read', 'created_at']
+    list_filter = ['message_type', 'is_read', 'facility', 'created_at']
+    search_fields = ['sender__username', 'recipient__username', 'message', 'facility__name']
+    readonly_fields = ['created_at']
+    
+    def message_preview(self, obj):
+        return obj.message[:50] + '...' if len(obj.message) > 50 else obj.message
+    message_preview.short_description = 'Message Preview'
+    
+    fieldsets = (
+        ('Message Information', {
+            'fields': ('sender', 'recipient', 'facility', 'message_type', 'message')
+        }),
+        ('Related Data', {
+            'fields': ('related_study',)
+        }),
+        ('Status', {
+            'fields': ('is_read',)
+        }),
+        ('System Information', {
+            'fields': ('created_at',)
+        }),
+    )
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    """Admin interface for Notification model"""
+    list_display = ['recipient', 'notification_type', 'title', 'is_read', 'created_at']
+    list_filter = ['notification_type', 'is_read', 'created_at']
+    search_fields = ['recipient__username', 'title', 'message']
+    readonly_fields = ['created_at']
+    
+    fieldsets = (
+        ('Notification Information', {
+            'fields': ('recipient', 'notification_type', 'title', 'message')
+        }),
+        ('Related Data', {
+            'fields': ('related_study',)
+        }),
+        ('Status', {
+            'fields': ('is_read',)
+        }),
+        ('System Information', {
+            'fields': ('created_at',)
+        }),
+    )
 
 
 @admin.register(DicomStudy)

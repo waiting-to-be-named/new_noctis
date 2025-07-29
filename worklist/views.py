@@ -17,6 +17,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 import io
+from django.contrib.auth import get_user_model
 
 
 class WorklistView(LoginRequiredMixin, ListView):
@@ -188,12 +189,12 @@ def create_report(request, study_id):
                 entry.status = 'completed'
                 entry.save()
             
-            # Create notification for facility
+            # Create notification for facility staff
             if study.facility:
-                facility_users = study.facility.staff.all()
-                for user in facility_users:
+                facility_staff = study.facility.staff.all()
+                for staff_member in facility_staff:
                     Notification.objects.create(
-                        recipient=user,
+                        recipient=staff_member.user,
                         notification_type='report_ready',
                         title=f'Report Ready: {study.patient_name}',
                         message=f'The radiology report for {study.patient_name} is now available.',
@@ -471,25 +472,46 @@ def api_notifications_clear_old(request):
 def api_chat_messages(request):
     """API endpoint for chat messages with filtering"""
     filter_type = request.GET.get('filter', 'all')
+    facility_id = request.GET.get('facility_id')
     
-    messages = ChatMessage.objects.filter(
-        Q(sender=request.user) | Q(recipient=request.user)
-    )
+    # Get messages for the current user
+    if hasattr(request.user, 'facility_staff'):
+        # If user is facility staff, get messages for their facility
+        user_facility = request.user.facility_staff.facility
+        messages = ChatMessage.objects.filter(
+            Q(facility=user_facility) | 
+            Q(sender=request.user) | 
+            Q(recipient=request.user)
+        )
+    else:
+        # For radiologists and admins, get all relevant messages
+        messages = ChatMessage.objects.filter(
+            Q(sender=request.user) | Q(recipient=request.user)
+        )
+        
+        if facility_id:
+            try:
+                facility = Facility.objects.get(id=facility_id)
+                messages = messages.filter(facility=facility)
+            except Facility.DoesNotExist:
+                pass
     
     if filter_type != 'all':
         messages = messages.filter(message_type=filter_type)
     
-    messages = messages.order_by('-created_at')[:50]
+    messages = messages.select_related('sender', 'recipient', 'facility').order_by('-created_at')[:50]
     
     data = [{
         'id': m.id,
-        'sender_name': m.sender.get_full_name() or m.sender.username,
-        'recipient_name': m.recipient.get_full_name() or m.recipient.username if m.recipient else 'All',
+        'sender_name': m.sender_full_name,
+        'sender_role': m.sender_role,
+        'recipient_name': m.recipient_full_name,
         'message_type': m.message_type,
         'message': m.message,
         'is_read': m.is_read,
         'created_at': m.created_at.isoformat(),
-        'facility_name': m.facility.name if m.facility else None
+        'facility_name': m.facility.name if m.facility else None,
+        'is_own_message': m.sender == request.user
     } for m in messages]
     
     return JsonResponse({'messages': data})
@@ -503,6 +525,8 @@ def api_chat_send(request):
         data = json.loads(request.body)
         message_text = data.get('message', '').strip()
         facility_id = data.get('facility_id')
+        recipient_id = data.get('recipient_id')
+        message_type = data.get('message_type', 'user_chat')
         
         if not message_text:
             return JsonResponse({'success': False, 'error': 'Message cannot be empty'})
@@ -510,33 +534,60 @@ def api_chat_send(request):
         facility = None
         recipient = None
         
+        # Handle facility targeting
         if facility_id:
             try:
                 facility = Facility.objects.get(id=facility_id)
-                # Find facility staff to send message to
-                # For now, we'll send to all facility users
             except Facility.DoesNotExist:
                 return JsonResponse({'success': False, 'error': 'Facility not found'})
+        
+        # Handle specific user targeting
+        if recipient_id:
+            try:
+                recipient = get_user_model().objects.get(id=recipient_id)
+            except get_user_model().DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Recipient not found'})
+        
+        # If no specific recipient but has facility, it's a facility broadcast
+        if facility and not recipient:
+            message_type = 'facility_broadcast'
         
         # Create chat message
         chat_message = ChatMessage.objects.create(
             sender=request.user,
             recipient=recipient,
             facility=facility,
-            message_type='user_chat',
+            message_type=message_type,
             message=message_text
         )
         
-        # Create notification for recipient
+        # Create notifications
         if recipient:
+            # Direct message to specific user
             Notification.objects.create(
                 recipient=recipient,
                 notification_type='chat',
                 title='New Chat Message',
                 message=f'{request.user.get_full_name() or request.user.username}: {message_text[:50]}...'
             )
+        elif facility:
+            # Broadcast to all facility staff
+            facility_staff = facility.staff.all()
+            for staff_member in facility_staff:
+                if staff_member.user != request.user:  # Don't notify sender
+                    Notification.objects.create(
+                        recipient=staff_member.user,
+                        notification_type='chat',
+                        title='New Facility Message',
+                        message=f'{request.user.get_full_name() or request.user.username}: {message_text[:50]}...'
+                    )
         
-        return JsonResponse({'success': True})
+        return JsonResponse({
+            'success': True,
+            'message_id': chat_message.id,
+            'sender_name': chat_message.sender_full_name,
+            'sender_role': chat_message.sender_role
+        })
         
     except json.JSONDecodeError:
         return JsonResponse({'success': False, 'error': 'Invalid JSON'})
@@ -553,6 +604,73 @@ def api_chat_clear(request):
     ).delete()[0]
     
     return JsonResponse({'success': True, 'deleted_count': deleted_count})
+
+
+@login_required
+def api_chat_users(request):
+    """Get available users and facilities for chat targeting"""
+    try:
+        users_data = []
+        facilities_data = []
+        
+        # Get facilities
+        facilities = Facility.objects.all().prefetch_related('staff__user')
+        for facility in facilities:
+            facility_staff = []
+            for staff_member in facility.staff.all():
+                user = staff_member.user
+                if user != request.user:  # Don't include self
+                    facility_staff.append({
+                        'id': user.id,
+                        'name': user.get_full_name() or user.username,
+                        'role': staff_member.get_role_display(),
+                        'is_primary_contact': staff_member.is_primary_contact
+                    })
+            
+            facilities_data.append({
+                'id': facility.id,
+                'name': facility.name,
+                'staff': facility_staff,
+                'staff_count': len(facility_staff)
+            })
+        
+        # Get all users (radiologists and other users)
+        if request.user.is_superuser or request.user.groups.filter(name='Radiologists').exists():
+            # Radiologists can message anyone
+            all_users = get_user_model().objects.exclude(id=request.user.id).select_related('facility_staff__facility')
+            for user in all_users:
+                user_info = {
+                    'id': user.id,
+                    'name': user.get_full_name() or user.username,
+                    'role': 'Unknown',
+                    'facility': None
+                }
+                
+                if hasattr(user, 'facility_staff'):
+                    user_info['role'] = user.facility_staff.get_role_display()
+                    user_info['facility'] = user.facility_staff.facility.name
+                elif user.groups.filter(name='Radiologists').exists():
+                    user_info['role'] = 'Radiologist'
+                elif user.is_superuser:
+                    user_info['role'] = 'Administrator'
+                
+                users_data.append(user_info)
+        
+        return JsonResponse({
+            'success': True,
+            'facilities': facilities_data,
+            'users': users_data,
+            'current_user': {
+                'id': request.user.id,
+                'name': request.user.get_full_name() or request.user.username,
+                'is_radiologist': request.user.groups.filter(name='Radiologists').exists(),
+                'is_admin': request.user.is_superuser,
+                'facility': request.user.facility_staff.facility.name if hasattr(request.user, 'facility_staff') else None
+            }
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
 
 
 def create_notification(user, notification_type, title, message, related_study=None):
