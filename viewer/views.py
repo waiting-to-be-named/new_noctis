@@ -95,6 +95,17 @@ class DicomViewerView(TemplateView):
                 study = DicomStudy.objects.get(id=study_id)
                 context['initial_study_id'] = study_id
                 context['initial_study'] = study
+                
+                # Update worklist entry status to in_progress if radiologist is viewing
+                if self.request.user.is_authenticated:
+                    worklist_entries = WorklistEntry.objects.filter(
+                        study=study,
+                        status='scheduled'
+                    )
+                    for entry in worklist_entries:
+                        entry.status = 'in_progress'
+                        entry.save()
+                        
             except DicomStudy.DoesNotExist:
                 context['initial_study_error'] = f'Study with ID {study_id} not found'
         

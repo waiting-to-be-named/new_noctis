@@ -182,6 +182,12 @@ def create_report(request, study_id):
             report.status = 'finalized'
             report.finalized_at = timezone.now()
             
+            # Update worklist entry status to completed
+            worklist_entries = WorklistEntry.objects.filter(study=study)
+            for entry in worklist_entries:
+                entry.status = 'completed'
+                entry.save()
+            
             # Create notification for facility
             if study.facility:
                 facility_users = study.facility.staff.all()
