@@ -283,7 +283,7 @@
                     </button>
                 </div>
                 <div>
-                    {% if report and report.status == 'finalized' %}
+                    {% if report %}
                     <a href="{% url 'worklist:print_report' report.id %}" class="btn btn-secondary" target="_blank">
                         <i class="fas fa-print"></i> Print Report
                     </a>

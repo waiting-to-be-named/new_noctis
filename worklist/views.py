@@ -159,54 +159,65 @@ def create_report(request, study_id):
         return JsonResponse({'error': 'Permission denied'}, status=403)
     
     if request.method == 'POST':
-        data = json.loads(request.body)
+        try:
+            data = json.loads(request.body) if request.body else {}
+        except json.JSONDecodeError:
+            # Fallback to regular POST data if JSON is invalid
+            data = request.POST.dict()
         
-        # Get or create report
-        report, created = Report.objects.get_or_create(
-            study=study,
-            radiologist=request.user,
-            defaults={
-                'findings': data.get('findings', ''),
-                'impression': data.get('impression', ''),
-                'recommendations': data.get('recommendations', ''),
-                'status': 'draft'
-            }
-        )
-        
-        if not created:
-            report.findings = data.get('findings', report.findings)
-            report.impression = data.get('impression', report.impression)
-            report.recommendations = data.get('recommendations', report.recommendations)
-            
-        if data.get('finalize'):
-            report.status = 'finalized'
-            report.finalized_at = timezone.now()
-            
-            # Update worklist entry status to completed
-            worklist_entries = WorklistEntry.objects.filter(study=study)
-            for entry in worklist_entries:
-                entry.status = 'completed'
-                entry.save()
-            
-            # Create notification for facility
-            if study.facility:
-                facility_users = study.facility.staff.all()
-                for user in facility_users:
-                    Notification.objects.create(
-                        recipient=user,
-                        notification_type='report_ready',
-                        title=f'Report Ready: {study.patient_name}',
-                        message=f'The radiology report for {study.patient_name} is now available.',
-                        related_study=study
-                    )
-        
-        report.save()
-        
-        return JsonResponse({
-            'success': True,
-            'report_id': report.id,
-            'status': report.status
-        })
+        try:
+            # Get or create report
+            report, created = Report.objects.get_or_create(
+                study=study,
+                radiologist=request.user,
+                defaults={
+                    'findings': data.get('findings', ''),
+                    'impression': data.get('impression', ''),
+                    'recommendations': data.get('recommendations', ''),
+                    'status': 'draft'
+                }
+            )
+
+            if not created:
+                report.findings = data.get('findings', report.findings)
+                report.impression = data.get('impression', report.impression)
+                report.recommendations = data.get('recommendations', report.recommendations)
+
+            if data.get('finalize'):
+                report.status = 'finalized'
+                report.finalized_at = timezone.now()
+
+                # Update worklist entry status to completed
+                worklist_entries = WorklistEntry.objects.filter(study=study)
+                for entry in worklist_entries:
+                    entry.status = 'completed'
+                    entry.save()
+
+                # Create notification for facility
+                if study.facility:
+                    facility_users = study.facility.staff.all()
+                    for user in facility_users:
+                        Notification.objects.create(
+                            recipient=user,
+                            notification_type='report_ready',
+                            title=f'Report Ready: {study.patient_name}',
+                            message=f'The radiology report for {study.patient_name} is now available.',
+                            related_study=study
+                        )
+
+            report.save()
+
+            return JsonResponse({
+                'success': True,
+                'report_id': report.id,
+                'status': report.status
+            })
+        except Exception as e:
+            # Log the error for debugging purposes but return generic message to frontend
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.exception("Error while saving report: %s", e)
+            return JsonResponse({'success': False, 'error': 'Server error while saving report'}, status=500)
     
     else:
         # GET request - check if it's an AJAX request or regular page load
