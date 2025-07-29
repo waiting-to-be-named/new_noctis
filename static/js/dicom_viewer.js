@@ -591,16 +591,23 @@ class DicomViewer {
     async loadStudy(studyId) {
         try {
             console.log(`Loading study ${studyId}...`);
+            
+            // Show loading indicator
+            this.showLoadingMessage('Loading study...');
+            
             const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
             
             if (!response.ok) {
+                if (response.status === 404) {
+                    throw new Error('Study not found. It may have been deleted or you may not have permission to view it.');
+                }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
             const data = await response.json();
             
             if (!data.images || data.images.length === 0) {
-                throw new Error('No images found in this study');
+                throw new Error('No images found in this study. The study may be incomplete or corrupted.');
             }
             
             console.log(`Found ${data.images.length} images in study`);
@@ -615,14 +622,17 @@ class DicomViewer {
             this.updateSliders();
             
             // Load the first image
+            this.showLoadingMessage('Loading first image...');
             await this.loadCurrentImage();
             
-            // Study loaded successfully - no need to update selector as it's removed
+            // Hide loading indicator
+            this.hideLoadingMessage();
             
             console.log('Study loaded successfully');
             
         } catch (error) {
             console.error('Error loading study:', error);
+            this.hideLoadingMessage();
             this.showError('Error loading study: ' + error.message);
             // Reset patient info on error
             this.updatePatientInfo();
@@ -674,6 +684,9 @@ class DicomViewer {
                     this.loadMeasurements();
                     this.loadAnnotations();
                     this.updatePatientInfo();
+                    
+                    // Update slice info overlay
+                    this.updateOverlayLabels();
                 };
                 img.onerror = (error) => {
                     console.error('Failed to load image data:', error);
@@ -723,6 +736,78 @@ class DicomViewer {
                 errorDiv.remove();
             }
         }, 5000);
+    }
+    
+    showLoadingMessage(message) {
+        // Remove existing loading message
+        this.hideLoadingMessage();
+        
+        const loadingDiv = document.createElement('div');
+        loadingDiv.id = 'loading-message';
+        loadingDiv.className = 'loading-overlay';
+        loadingDiv.innerHTML = `
+            <div class="loading-content">
+                <div class="loading-spinner"></div>
+                <span>${message}</span>
+            </div>
+        `;
+        loadingDiv.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            color: white;
+            font-size: 16px;
+        `;
+        
+        const content = loadingDiv.querySelector('.loading-content');
+        content.style.cssText = `
+            text-align: center;
+            background: rgba(40,40,40,0.9);
+            padding: 30px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        `;
+        
+        const spinner = loadingDiv.querySelector('.loading-spinner');
+        spinner.style.cssText = `
+            width: 40px;
+            height: 40px;
+            border: 4px solid #333;
+            border-top-color: #0099ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        `;
+        
+        // Add keyframes for spinner animation
+        if (!document.querySelector('#spinner-keyframes')) {
+            const style = document.createElement('style');
+            style.id = 'spinner-keyframes';
+            style.textContent = `
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        document.body.appendChild(loadingDiv);
+    }
+    
+    hideLoadingMessage() {
+        const loadingDiv = document.getElementById('loading-message');
+        if (loadingDiv) {
+            loadingDiv.remove();
+        }
     }
     
     updatePatientInfo() {
@@ -804,6 +889,19 @@ class DicomViewer {
         // Draw image
         this.ctx.drawImage(img, x, y, displayWidth, displayHeight);
         
+        // Store image transform for coordinate conversion
+        this.imageTransform = {
+            x: x,
+            y: y,
+            width: displayWidth,
+            height: displayHeight,
+            scale: scale
+        };
+        
+        // Draw measurements and annotations on top of the image
+        this.drawMeasurements();
+        this.drawAnnotations();
+        
         // Update overlay labels
         this.updateOverlayLabels();
     }
@@ -823,10 +921,16 @@ class DicomViewer {
     drawMeasurements() {
         if (!this.currentImage) return;
         
-        this.ctx.strokeStyle = 'red';
+        // Save current context state
+        this.ctx.save();
+        
+        // Set default measurement styles
+        this.ctx.strokeStyle = '#ff0000';
         this.ctx.lineWidth = 2;
-        this.ctx.fillStyle = 'red';
-        this.ctx.font = '12px Arial';
+        this.ctx.fillStyle = '#ff0000';
+        this.ctx.font = 'bold 14px Arial';
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        this.ctx.shadowBlur = 2;
         
         this.measurements.forEach(measurement => {
             const coords = measurement.coordinates;
@@ -850,9 +954,17 @@ class DicomViewer {
                 // Display HU value
                 const text = `${measurement.value.toFixed(1)} HU`;
                 const textMetrics = this.ctx.measureText(text);
-                this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                this.ctx.fillRect(centerX - textMetrics.width/2 - 4, centerY - 8, textMetrics.width + 8, 16);
+                
+                // Draw text background with border
+                this.ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                this.ctx.fillRect(centerX - textMetrics.width/2 - 6, centerY - 10, textMetrics.width + 12, 20);
+                this.ctx.strokeStyle = 'lime';
+                this.ctx.lineWidth = 1;
+                this.ctx.strokeRect(centerX - textMetrics.width/2 - 6, centerY - 10, textMetrics.width + 12, 20);
+                
+                // Draw text
                 this.ctx.fillStyle = 'lime';
+                this.ctx.font = 'bold 12px Arial';
                 this.ctx.fillText(text, centerX - textMetrics.width/2, centerY + 4);
             } else if (measurement.type === 'volume' && coords && coords.length >= 3) {
                 // Draw volume contour
@@ -904,12 +1016,17 @@ class DicomViewer {
                 const midY = (start.y + end.y) / 2;
                 const text = `${measurement.value.toFixed(1)} ${measurement.unit}`;
                 
-                // Background for text
+                // Background for text with border
                 const textMetrics = this.ctx.measureText(text);
-                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                this.ctx.fillRect(midX - textMetrics.width/2 - 4, midY - 8, textMetrics.width + 8, 16);
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                this.ctx.fillRect(midX - textMetrics.width/2 - 6, midY - 10, textMetrics.width + 12, 20);
+                this.ctx.strokeStyle = '#ff0000';
+                this.ctx.lineWidth = 1;
+                this.ctx.strokeRect(midX - textMetrics.width/2 - 6, midY - 10, textMetrics.width + 12, 20);
                 
-                this.ctx.fillStyle = 'red';
+                // Draw text
+                this.ctx.fillStyle = '#ff0000';
+                this.ctx.font = 'bold 12px Arial';
                 this.ctx.fillText(text, midX - textMetrics.width/2, midY + 4);
             }
         });
@@ -984,6 +1101,9 @@ class DicomViewer {
                 this.ctx.fillText('Click near first point to close contour', 10, 30);
             }
         }
+        
+        // Restore context state
+        this.ctx.restore();
     }
     
     drawAnnotations() {
@@ -1331,6 +1451,15 @@ class DicomViewer {
     imageToCanvasCoords(imageX, imageY) {
         if (!this.currentImage) return { x: 0, y: 0 };
         
+        // Use stored transform if available, otherwise calculate
+        if (this.imageTransform) {
+            return {
+                x: this.imageTransform.x + (imageX * this.imageTransform.scale),
+                y: this.imageTransform.y + (imageY * this.imageTransform.scale)
+            };
+        }
+        
+        // Fallback to calculation
         const img = this.currentImage.image;
         const scale = this.getScale();
         
