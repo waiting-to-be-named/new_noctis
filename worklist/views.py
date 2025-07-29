@@ -145,6 +145,7 @@ class FacilityWorklistView(LoginRequiredMixin, ListView):
             self.request.user.is_superuser or 
             self.request.user.groups.filter(name='Radiologists').exists()
         )
+        context['is_admin'] = self.request.user.is_superuser
         return context
 
 
@@ -553,6 +554,38 @@ def api_chat_clear(request):
     ).delete()[0]
     
     return JsonResponse({'success': True, 'deleted_count': deleted_count})
+
+
+@login_required
+@require_http_methods(['POST'])
+def delete_worklist_entry(request, entry_id):
+    """Delete a worklist entry - admin only"""
+    # Check if user is admin
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Permission denied. Admin access required.'}, status=403)
+    
+    try:
+        entry = get_object_or_404(WorklistEntry, id=entry_id)
+        
+        # Store entry info for potential logging
+        entry_info = {
+            'patient_name': entry.patient_name,
+            'patient_id': entry.patient_id,
+            'accession_number': entry.accession_number
+        }
+        
+        # Delete the entry
+        entry.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Entry for {entry_info["patient_name"]} (ID: {entry_info["patient_id"]}) has been deleted.'
+        })
+        
+    except WorklistEntry.DoesNotExist:
+        return JsonResponse({'error': 'Worklist entry not found.'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': f'Error deleting entry: {str(e)}'}, status=500)
 
 
 def create_notification(user, notification_type, title, message, related_study=None):

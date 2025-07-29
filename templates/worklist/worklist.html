@@ -137,6 +137,11 @@
                                         <i class="fas fa-print"></i> Print
                                     </button>
                                     {% endif %}
+                                    {% if is_admin %}
+                                    <button class="btn btn-delete" onclick="deleteEntry({{ entry.id }}, '{{ entry.patient_name }}')">
+                                        <i class="fas fa-trash"></i> Delete
+                                    </button>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -429,6 +434,35 @@
         
         function printReport(reportId) {
             window.open(`/worklist/report/${reportId}/print/`, '_blank');
+        }
+        
+        function deleteEntry(entryId, patientName) {
+            if (confirm(`Are you sure you want to delete the entry for patient "${patientName}"? This action cannot be undone.`)) {
+                fetch(`/worklist/entry/${entryId}/delete/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCSRFToken()
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message);
+                        // Remove the row from the table
+                        const row = document.querySelector(`tr[data-entry-id="${entryId}"]`);
+                        if (row) {
+                            row.remove();
+                        }
+                    } else {
+                        alert('Error: ' + (data.error || 'Unknown error occurred'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error deleting entry. Please try again.');
+                });
+            }
         }
         
         function getCookie(name) {
