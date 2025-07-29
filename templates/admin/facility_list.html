@@ -84,6 +84,18 @@
             background: #0052a3;
         }
         
+        .btn-delete {
+            background: #dc3545;
+            color: white;
+            font-size: 12px;
+            padding: 6px 12px;
+            margin-left: 5px;
+        }
+        
+        .btn-delete:hover {
+            background: #c82333;
+        }
+        
         .facilities-table {
             background: #1a1a1a;
             border-radius: 8px;
@@ -257,6 +269,12 @@
                             <a href="{% url 'viewer:facility_edit' facility.pk %}" class="btn btn-edit">
                                 <i class="fas fa-edit"></i> Edit
                             </a>
+                            <form method="post" action="{% url 'viewer:facility_delete' facility.pk %}" style="display: inline-block;" onsubmit="return confirm('Are you sure you want to delete this facility? This action cannot be undone.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-delete">
+                                    <i class="fas fa-trash"></i> Delete
+                                </button>
+                            </form>
                         </td>
                     </tr>
                     {% endfor %}

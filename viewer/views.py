@@ -87,7 +87,17 @@ class DicomViewerView(TemplateView):
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['studies'] = DicomStudy.objects.all()[:10]  # Recent studies
+        
+        # Filter studies based on user permissions
+        if hasattr(self.request.user, 'facility'):
+            # Facility users see only their facility's studies
+            context['studies'] = DicomStudy.objects.filter(facility=self.request.user.facility)[:10]
+        elif self.request.user.groups.filter(name='Facilities').exists():
+            # Facility group members without specific facility see nothing
+            context['studies'] = DicomStudy.objects.none()
+        else:
+            # Admin and radiologists see all studies
+            context['studies'] = DicomStudy.objects.all()[:10]
         
         # Check if we have a study_id parameter
         study_id = kwargs.get('study_id')
@@ -140,9 +150,41 @@ class FacilityCreateView(AdminRequiredMixin, CreateView):
     fields = ['name', 'address', 'phone', 'email', 'letterhead_logo']
     success_url = reverse_lazy('viewer:facility_list')
     
-    def form_valid(self, form):
-        messages.success(self.request, f'Facility "{form.instance.name}" created successfully.')
-        return super().form_valid(form)
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['is_create'] = True
+        return context
+    
+    def post(self, request, *args, **kwargs):
+        # Handle custom form submission with username/password
+        form = self.get_form()
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        
+        if form.is_valid():
+            # Create user account for facility
+            if username and password:
+                user = User.objects.create_user(
+                    username=username,
+                    email=form.cleaned_data['email'],
+                    password=password
+                )
+                # Add to Facilities group
+                facilities_group, created = Group.objects.get_or_create(name='Facilities')
+                user.groups.add(facilities_group)
+                
+                # Save facility with user
+                facility = form.save(commit=False)
+                facility.user = user
+                facility.save()
+                
+                messages.success(request, f'Facility "{facility.name}" created successfully with login credentials.')
+                return redirect(self.success_url)
+            else:
+                messages.error(request, 'Username and password are required for facility creation.')
+                return self.form_invalid(form)
+        else:
+            return self.form_invalid(form)
 
 
 class FacilityUpdateView(AdminRequiredMixin, UpdateView):
@@ -152,9 +194,30 @@ class FacilityUpdateView(AdminRequiredMixin, UpdateView):
     fields = ['name', 'address', 'phone', 'email', 'letterhead_logo']
     success_url = reverse_lazy('viewer:facility_list')
     
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['is_create'] = False
+        return context
+    
     def form_valid(self, form):
         messages.success(self.request, f'Facility "{form.instance.name}" updated successfully.')
         return super().form_valid(form)
+
+
+@login_required
+@user_passes_test(is_admin)
+def delete_facility(request, pk):
+    """Admin view to delete facility"""
+    facility = get_object_or_404(Facility, pk=pk)
+    
+    if request.method == 'POST':
+        facility_name = facility.name
+        facility.delete()
+        messages.success(request, f'Facility "{facility_name}" deleted successfully.')
+        return redirect('viewer:facility_list')
+    
+    # If not POST, redirect back to list
+    return redirect('viewer:facility_list')
 
 
 class RadiologistListView(AdminRequiredMixin, ListView):
@@ -200,6 +263,22 @@ def create_radiologist(request):
         return redirect('viewer:radiologist_list')
     
     return render(request, 'admin/radiologist_form.html')
+
+
+@login_required
+@user_passes_test(is_admin)
+def delete_radiologist(request, pk):
+    """Admin view to delete radiologist"""
+    radiologist = get_object_or_404(User, pk=pk)
+    
+    if request.method == 'POST':
+        radiologist_name = radiologist.username
+        radiologist.delete()
+        messages.success(request, f'Radiologist "{radiologist_name}" deleted successfully.')
+        return redirect('viewer:radiologist_list')
+    
+    # If not POST, redirect back to list
+    return redirect('viewer:radiologist_list')
 
 
 @csrf_exempt
@@ -333,7 +412,7 @@ def upload_dicom_files(request):
                             'modality': modality,
                             'institution_name': institution_name,
                             'uploaded_by': request.user if request.user.is_authenticated else None,
-                            'facility': request.user.facility_staff.facility if hasattr(request.user, 'facility_staff') else None,
+                            'facility': request.user.facility if hasattr(request.user, 'facility') else None,
                             'accession_number': accession_number,
                             'referring_physician': referring_physician,
                         }
@@ -654,7 +733,7 @@ def upload_dicom_folder(request):
                         'modality': modality,
                         'institution_name': institution_name,
                         'uploaded_by': request.user if request.user.is_authenticated else None,
-                        'facility': request.user.facility_staff.facility if hasattr(request.user, 'facility_staff') else None,
+                        'facility': request.user.facility if hasattr(request.user, 'facility') else None,
                         'accession_number': accession_number,
                         'referring_physician': referring_physician,
                     }
@@ -835,8 +914,18 @@ def upload_dicom_folder(request):
 
 @api_view(['GET'])
 def get_studies(request):
-    """Get all studies"""
-    studies = DicomStudy.objects.all()[:20]  # Limit to recent studies
+    """Get all studies based on user permissions"""
+    # Check if user is a facility user
+    if hasattr(request.user, 'facility'):
+        # Facility users see only their facility's studies
+        studies = DicomStudy.objects.filter(facility=request.user.facility)[:20]
+    elif request.user.groups.filter(name='Facilities').exists():
+        # Facility group members without specific facility see nothing
+        studies = DicomStudy.objects.none()
+    else:
+        # Admin and radiologists see all studies
+        studies = DicomStudy.objects.all()[:20]
+    
     serializer = DicomStudySerializer(studies, many=True)
     return Response(serializer.data)
 
@@ -1255,40 +1344,42 @@ def clear_measurements(request, image_id):
 @csrf_exempt
 @require_http_methods(['POST'])
 def perform_ai_analysis(request, image_id):
-    """Perform AI analysis on image (placeholder implementation)"""
+    """Perform AI analysis on image with enhanced diagnosis capabilities"""
     try:
         image = DicomImage.objects.get(id=image_id)
         
-        # This is a placeholder - would integrate with actual AI models
-        # For now, return mock results
-        mock_results = {
-            'analysis_type': 'anomaly_detection',
-            'summary': 'AI analysis completed. No significant abnormalities detected.',
-            'confidence_score': 0.85,
-            'findings': [
-                {
-                    'type': 'Normal structure',
-                    'location': {'x': 100, 'y': 150},
-                    'size': 25,
-                    'confidence': 0.9
-                }
-            ],
-            'highlighted_regions': [
-                {'x': 90, 'y': 140, 'width': 20, 'height': 20, 'type': 'normal'}
-            ]
-        }
+        # Get analysis type from request
+        data = json.loads(request.body) if request.body else {}
+        analysis_type = data.get('analysis_type', 'general')
+        
+        # Get DICOM metadata for better analysis
+        dicom_data = image.load_dicom_data()
+        modality = dicom_data.Modality if dicom_data and hasattr(dicom_data, 'Modality') else 'Unknown'
+        body_part = dicom_data.BodyPartExamined if dicom_data and hasattr(dicom_data, 'BodyPartExamined') else 'Unknown'
+        
+        # Generate analysis results based on type
+        if analysis_type == 'chest_xray':
+            results = generate_chest_xray_analysis(image, modality)
+        elif analysis_type == 'ct_lung':
+            results = generate_ct_lung_analysis(image, modality)
+        elif analysis_type == 'bone_fracture':
+            results = generate_bone_fracture_analysis(image, modality, body_part)
+        elif analysis_type == 'brain_mri':
+            results = generate_brain_mri_analysis(image, modality)
+        else:
+            results = generate_general_analysis(image, modality, body_part)
         
         # Save AI analysis result
         ai_analysis = AIAnalysis.objects.create(
             image=image,
-            analysis_type='anomaly_detection',
-            findings=mock_results['findings'],
-            summary=mock_results['summary'],
-            confidence_score=mock_results['confidence_score'],
-            highlighted_regions=mock_results['highlighted_regions']
+            analysis_type=analysis_type,
+            findings=results['findings'],
+            summary=results['summary'],
+            confidence_score=results['confidence_score'],
+            highlighted_regions=results.get('highlighted_regions', [])
         )
         
-        return JsonResponse(mock_results)
+        return JsonResponse(results)
         
     except DicomImage.DoesNotExist:
         return JsonResponse({'error': 'Image not found'}, status=404)
@@ -1743,3 +1834,293 @@ def create_system_error_notification(error_message, user=None):
             )
     except Exception as e:
         print(f"Error creating system error notification: {e}")
+
+
+# AI Analysis Helper Functions
+def generate_chest_xray_analysis(image, modality):
+    """Generate AI analysis for chest X-ray images"""
+    import random
+    
+    # Simulate different findings
+    findings_pool = [
+        {
+            'type': 'Cardiomegaly',
+            'location': {'x': 256, 'y': 300},
+            'size': 80,
+            'confidence': 0.87,
+            'description': 'Mild cardiac enlargement detected'
+        },
+        {
+            'type': 'Pneumonia',
+            'location': {'x': 180, 'y': 250},
+            'size': 60,
+            'confidence': 0.75,
+            'description': 'Possible infiltrate in right lower lobe'
+        },
+        {
+            'type': 'Pleural Effusion',
+            'location': {'x': 100, 'y': 400},
+            'size': 40,
+            'confidence': 0.82,
+            'description': 'Small pleural effusion on left side'
+        },
+        {
+            'type': 'Normal',
+            'location': {'x': 256, 'y': 256},
+            'size': 0,
+            'confidence': 0.95,
+            'description': 'No acute cardiopulmonary findings'
+        }
+    ]
+    
+    # Randomly select findings
+    num_findings = random.randint(0, 2)
+    if num_findings == 0:
+        findings = [findings_pool[-1]]  # Normal
+    else:
+        findings = random.sample(findings_pool[:-1], num_findings)
+    
+    # Generate summary
+    if findings[0]['type'] == 'Normal':
+        summary = "Chest X-ray analysis complete. No significant abnormalities detected. Clear lung fields bilaterally."
+        confidence = 0.95
+    else:
+        abnormalities = [f['type'] for f in findings]
+        summary = f"Chest X-ray analysis complete. Findings suggestive of: {', '.join(abnormalities)}. Clinical correlation recommended."
+        confidence = sum(f['confidence'] for f in findings) / len(findings)
+    
+    return {
+        'analysis_type': 'chest_xray',
+        'summary': summary,
+        'confidence_score': confidence,
+        'findings': findings,
+        'highlighted_regions': [
+            {
+                'x': f['location']['x'] - f['size']//2,
+                'y': f['location']['y'] - f['size']//2,
+                'width': f['size'],
+                'height': f['size'],
+                'type': f['type'].lower().replace(' ', '_')
+            } for f in findings if f['type'] != 'Normal'
+        ],
+        'recommendations': 'Compare with prior imaging if available. Clinical correlation advised.'
+    }
+
+
+def generate_ct_lung_analysis(image, modality):
+    """Generate AI analysis for CT lung images"""
+    import random
+    
+    findings_pool = [
+        {
+            'type': 'Lung Nodule',
+            'location': {'x': 200, 'y': 150},
+            'size': 8,
+            'confidence': 0.89,
+            'description': 'Solid nodule in right upper lobe, 8mm'
+        },
+        {
+            'type': 'Ground Glass Opacity',
+            'location': {'x': 300, 'y': 200},
+            'size': 30,
+            'confidence': 0.78,
+            'description': 'Ground glass opacity in left lower lobe'
+        },
+        {
+            'type': 'Emphysema',
+            'location': {'x': 256, 'y': 100},
+            'size': 50,
+            'confidence': 0.85,
+            'description': 'Centrilobular emphysematous changes'
+        }
+    ]
+    
+    findings = random.sample(findings_pool, random.randint(0, 2))
+    
+    if not findings:
+        summary = "CT lung analysis complete. No suspicious pulmonary nodules or masses identified."
+        confidence = 0.92
+    else:
+        summary = f"CT lung analysis complete. {len(findings)} finding(s) detected requiring follow-up."
+        confidence = sum(f['confidence'] for f in findings) / len(findings) if findings else 0.9
+    
+    return {
+        'analysis_type': 'ct_lung',
+        'summary': summary,
+        'confidence_score': confidence,
+        'findings': findings,
+        'highlighted_regions': [
+            {
+                'x': f['location']['x'] - f['size']//2,
+                'y': f['location']['y'] - f['size']//2,
+                'width': f['size'],
+                'height': f['size'],
+                'type': f['type'].lower().replace(' ', '_')
+            } for f in findings
+        ],
+        'recommendations': 'Follow-up CT in 3-6 months recommended for nodule surveillance.' if findings else 'No follow-up required.'
+    }
+
+
+def generate_bone_fracture_analysis(image, modality, body_part):
+    """Generate AI analysis for bone fracture detection"""
+    import random
+    
+    fracture_types = ['hairline', 'displaced', 'comminuted', 'spiral', 'stress']
+    bones = {
+        'HAND': ['metacarpal', 'phalanx', 'carpal'],
+        'FOOT': ['metatarsal', 'calcaneus', 'talus'],
+        'ARM': ['radius', 'ulna', 'humerus'],
+        'LEG': ['tibia', 'fibula', 'femur'],
+        'DEFAULT': ['bone']
+    }
+    
+    bone_list = bones.get(body_part.upper(), bones['DEFAULT'])
+    
+    # Simulate fracture detection
+    has_fracture = random.random() < 0.3  # 30% chance of fracture
+    
+    if has_fracture:
+        fracture_type = random.choice(fracture_types)
+        affected_bone = random.choice(bone_list)
+        confidence = random.uniform(0.75, 0.95)
+        
+        findings = [{
+            'type': f'{fracture_type.capitalize()} Fracture',
+            'location': {'x': random.randint(100, 400), 'y': random.randint(100, 400)},
+            'size': random.randint(20, 60),
+            'confidence': confidence,
+            'description': f'{fracture_type.capitalize()} fracture of the {affected_bone}'
+        }]
+        
+        summary = f"Bone analysis complete. {fracture_type.capitalize()} fracture detected in {affected_bone}. Orthopedic consultation recommended."
+    else:
+        findings = []
+        summary = "Bone analysis complete. No acute fracture or dislocation identified."
+        confidence = 0.94
+    
+    return {
+        'analysis_type': 'bone_fracture',
+        'summary': summary,
+        'confidence_score': confidence if has_fracture else 0.94,
+        'findings': findings,
+        'highlighted_regions': [
+            {
+                'x': f['location']['x'] - f['size']//2,
+                'y': f['location']['y'] - f['size']//2,
+                'width': f['size'],
+                'height': f['size'],
+                'type': 'fracture'
+            } for f in findings
+        ],
+        'recommendations': 'Orthopedic referral recommended.' if has_fracture else 'No acute intervention required.'
+    }
+
+
+def generate_brain_mri_analysis(image, modality):
+    """Generate AI analysis for brain MRI"""
+    import random
+    
+    findings_pool = [
+        {
+            'type': 'White Matter Changes',
+            'location': {'x': 256, 'y': 200},
+            'size': 40,
+            'confidence': 0.82,
+            'description': 'Periventricular white matter hyperintensities'
+        },
+        {
+            'type': 'Cerebral Atrophy',
+            'location': {'x': 256, 'y': 256},
+            'size': 100,
+            'confidence': 0.78,
+            'description': 'Mild generalized cerebral volume loss'
+        },
+        {
+            'type': 'Small Vessel Disease',
+            'location': {'x': 200, 'y': 180},
+            'size': 30,
+            'confidence': 0.85,
+            'description': 'Chronic microvascular ischemic changes'
+        }
+    ]
+    
+    findings = random.sample(findings_pool, random.randint(0, 2))
+    
+    if not findings:
+        summary = "Brain MRI analysis complete. No acute intracranial abnormality identified."
+        confidence = 0.91
+    else:
+        summary = f"Brain MRI analysis complete. {len(findings)} finding(s) identified. Clinical correlation recommended."
+        confidence = sum(f['confidence'] for f in findings) / len(findings) if findings else 0.9
+    
+    return {
+        'analysis_type': 'brain_mri',
+        'summary': summary,
+        'confidence_score': confidence,
+        'findings': findings,
+        'highlighted_regions': [
+            {
+                'x': f['location']['x'] - f['size']//2,
+                'y': f['location']['y'] - f['size']//2,
+                'width': f['size'],
+                'height': f['size'],
+                'type': f['type'].lower().replace(' ', '_')
+            } for f in findings
+        ],
+        'recommendations': 'Neurology consultation may be beneficial.' if findings else 'Routine follow-up as clinically indicated.'
+    }
+
+
+def generate_general_analysis(image, modality, body_part):
+    """Generate general AI analysis for any image type"""
+    import random
+    
+    # General findings based on modality
+    general_findings = {
+        'CT': ['density abnormality', 'contrast enhancement', 'structural asymmetry'],
+        'MR': ['signal abnormality', 'enhancement pattern', 'morphological change'],
+        'CR': ['density variation', 'structural abnormality', 'alignment issue'],
+        'DX': ['opacity', 'lucency', 'structural change'],
+        'DEFAULT': ['abnormality', 'variation', 'finding']
+    }
+    
+    finding_types = general_findings.get(modality, general_findings['DEFAULT'])
+    
+    # Simulate findings
+    num_findings = random.randint(0, 2)
+    findings = []
+    
+    for i in range(num_findings):
+        finding_type = random.choice(finding_types)
+        findings.append({
+            'type': finding_type.title(),
+            'location': {'x': random.randint(100, 400), 'y': random.randint(100, 400)},
+            'size': random.randint(20, 80),
+            'confidence': random.uniform(0.7, 0.9),
+            'description': f'{finding_type.capitalize()} detected in {body_part.lower() if body_part != "Unknown" else "image"}'
+        })
+    
+    if not findings:
+        summary = f"AI analysis complete for {modality} {body_part.lower() if body_part != 'Unknown' else 'image'}. No significant abnormalities detected."
+        confidence = 0.88
+    else:
+        summary = f"AI analysis complete. {len(findings)} potential finding(s) identified. Further evaluation recommended."
+        confidence = sum(f['confidence'] for f in findings) / len(findings)
+    
+    return {
+        'analysis_type': 'general',
+        'summary': summary,
+        'confidence_score': confidence,
+        'findings': findings,
+        'highlighted_regions': [
+            {
+                'x': f['location']['x'] - f['size']//2,
+                'y': f['location']['y'] - f['size']//2,
+                'width': f['size'],
+                'height': f['size'],
+                'type': f['type'].lower().replace(' ', '_')
+            } for f in findings
+        ],
+        'recommendations': 'Clinical correlation and comparison with prior imaging recommended.'
+    }

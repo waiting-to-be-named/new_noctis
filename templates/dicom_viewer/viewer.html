@@ -53,14 +53,56 @@
                     <i class="fas fa-calculator"></i>
                     <span>Volume</span>
                 </button>
-                <button class="tool-btn" data-tool="ai" title="AI Analysis">
-                    <i class="fas fa-robot"></i>
-                    <span>AI</span>
-                </button>
-                <button class="tool-btn" data-tool="3d" title="3D Reconstruction">
-                    <i class="fas fa-cube"></i>
-                    <span>3D</span>
-                </button>
+                <div class="dropdown-tool">
+                    <button class="tool-btn dropdown-toggle" data-tool="ai" title="AI Analysis">
+                        <i class="fas fa-robot"></i>
+                        <span>AI</span>
+                        <i class="fas fa-chevron-down dropdown-arrow"></i>
+                    </button>
+                    <div class="dropdown-menu ai-dropdown">
+                        <h4>AI Analysis</h4>
+                        <div class="dropdown-item" onclick="viewer.performAIAnalysis('chest_xray')">
+                            <i class="fas fa-lungs"></i> Chest X-Ray Analysis
+                        </div>
+                        <div class="dropdown-item" onclick="viewer.performAIAnalysis('ct_lung')">
+                            <i class="fas fa-wind"></i> CT Lung Nodule Detection
+                        </div>
+                        <div class="dropdown-item" onclick="viewer.performAIAnalysis('bone_fracture')">
+                            <i class="fas fa-bone"></i> Bone Fracture Detection
+                        </div>
+                        <div class="dropdown-item" onclick="viewer.performAIAnalysis('brain_mri')">
+                            <i class="fas fa-brain"></i> Brain MRI Analysis
+                        </div>
+                        <div class="dropdown-item" onclick="viewer.performAIAnalysis('general')">
+                            <i class="fas fa-search"></i> General Abnormality Detection
+                        </div>
+                    </div>
+                </div>
+                <div class="dropdown-tool">
+                    <button class="tool-btn dropdown-toggle" data-tool="3d" title="3D Reconstruction">
+                        <i class="fas fa-cube"></i>
+                        <span>3D</span>
+                        <i class="fas fa-chevron-down dropdown-arrow"></i>
+                    </button>
+                    <div class="dropdown-menu reconstruction-dropdown">
+                        <h4>3D Reconstruction</h4>
+                        <div class="dropdown-item" onclick="viewer.apply3DReconstruction('mpr')">
+                            <i class="fas fa-th"></i> Multi-Planar Reconstruction (MPR)
+                        </div>
+                        <div class="dropdown-item" onclick="viewer.apply3DReconstruction('volume')">
+                            <i class="fas fa-cube"></i> Volume Rendering
+                        </div>
+                        <div class="dropdown-item" onclick="viewer.apply3DReconstruction('bone')">
+                            <i class="fas fa-bone"></i> 3D Bone Reconstruction
+                        </div>
+                        <div class="dropdown-item" onclick="viewer.apply3DReconstruction('vessel')">
+                            <i class="fas fa-project-diagram"></i> Vessel Analysis (MIP)
+                        </div>
+                        <div class="dropdown-item" onclick="viewer.apply3DReconstruction('surface')">
+                            <i class="fas fa-layer-group"></i> Surface Rendering
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -76,6 +118,10 @@
                     <button id="load-dicom-btn" class="primary-btn">
                         <i class="fas fa-upload"></i>
                         Load DICOM Files
+                    </button>
+                    <button id="logout-btn" class="logout-btn" onclick="window.location.href='/accounts/logout/'">
+                        <i class="fas fa-sign-out-alt"></i>
+                        Logout
                     </button>
                     <select id="backend-studies" class="form-select">
                         <option value="">Select DICOM from System</option>
