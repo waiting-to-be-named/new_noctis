@@ -20,6 +20,9 @@ class DicomViewer {
         this.panY = 0;
         this.inverted = false;
         this.crosshair = false;
+        this.hasManuallyZoomed = false;
+        this.currentScale = 1.0;
+        this.currentDisplayOffset = { x: 0, y: 0 };
         
         // Tools
         this.activeTool = 'windowing';
@@ -80,7 +83,12 @@ class DicomViewer {
         // Load initial study if provided
         if (this.initialStudyId) {
             console.log('Loading initial study:', this.initialStudyId);
-            await this.loadStudy(this.initialStudyId);
+            try {
+                await this.loadStudy(this.initialStudyId);
+            } catch (error) {
+                console.error('Failed to load initial study:', error);
+                alert(`Failed to load study ${this.initialStudyId}. Please select it manually from the dropdown.`);
+            }
         }
     }
     
@@ -135,6 +143,7 @@ class DicomViewer {
         
         document.getElementById('zoom-slider').addEventListener('input', (e) => {
             this.zoomFactor = e.target.value / 100;
+            this.hasManuallyZoomed = true; // Mark as manually zoomed
             document.getElementById('zoom-value').textContent = e.target.value + '%';
             this.updateDisplay();
         });
@@ -593,12 +602,16 @@ class DicomViewer {
             const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
             
             if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`HTTP Error ${response.status}: ${errorText}`);
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
             const data = await response.json();
+            console.log('Study data received:', data);
             
             if (!data.images || data.images.length === 0) {
+                console.error('No images found in study data:', data);
                 throw new Error('No images found in this study');
             }
             
@@ -608,6 +621,11 @@ class DicomViewer {
             this.currentSeries = data.series || null;
             this.currentImages = data.images;
             this.currentImageIndex = 0;
+            
+            // Clear previous measurements when loading new study
+            this.measurements = [];
+            this.annotations = [];
+            this.hasManuallyZoomed = false; // Reset zoom for new study
             
             // Update UI
             this.updatePatientInfo();
@@ -620,6 +638,16 @@ class DicomViewer {
             const studySelect = document.getElementById('backend-studies');
             if (studySelect) {
                 studySelect.value = studyId;
+                
+                // If the study isn't in the dropdown, add it
+                const existingOption = studySelect.querySelector(`option[value="${studyId}"]`);
+                if (!existingOption && this.currentStudy) {
+                    const option = document.createElement('option');
+                    option.value = studyId;
+                    option.textContent = `${this.currentStudy.patient_name} - ${this.currentStudy.study_date} (${this.currentStudy.modality})`;
+                    option.selected = true;
+                    studySelect.appendChild(option);
+                }
             }
             
             console.log('Study loaded successfully');
@@ -663,6 +691,12 @@ class DicomViewer {
                         metadata: data.metadata,
                         id: imageData.id
                     };
+                    
+                    // Reset auto-scaling for new images if zoom hasn't been manually changed
+                    if (!this.hasManuallyZoomed) {
+                        this.zoomFactor = 1.0; // Reset to trigger auto-fit
+                    }
+                    
                     this.updateDisplay();
                     this.loadMeasurements();
                     this.loadAnnotations();
@@ -725,8 +759,14 @@ class DicomViewer {
         // Clear canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // Calculate display parameters
+        // Calculate display parameters with improved scaling
         const img = this.currentImage.image;
+        
+        // Auto-fit on first load if zoom factor is still 1.0 and no manual interaction
+        if (this.zoomFactor === 1.0 && !this.hasManuallyZoomed) {
+            this.autoFitToScreen();
+        }
+        
         const scale = Math.min(
             (this.canvas.width * this.zoomFactor) / img.width,
             (this.canvas.height * this.zoomFactor) / img.height
@@ -737,12 +777,17 @@ class DicomViewer {
         const x = (this.canvas.width - displayWidth) / 2 + this.panX;
         const y = (this.canvas.height - displayHeight) / 2 + this.panY;
         
+        // Store current scale for coordinate conversions
+        this.currentScale = scale;
+        this.currentDisplayOffset = { x, y };
+        
         // Draw image
         this.ctx.drawImage(img, x, y, displayWidth, displayHeight);
         
         // Draw overlays
         this.drawMeasurements();
         this.drawAnnotations();
+        this.drawVolumeContour();
         if (this.crosshair) {
             this.drawCrosshair();
         }
@@ -752,6 +797,35 @@ class DicomViewer {
         
         // Update overlay labels
         this.updateOverlayLabels();
+    }
+    
+    autoFitToScreen() {
+        if (!this.currentImage) return;
+        
+        const img = this.currentImage.image;
+        const canvasWidth = this.canvas.width;
+        const canvasHeight = this.canvas.height;
+        
+        // Calculate the scale needed to fit the image within the canvas with some padding
+        const padding = 20; // 20px padding around the image
+        const scaleX = (canvasWidth - padding * 2) / img.width;
+        const scaleY = (canvasHeight - padding * 2) / img.height;
+        
+        // Use the smaller scale to ensure the entire image fits
+        const autoScale = Math.min(scaleX, scaleY, 1.0); // Don't zoom in beyond 100%
+        
+        this.zoomFactor = autoScale;
+        
+        // Update zoom slider
+        const zoomPercent = Math.round(this.zoomFactor * 100);
+        document.getElementById('zoom-slider').value = zoomPercent;
+        document.getElementById('zoom-value').textContent = zoomPercent + '%';
+        
+        // Reset pan to center
+        this.panX = 0;
+        this.panY = 0;
+        
+        console.log(`Auto-fitted image: ${img.width}x${img.height} with scale ${autoScale.toFixed(2)}`);
     }
     
     drawMeasurements() {
@@ -1112,6 +1186,7 @@ class DicomViewer {
         this.zoomFactor = 1.0;
         this.panX = 0;
         this.panY = 0;
+        this.hasManuallyZoomed = false; // Reset manual zoom flag to enable auto-fit
         
         document.getElementById('zoom-slider').value = 100;
         document.getElementById('zoom-value').textContent = '100%';
@@ -1180,6 +1255,7 @@ class DicomViewer {
             this.panY += deltaY;
             
             this.dragStart = { x, y };
+            this.canvas.style.cursor = 'grabbing';
             this.redraw();
         } else if (this.activeTool === 'measure' && this.currentMeasurement) {
             const imageCoords = this.canvasToImageCoords(x, y);
@@ -1208,6 +1284,11 @@ class DicomViewer {
         if (this.activeTool === 'windowing' || this.activeTool === 'pan') {
             this.isDragging = false;
             this.dragStart = null;
+            
+            // Reset cursor for pan tool
+            if (this.activeTool === 'pan') {
+                this.canvas.style.cursor = 'grab';
+            }
         } else if (this.activeTool === 'measure' && this.currentMeasurement) {
             // Calculate distance
             const dx = this.currentMeasurement.end.x - this.currentMeasurement.start.x;
@@ -1216,19 +1297,53 @@ class DicomViewer {
             
             // Convert to mm if pixel spacing is available
             let distanceMm = distance;
-            if (this.currentImage && this.currentImage.pixel_spacing) {
-                const spacing = this.parsePixelSpacing(this.currentImage.pixel_spacing);
-                distanceMm = distance * spacing[0]; // Use first spacing value
+            let unit = 'px';
+            
+            if (this.currentImage && this.currentImage.metadata) {
+                const metadata = this.currentImage.metadata;
+                if (metadata.pixel_spacing_x && metadata.pixel_spacing_y) {
+                    const avgSpacing = (metadata.pixel_spacing_x + metadata.pixel_spacing_y) / 2;
+                    distanceMm = distance * avgSpacing;
+                    unit = 'mm';
+                }
             }
             
-            this.currentMeasurement.distance = distanceMm;
-            this.measurements.push(this.currentMeasurement);
+            // Apply unit preference
+            let finalValue = distanceMm;
+            let finalUnit = unit;
+            if (this.measurementUnit === 'cm' && unit === 'mm') {
+                finalValue = distanceMm / 10.0;
+                finalUnit = 'cm';
+            }
+            
+            // Create measurement object with proper structure
+            const measurement = {
+                type: 'line',
+                coordinates: [this.currentMeasurement.start, this.currentMeasurement.end],
+                value: finalValue,
+                unit: finalUnit,
+                image_id: this.currentImage.id
+            };
+            
+            this.measurements.push(measurement);
             this.updateMeasurementsList();
             this.currentMeasurement = null;
             this.redraw();
         } else if (this.activeTool === 'ellipse' && this.currentEllipse) {
-            this.measurements.push(this.currentEllipse);
-            this.updateMeasurementsList();
+            // Create ellipse measurement for HU analysis
+            const ellipseData = {
+                start: {
+                    x: this.currentEllipse.center.x - this.currentEllipse.radius,
+                    y: this.currentEllipse.center.y - this.currentEllipse.radius
+                },
+                end: {
+                    x: this.currentEllipse.center.x + this.currentEllipse.radius,
+                    y: this.currentEllipse.center.y + this.currentEllipse.radius
+                }
+            };
+            
+            // Call the HU analysis function
+            this.addEllipseHU(ellipseData);
             this.currentEllipse = null;
             this.redraw();
         }
@@ -1241,6 +1356,7 @@ class DicomViewer {
             // Zoom
             const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1;
             this.zoomFactor = Math.max(0.1, Math.min(5.0, this.zoomFactor * zoomDelta));
+            this.hasManuallyZoomed = true; // Mark as manually zoomed
             
             const zoomPercent = Math.round(this.zoomFactor * 100);
             document.getElementById('zoom-slider').value = zoomPercent;
@@ -1584,15 +1700,23 @@ class DicomViewer {
     saveVolumeMeasurement(volumeData) {
         const measurement = {
             type: 'volume',
+            value: volumeData.volume_ml, // Use ml as the primary value
+            unit: 'ml',
+            coordinates: this.volumeContour.slice(), // Copy array
             volume_mm3: volumeData.volume_mm3,
             volume_ml: volumeData.volume_ml,
             area_mm2: volumeData.area_mm2,
-            contour_points: this.volumeContour,
+            image_id: this.currentImage.id,
             timestamp: new Date().toISOString()
         };
         
         this.measurements.push(measurement);
         this.updateMeasurementsList();
+        this.updateDisplay();
+        
+        // Clear the contour after saving
+        this.volumeContour = [];
+        this.volumeTool = false;
     }
     
     drawVolumeContour() {
@@ -1677,12 +1801,6 @@ class DicomViewer {
     
     redraw() {
         this.updateDisplay();
-        this.drawMeasurements();
-        this.drawAnnotations();
-        this.drawAIHighlights();
-        this.drawVolumeContour();
-        this.drawCrosshair();
-        this.updateOverlayLabels();
     }
 
     performAIAnalysis() {
@@ -1757,9 +1875,19 @@ class DicomViewer {
         });
     }
     
-    toggleAIHighlights() {
-        this.showAIHighlights = !this.showAIHighlights;
+    toggleAIHighlights(showHighlights) {
+        if (typeof showHighlights === 'boolean') {
+            this.showAIHighlights = showHighlights;
+        } else {
+            this.showAIHighlights = !this.showAIHighlights;
+        }
         this.redraw();
+        
+        // Update checkbox if called programmatically
+        const checkbox = document.getElementById('toggle-ai-highlights');
+        if (checkbox) {
+            checkbox.checked = this.showAIHighlights;
+        }
     }
     
     toggle3DOptions() {
