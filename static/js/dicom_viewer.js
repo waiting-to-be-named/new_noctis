@@ -80,7 +80,12 @@ class DicomViewer {
         // Load initial study if provided
         if (this.initialStudyId) {
             console.log('Loading initial study:', this.initialStudyId);
-            await this.loadStudy(this.initialStudyId);
+            try {
+                await this.loadStudy(this.initialStudyId);
+            } catch (error) {
+                console.error('Failed to load initial study:', error);
+                this.showError(`Failed to load study ${this.initialStudyId}: ${error.message}`);
+            }
         }
     }
     
@@ -609,14 +614,23 @@ class DicomViewer {
             this.currentImages = data.images;
             this.currentImageIndex = 0;
             
+            console.log('Current study set to:', this.currentStudy);
+            
             // Update UI
             this.updatePatientInfo();
             this.updateSliders();
             
             // Load the first image
-            await this.loadCurrentImage();
-            
-            // Study loaded successfully - no need to update selector as it's removed
+            try {
+                await this.loadCurrentImage();
+                // Update patient info again after image is loaded to ensure it's displayed
+                this.updatePatientInfo();
+            } catch (imageError) {
+                console.error('Error loading first image:', imageError);
+                // Still show patient info even if image fails to load
+                this.updatePatientInfo();
+                this.showError('Images loaded but failed to display first image: ' + imageError.message);
+            }
             
             console.log('Study loaded successfully');
             
@@ -624,14 +638,20 @@ class DicomViewer {
             console.error('Error loading study:', error);
             this.showError('Error loading study: ' + error.message);
             // Reset patient info on error
+            this.currentStudy = null;
+            this.currentImages = [];
+            this.currentImageIndex = 0;
             this.updatePatientInfo();
+            
+            // Re-throw the error so the caller can handle it
+            throw error;
         }
     }
     
     async loadCurrentImage() {
         if (!this.currentImages.length) {
             console.log('No images available');
-            return;
+            return Promise.resolve();
         }
         
         const imageData = this.currentImages[this.currentImageIndex];
@@ -653,33 +673,39 @@ class DicomViewer {
             const data = await response.json();
             
             if (data.image_data) {
-                const img = new Image();
-                img.onload = () => {
-                    console.log('Image loaded successfully');
-                    this.currentImage = {
-                        image: img,
-                        metadata: data.metadata,
-                        id: imageData.id,
-                        rows: data.metadata.rows,
-                        columns: data.metadata.columns,
-                        pixel_spacing_x: data.metadata.pixel_spacing_x,
-                        pixel_spacing_y: data.metadata.pixel_spacing_y,
-                        pixel_spacing: `${data.metadata.pixel_spacing_x},${data.metadata.pixel_spacing_y}`,
-                        slice_thickness: data.metadata.slice_thickness
+                await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        console.log('Image loaded successfully');
+                        this.currentImage = {
+                            image: img,
+                            metadata: data.metadata,
+                            id: imageData.id,
+                            rows: data.metadata.rows,
+                            columns: data.metadata.columns,
+                            pixel_spacing_x: data.metadata.pixel_spacing_x,
+                            pixel_spacing_y: data.metadata.pixel_spacing_y,
+                            pixel_spacing: `${data.metadata.pixel_spacing_x},${data.metadata.pixel_spacing_y}`,
+                            slice_thickness: data.metadata.slice_thickness
+                        };
+                        // Ensure canvas is properly sized before drawing
+                        this.resizeCanvas();
+                        this.updateDisplay();
+                        this.loadMeasurements();
+                        this.loadAnnotations();
+                        // Update patient info to ensure it's displayed
+                        this.updatePatientInfo();
+                        resolve();
                     };
-                    // Ensure canvas is properly sized before drawing
-                    this.resizeCanvas();
-                    this.updateDisplay();
-                    this.loadMeasurements();
-                    this.loadAnnotations();
-                    this.updatePatientInfo();
-                };
-                img.onerror = (error) => {
-                    console.error('Failed to load image data:', error);
-                    console.error('Image source:', img.src);
-                    this.showError('Failed to load image. Please try refreshing or selecting another image.');
-                };
-                img.src = data.image_data;
+                    img.onerror = (error) => {
+                        console.error('Failed to load image data:', error);
+                        console.error('Image source:', img.src);
+                        const errorMsg = 'Failed to load image. Please try refreshing or selecting another image.';
+                        this.showError(errorMsg);
+                        reject(new Error(errorMsg));
+                    };
+                    img.src = data.image_data;
+                });
             } else {
                 throw new Error(data.error || 'No image data received');
             }
@@ -687,6 +713,8 @@ class DicomViewer {
         } catch (error) {
             console.error('Error loading image:', error);
             this.showError('Error loading image: ' + error.message);
+            // Re-throw the error so the caller can handle it
+            throw error;
         }
     }
     
@@ -725,18 +753,23 @@ class DicomViewer {
     }
     
     updatePatientInfo() {
-        if (!this.currentStudy) {
-            const patientInfo = document.getElementById('patient-info');
+        const patientInfo = document.getElementById('patient-info');
+        
+        if (!this.currentStudy || !patientInfo) {
             if (patientInfo) {
                 patientInfo.textContent = 'Patient: - | Study Date: - | Modality: -';
             }
             return;
         }
         
-        const patientInfo = document.getElementById('patient-info');
-        if (patientInfo) {
-            patientInfo.textContent = `Patient: ${this.currentStudy.patient_name} | Study Date: ${this.currentStudy.study_date} | Modality: ${this.currentStudy.modality}`;
-        }
+        // Format the patient information properly
+        const patientName = this.currentStudy.patient_name || 'Unknown';
+        const studyDate = this.currentStudy.study_date || 'Unknown';
+        const modality = this.currentStudy.modality || 'Unknown';
+        
+        patientInfo.textContent = `Patient: ${patientName} | Study Date: ${studyDate} | Modality: ${modality}`;
+        
+        console.log('Updated patient info:', patientInfo.textContent);
         
         // Update image info in right panel if elements exist
         const currentImageData = this.currentImages[this.currentImageIndex];
