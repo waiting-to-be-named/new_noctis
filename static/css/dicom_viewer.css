@@ -27,6 +27,8 @@ body {
     flex-direction: column;
     align-items: center;
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
+    position: relative;
+    z-index: 100;
 }
 
 .main-content {
@@ -91,6 +93,119 @@ body {
 
 .tool-btn span {
     font-size: 10px;
+}
+
+/* Dropdown Tools */
+.dropdown-tool {
+    position: relative;
+    width: 60px;
+}
+
+.dropdown-toggle {
+    position: relative;
+}
+
+.dropdown-arrow {
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    font-size: 8px;
+    opacity: 0.7;
+}
+
+.dropdown-menu {
+    position: absolute;
+    left: 70px;
+    top: 0;
+    background: #1a1a1a;
+    border: 2px solid #00ff00;
+    border-radius: 8px;
+    min-width: 250px;
+    display: none;
+    z-index: 1000;
+    box-shadow: 0 4px 20px rgba(0, 255, 0, 0.2);
+}
+
+.dropdown-tool:hover .dropdown-menu,
+.dropdown-menu:hover {
+    display: block;
+}
+
+.dropdown-menu h4 {
+    margin: 0;
+    padding: 15px 20px;
+    border-bottom: 1px solid #333;
+    color: #00ff00;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.dropdown-item {
+    padding: 12px 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.dropdown-item:hover {
+    background: rgba(0, 255, 0, 0.1);
+    color: #00ff00;
+    padding-left: 25px;
+}
+
+.dropdown-item i {
+    width: 20px;
+    text-align: center;
+    opacity: 0.8;
+}
+
+.dropdown-item:hover i {
+    opacity: 1;
+    color: #00ff00;
+}
+
+/* Progress Overlay */
+.reconstruction-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.progress-content {
+    background: #1a1a1a;
+    border: 2px solid #00ff00;
+    border-radius: 12px;
+    padding: 40px;
+    text-align: center;
+    box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
+}
+
+.progress-content i {
+    font-size: 48px;
+    color: #00ff00;
+    margin-bottom: 20px;
+}
+
+.progress-content p {
+    font-size: 18px;
+    color: #fff;
+    margin: 0;
 }
 
 /* Canvas */
@@ -211,6 +326,27 @@ body {
 
 .secondary-btn:hover {
     background: #555;
+}
+
+.logout-btn {
+    background: #dc3545;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.logout-btn:hover {
+    background: #c82333;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
 }
 
 /* Preset Buttons */

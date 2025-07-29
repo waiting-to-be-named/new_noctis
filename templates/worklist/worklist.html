@@ -28,6 +28,11 @@
                     </button>
                 </div>
                 {% endif %}
+                {% if user.is_authenticated %}
+                <button class="btn btn-logout" onclick="window.location.href='/accounts/logout/'">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </button>
+                {% endif %}
             </div>
         </div>
         

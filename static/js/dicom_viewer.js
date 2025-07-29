@@ -1048,18 +1048,21 @@ class DicomViewer {
     
     // Event Handlers
     handleToolClick(tool) {
-        // Remove active class from all tool buttons
-        document.querySelectorAll('.tool-btn').forEach(btn => {
-            btn.classList.remove('active');
-        });
-        
-        // Add active class to clicked button
-        const clickedBtn = document.querySelector(`[data-tool="${tool}"]`);
-        if (clickedBtn) {
-            clickedBtn.classList.add('active');
+        // Don't change active state for dropdown tools
+        if (tool !== 'ai' && tool !== '3d') {
+            // Remove active class from all non-dropdown tool buttons
+            document.querySelectorAll('.tool-btn:not(.dropdown-toggle)').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Add active class to clicked button
+            const clickedBtn = document.querySelector(`[data-tool="${tool}"]`);
+            if (clickedBtn && !clickedBtn.classList.contains('dropdown-toggle')) {
+                clickedBtn.classList.add('active');
+            }
+            
+            this.activeTool = tool;
         }
-        
-        this.activeTool = tool;
         
         // Handle specific tool actions
         switch (tool) {
@@ -1097,10 +1100,10 @@ class DicomViewer {
                 this.startVolumeCalculation();
                 break;
             case 'ai':
-                this.performAIAnalysis();
+                // Dropdown handled by onclick in HTML
                 break;
             case '3d':
-                this.toggle3DOptions();
+                // Dropdown handled by onclick in HTML
                 break;
         }
     }
@@ -1682,7 +1685,7 @@ class DicomViewer {
         this.updateOverlayLabels();
     }
 
-    performAIAnalysis() {
+    performAIAnalysis(analysisType = 'general') {
         if (!this.currentImage) {
             alert('Please load an image first');
             return;
@@ -1694,12 +1697,13 @@ class DicomViewer {
         const resultsDiv = document.getElementById('ai-results');
         resultsDiv.innerHTML = '<div class="loading">Performing AI analysis...</div>';
         
-                    fetch(`/viewer/api/images/${this.currentImage.id}/ai-analysis/`, {
+        fetch(`/viewer/api/images/${this.currentImage.id}/ai-analysis/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': this.getCSRFToken()
-            }
+            },
+            body: JSON.stringify({ analysis_type: analysisType })
         })
         .then(response => response.json())
         .then(data => {
@@ -1716,26 +1720,48 @@ class DicomViewer {
     
     displayAIResults(results) {
         const resultsDiv = document.getElementById('ai-results');
+        
+        // Generate findings HTML
+        let findingsHTML = '';
+        if (results.findings && results.findings.length > 0) {
+            findingsHTML = results.findings.map(f => `
+                <div class="ai-finding">
+                    <div class="finding-header">
+                        <strong>${f.type}</strong>
+                        <span class="confidence">${(f.confidence * 100).toFixed(1)}% confidence</span>
+                    </div>
+                    <div class="finding-details">
+                        ${f.description || `Location: (${f.location.x}, ${f.location.y}), Size: ${f.size}px`}
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            findingsHTML = '<p class="no-findings">No abnormal findings detected.</p>';
+        }
+        
         resultsDiv.innerHTML = `
             <div class="ai-summary">
                 <h4>Analysis Summary</h4>
                 <p>${results.summary}</p>
-                <p>Confidence: ${(results.confidence_score * 100).toFixed(1)}%</p>
+                <div class="confidence-bar">
+                    <div class="confidence-fill" style="width: ${results.confidence_score * 100}%"></div>
+                    <span class="confidence-text">Confidence: ${(results.confidence_score * 100).toFixed(1)}%</span>
+                </div>
             </div>
             <div class="ai-findings">
-                <h4>Findings</h4>
-                <ul>
-                    ${results.findings.map(f => `
-                        <li>
-                            <strong>${f.type}</strong> at (${f.location.x}, ${f.location.y})
-                            <br>Size: ${f.size}px, Confidence: ${(f.confidence * 100).toFixed(1)}%
-                        </li>
-                    `).join('')}
-                </ul>
+                <h4>Detailed Findings</h4>
+                ${findingsHTML}
             </div>
+            ${results.recommendations ? `
+                <div class="ai-recommendations">
+                    <h4>Recommendations</h4>
+                    <p>${results.recommendations}</p>
+                </div>
+            ` : ''}
             <div class="ai-actions">
                 <button onclick="viewer.copyAIResults()">Copy Results</button>
                 <button onclick="viewer.toggleAIHighlights()">Toggle Highlights</button>
+                <button onclick="viewer.saveAIReport()">Save Report</button>
             </div>
         `;
     }
@@ -1759,12 +1785,79 @@ class DicomViewer {
         this.redraw();
     }
     
+    saveAIReport() {
+        if (!this.aiAnalysisResults) return;
+        
+        const report = `AI Analysis Report
+        
+Study: ${this.currentStudy ? this.currentStudy.patient_name : 'Unknown'}
+Date: ${new Date().toLocaleString()}
+Analysis Type: ${this.aiAnalysisResults.analysis_type}
+
+Summary:
+${this.aiAnalysisResults.summary}
+
+Confidence: ${(this.aiAnalysisResults.confidence_score * 100).toFixed(1)}%
+
+Findings:
+${this.aiAnalysisResults.findings.map(f => 
+    `- ${f.type}: ${f.description || `Location (${f.location.x}, ${f.location.y})`} - Confidence: ${(f.confidence * 100).toFixed(1)}%`
+).join('\n')}
+
+Recommendations:
+${this.aiAnalysisResults.recommendations || 'None'}`;
+        
+        // Create and download text file
+        const blob = new Blob([report], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `AI_Report_${this.currentStudy ? this.currentStudy.patient_id : 'Unknown'}_${new Date().toISOString().split('T')[0]}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }
+    
     toggle3DOptions() {
         this.create3DModal();
     }
     
-    apply3DReconstruction() {
-        const reconstructionType = document.getElementById('3d-reconstruction-type').value;
+    show3DResult(data, type) {
+        // Create a result modal
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.display = 'block';
+        
+        const title = {
+            'mpr': 'Multi-Planar Reconstruction',
+            'volume': 'Volume Rendering',
+            'bone': '3D Bone Reconstruction',
+            'vessel': 'Vessel Analysis',
+            'surface': 'Surface Rendering'
+        }[type] || type;
+        
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>${title}</h3>
+                    <button class="modal-close" onclick="this.closest('.modal').remove()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="reconstruction-result">
+                        <p>3D reconstruction completed successfully!</p>
+                        <p>Type: ${type}</p>
+                        <p>Series: ${this.currentSeries ? this.currentSeries.description : 'Unknown'}</p>
+                        ${data.preview_image ? `<img src="${data.preview_image}" alt="3D Preview" style="max-width: 100%; margin-top: 20px;">` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+    }
+    
+    apply3DReconstruction(type = 'mpr') {
         const seriesId = this.currentSeries ? this.currentSeries.id : null;
         
         if (!seriesId) {
@@ -1772,31 +1865,34 @@ class DicomViewer {
             return;
         }
         
-        const modal = document.getElementById('3d-modal');
-        const progressDiv = modal.querySelector('.3d-progress');
-        const progressText = modal.querySelector('.3d-progress-text');
+        // Show a simple progress indicator
+        const progressOverlay = document.createElement('div');
+        progressOverlay.className = 'reconstruction-progress';
+        progressOverlay.innerHTML = `
+            <div class="progress-content">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Generating ${type.toUpperCase()} reconstruction...</p>
+            </div>
+        `;
+        document.body.appendChild(progressOverlay);
         
-        progressDiv.style.display = 'block';
-        progressText.textContent = 'Generating 3D reconstruction...';
+        // Use default parameters for quick reconstruction
+        const windowCenter = 40;
+        const windowWidth = 400;
+        const thresholdMin = -1000;
+        const thresholdMax = 1000;
         
-        // Get reconstruction parameters
-        const windowCenter = document.getElementById('3d-window-center').value;
-        const windowWidth = document.getElementById('3d-window-width').value;
-        const thresholdMin = document.getElementById('3d-threshold-min').value;
-        const thresholdMax = document.getElementById('3d-threshold-max').value;
-        
-        const url = `/viewer/api/series/${seriesId}/3d-reconstruction/?type=${reconstructionType}&window_center=${windowCenter}&window_width=${windowWidth}&threshold_min=${thresholdMin}&threshold_max=${thresholdMax}`;
+        const url = `/viewer/api/series/${seriesId}/3d-reconstruction/?type=${type}&window_center=${windowCenter}&window_width=${windowWidth}&threshold_min=${thresholdMin}&threshold_max=${thresholdMax}`;
         
         fetch(url)
             .then(response => response.json())
             .then(data => {
-                progressText.textContent = '3D reconstruction complete!';
-                setTimeout(() => {
-                    this.display3DReconstruction(data, modal);
-                }, 1000);
+                progressOverlay.remove();
+                this.show3DResult(data, type);
             })
             .catch(error => {
-                progressText.textContent = '3D reconstruction failed: ' + error.message;
+                progressOverlay.remove();
+                alert('3D reconstruction failed: ' + error.message);
                 console.error('3D reconstruction error:', error);
             });
     }

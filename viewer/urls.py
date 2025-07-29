@@ -12,8 +12,10 @@ urlpatterns = [
     path('admin/facilities/', views.FacilityListView.as_view(), name='facility_list'),
     path('admin/facilities/new/', views.FacilityCreateView.as_view(), name='facility_create'),
     path('admin/facilities/<int:pk>/edit/', views.FacilityUpdateView.as_view(), name='facility_edit'),
+    path('admin/facilities/<int:pk>/delete/', views.delete_facility, name='facility_delete'),
     path('admin/radiologists/', views.RadiologistListView.as_view(), name='radiologist_list'),
     path('admin/radiologists/new/', views.create_radiologist, name='radiologist_create'),
+    path('admin/radiologists/<int:pk>/delete/', views.delete_radiologist, name='radiologist_delete'),
     
     # File upload
     path('api/upload/', views.upload_dicom_files, name='upload_dicom'),
