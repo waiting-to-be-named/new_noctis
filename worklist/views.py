@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.db.models import Q
 from viewer.models import (
     DicomStudy, WorklistEntry, Facility, Report, 
-    Notification, DicomSeries, DicomImage
+    Notification, DicomSeries, DicomImage, ChatMessage
 )
 import json
 from django.core.paginator import Paginator
@@ -382,3 +382,195 @@ def mark_notification_read(request, notification_id):
     notification.is_read = True
     notification.save()
     return JsonResponse({'success': True})
+
+
+# New API endpoints for enhanced functionality
+
+@login_required
+def api_notifications(request):
+    """API endpoint for notifications with filtering"""
+    filter_type = request.GET.get('filter', 'all')
+    
+    notifications = Notification.objects.filter(recipient=request.user)
+    
+    if filter_type != 'all':
+        notifications = notifications.filter(notification_type=filter_type)
+    
+    notifications = notifications.order_by('-created_at')[:50]
+    
+    data = [{
+        'id': n.id,
+        'notification_type': n.notification_type,
+        'title': n.title,
+        'message': n.message,
+        'is_read': n.is_read,
+        'created_at': n.created_at.isoformat(),
+        'related_study_id': n.related_study.id if n.related_study else None
+    } for n in notifications]
+    
+    return JsonResponse({'notifications': data})
+
+
+@login_required
+def api_notifications_count(request):
+    """Get count of unread notifications and messages"""
+    unread_notifications = Notification.objects.filter(
+        recipient=request.user,
+        is_read=False
+    ).count()
+    
+    unread_messages = ChatMessage.objects.filter(
+        recipient=request.user,
+        is_read=False
+    ).count()
+    
+    return JsonResponse({
+        'unread_notifications': unread_notifications,
+        'unread_messages': unread_messages
+    })
+
+
+@login_required
+@require_http_methods(['POST'])
+def api_notifications_mark_read(request, notification_id):
+    """Mark specific notification as read"""
+    try:
+        notification = Notification.objects.get(id=notification_id, recipient=request.user)
+        notification.is_read = True
+        notification.save()
+        return JsonResponse({'success': True})
+    except Notification.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Notification not found'})
+
+
+@login_required
+@require_http_methods(['POST'])
+def api_notifications_mark_all_read(request):
+    """Mark all notifications as read"""
+    Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
+    return JsonResponse({'success': True})
+
+
+@login_required
+@require_http_methods(['POST'])
+def api_notifications_clear_old(request):
+    """Clear old read notifications"""
+    from datetime import timedelta
+    week_ago = timezone.now() - timedelta(days=7)
+    
+    deleted_count = Notification.objects.filter(
+        recipient=request.user,
+        is_read=True,
+        created_at__lt=week_ago
+    ).delete()[0]
+    
+    return JsonResponse({'success': True, 'deleted_count': deleted_count})
+
+
+@login_required
+def api_chat_messages(request):
+    """API endpoint for chat messages with filtering"""
+    filter_type = request.GET.get('filter', 'all')
+    
+    messages = ChatMessage.objects.filter(
+        Q(sender=request.user) | Q(recipient=request.user)
+    )
+    
+    if filter_type != 'all':
+        messages = messages.filter(message_type=filter_type)
+    
+    messages = messages.order_by('-created_at')[:50]
+    
+    data = [{
+        'id': m.id,
+        'sender_name': m.sender.get_full_name() or m.sender.username,
+        'recipient_name': m.recipient.get_full_name() or m.recipient.username if m.recipient else 'All',
+        'message_type': m.message_type,
+        'message': m.message,
+        'is_read': m.is_read,
+        'created_at': m.created_at.isoformat(),
+        'facility_name': m.facility.name if m.facility else None
+    } for m in messages]
+    
+    return JsonResponse({'messages': data})
+
+
+@login_required
+@require_http_methods(['POST'])
+def api_chat_send(request):
+    """Send a new chat message"""
+    try:
+        data = json.loads(request.body)
+        message_text = data.get('message', '').strip()
+        facility_id = data.get('facility_id')
+        
+        if not message_text:
+            return JsonResponse({'success': False, 'error': 'Message cannot be empty'})
+        
+        facility = None
+        recipient = None
+        
+        if facility_id:
+            try:
+                facility = Facility.objects.get(id=facility_id)
+                # Find facility staff to send message to
+                # For now, we'll send to all facility users
+            except Facility.DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Facility not found'})
+        
+        # Create chat message
+        chat_message = ChatMessage.objects.create(
+            sender=request.user,
+            recipient=recipient,
+            facility=facility,
+            message_type='user_chat',
+            message=message_text
+        )
+        
+        # Create notification for recipient
+        if recipient:
+            Notification.objects.create(
+                recipient=recipient,
+                notification_type='chat',
+                title='New Chat Message',
+                message=f'{request.user.get_full_name() or request.user.username}: {message_text[:50]}...'
+            )
+        
+        return JsonResponse({'success': True})
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+@login_required
+@require_http_methods(['POST'])
+def api_chat_clear(request):
+    """Clear chat history"""
+    deleted_count = ChatMessage.objects.filter(
+        Q(sender=request.user) | Q(recipient=request.user)
+    ).delete()[0]
+    
+    return JsonResponse({'success': True, 'deleted_count': deleted_count})
+
+
+def create_notification(user, notification_type, title, message, related_study=None):
+    """Helper function to create notifications"""
+    Notification.objects.create(
+        recipient=user,
+        notification_type=notification_type,
+        title=title,
+        message=message,
+        related_study=related_study
+    )
+
+
+def create_system_upload_message(study, user):
+    """Create a system upload message when a study is uploaded"""
+    ChatMessage.objects.create(
+        sender=user,
+        message_type='system_upload',
+        message=f'New study uploaded: {study.patient_name} - {study.study_description or study.modality}',
+        related_study=study
+    )

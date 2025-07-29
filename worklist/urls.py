@@ -23,4 +23,16 @@ urlpatterns = [
     # Notifications
     path('notifications/', views.get_notifications, name='get_notifications'),
     path('notifications/<int:notification_id>/read/', views.mark_notification_read, name='mark_notification_read'),
+    
+    # API endpoints
+    path('api/notifications/', views.api_notifications, name='api_notifications'),
+    path('api/notifications/count/', views.api_notifications_count, name='api_notifications_count'),
+    path('api/notifications/<int:notification_id>/read/', views.api_notifications_mark_read, name='api_notifications_mark_read'),
+    path('api/notifications/mark-all-read/', views.api_notifications_mark_all_read, name='api_notifications_mark_all_read'),
+    path('api/notifications/clear-old/', views.api_notifications_clear_old, name='api_notifications_clear_old'),
+    
+    # Chat API endpoints
+    path('api/chat/', views.api_chat_messages, name='api_chat_messages'),
+    path('api/chat/send/', views.api_chat_send, name='api_chat_send'),
+    path('api/chat/clear/', views.api_chat_clear, name='api_chat_clear'),
 ]

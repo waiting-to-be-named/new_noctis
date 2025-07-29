@@ -914,3 +914,68 @@ body {
     background: #aa0000;
     color: #fff;
 }
+
+/* Clinical Information Section */
+.clinical-info-section {
+    background: #2a2a2a;
+    border: 1px solid #555;
+    border-radius: 5px;
+    margin-top: 10px;
+    overflow: hidden;
+}
+
+.clinical-info-header {
+    background: #333;
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+}
+
+.clinical-info-header h4 {
+    margin: 0;
+    font-size: 14px;
+    color: #00ff00;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-toggle {
+    background: none;
+    border: none;
+    color: #ccc;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px;
+    border-radius: 3px;
+}
+
+.btn-toggle:hover {
+    color: #fff;
+    background: #555;
+}
+
+.clinical-info-content {
+    padding: 12px;
+    border-top: 1px solid #555;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.clinical-info-content p {
+    margin: 0;
+    color: #ccc;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.clinical-info-content.collapsed {
+    display: none;
+}
+
+.clinical-info.expanded {
+    background: #1a3a1a;
+    border-color: #00ff00;
+}

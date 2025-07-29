@@ -61,6 +61,27 @@
             color: #333;
         }
         
+        .clinical-info {
+            background: #f0f8ff;
+            border-left: 4px solid #4CAF50;
+            padding: 15px;
+            margin-top: 10px;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .clinical-info .info-label {
+            color: #2e7d32;
+            font-weight: bold;
+            font-size: 1em;
+        }
+        
+        .clinical-info .info-value {
+            color: #1b5e20;
+            font-style: italic;
+            white-space: pre-wrap;
+            margin-top: 5px;
+        }
+        
         .form-group {
             margin-bottom: 25px;
         }
@@ -210,6 +231,20 @@
                     <span class="info-label">Study Description</span>
                     <span class="info-value">{{ study.study_description|default:"N/A" }}</span>
                 </div>
+                <div class="info-item">
+                    <span class="info-label">Referring Physician</span>
+                    <span class="info-value">{{ study.referring_physician|default:"N/A" }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Accession Number</span>
+                    <span class="info-value">{{ study.accession_number|default:"N/A" }}</span>
+                </div>
+                {% if study.clinical_info %}
+                <div class="info-item clinical-info">
+                    <span class="info-label">Clinical Information</span>
+                    <span class="info-value">{{ study.clinical_info }}</span>
+                </div>
+                {% endif %}
                 {% if report %}
                 <div class="info-item">
                     <span class="info-label">Report Status</span>

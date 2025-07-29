@@ -40,4 +40,7 @@ urlpatterns = [
     
     # 3D Reconstruction
     path('api/series/<int:series_id>/3d-reconstruction/', views.get_3d_reconstruction, name='3d_reconstruction'),
+    
+    # Clinical Information
+    path('api/study/<int:study_id>/clinical-info/', views.api_study_clinical_info, name='api_study_clinical_info'),
 ]
