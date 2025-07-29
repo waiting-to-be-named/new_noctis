@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM Viewer Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-info { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .error { color: red; }
+        .success { color: green; }
+        #dicom-canvas { border: 1px solid #ccc; background: #000; }
+    </style>
+</head>
+<body>
+    <h1>DICOM Viewer Debug Test</h1>
+    
+    <div class="debug-info">
+        <h3>Debug Information</h3>
+        <div id="debug-output"></div>
+    </div>
+    
+    <div>
+        <h3>Canvas</h3>
+        <canvas id="dicom-canvas" width="512" height="512"></canvas>
+    </div>
+    
+    <div>
+        <h3>Test Controls</h3>
+        <button onclick="testAPI()">Test API</button>
+        <button onclick="testImageLoad()">Test Image Load</button>
+        <button onclick="testViewerInit()">Test Viewer Init</button>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const output = document.getElementById('debug-output');
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            output.appendChild(div);
+            console.log(message);
+        }
+
+        async function testAPI() {
+            log('Testing API endpoints...');
+            
+            try {
+                // Test studies endpoint
+                const studiesResponse = await fetch('/viewer/api/studies/');
+                if (studiesResponse.ok) {
+                    const studiesData = await studiesResponse.json();
+                    log(`✅ Studies API working - found ${studiesData.length} studies`, 'success');
+                } else {
+                    log(`❌ Studies API failed: ${studiesResponse.status}`, 'error');
+                }
+
+                // Test study images endpoint
+                const imagesResponse = await fetch('/viewer/api/studies/5/images/');
+                if (imagesResponse.ok) {
+                    const imagesData = await imagesResponse.json();
+                    log(`✅ Study images API working - found ${imagesData.images.length} images`, 'success');
+                } else {
+                    log(`❌ Study images API failed: ${imagesResponse.status}`, 'error');
+                }
+
+                // Test image data endpoint
+                const imageDataResponse = await fetch('/viewer/api/images/4/data/?window_width=400&window_level=40');
+                if (imageDataResponse.ok) {
+                    const imageData = await imageDataResponse.json();
+                    if (imageData.image_data) {
+                        log(`✅ Image data API working - received ${imageData.image_data.length} chars`, 'success');
+                    } else {
+                        log(`❌ Image data API failed - no image data`, 'error');
+                    }
+                } else {
+                    log(`❌ Image data API failed: ${imageDataResponse.status}`, 'error');
+                }
+
+            } catch (error) {
+                log(`❌ API test error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testImageLoad() {
+            log('Testing image loading...');
+            
+            try {
+                const response = await fetch('/viewer/api/images/4/data/?window_width=400&window_level=40');
+                const data = await response.json();
+                
+                if (data.image_data) {
+                    const img = new Image();
+                    img.onload = () => {
+                        log(`✅ Image loaded successfully - ${img.width}x${img.height}`, 'success');
+                        
+                        // Draw to canvas
+                        const canvas = document.getElementById('dicom-canvas');
+                        const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        log('✅ Image drawn to canvas', 'success');
+                    };
+                    img.onerror = (error) => {
+                        log(`❌ Image load failed: ${error}`, 'error');
+                    };
+                    img.src = data.image_data;
+                } else {
+                    log('❌ No image data received', 'error');
+                }
+            } catch (error) {
+                log(`❌ Image load test error: ${error.message}`, 'error');
+            }
+        }
+
+        function testViewerInit() {
+            log('Testing viewer initialization...');
+            
+            try {
+                // Check if viewer script is loaded
+                if (typeof DicomViewer === 'undefined') {
+                    log('❌ DicomViewer class not found - script may not be loaded', 'error');
+                    return;
+                }
+                
+                log('✅ DicomViewer class found', 'success');
+                
+                // Try to create viewer instance
+                const viewer = new DicomViewer(5);
+                log('✅ Viewer instance created', 'success');
+                
+                // Check if canvas is available
+                const canvas = document.getElementById('dicom-canvas');
+                if (canvas) {
+                    log('✅ Canvas element found', 'success');
+                } else {
+                    log('❌ Canvas element not found', 'error');
+                }
+                
+            } catch (error) {
+                log(`❌ Viewer init error: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-run tests on page load
+        window.addEventListener('load', () => {
+            log('Page loaded, running tests...');
+            setTimeout(() => {
+                testAPI();
+                setTimeout(() => {
+                    testImageLoad();
+                    setTimeout(() => {
+                        testViewerInit();
+                    }, 1000);
+                }, 1000);
+            }, 500);
+        });
+    </script>
+    
+    <!-- Load the viewer script -->
+    <script src="/static/js/dicom_viewer.js"></script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM Viewer Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a1a; color: #fff; }
+        .test-container { max-width: 1200px; margin: 0 auto; }
+        .test-info { background: #333; padding: 15px; margin: 15px 0; border-radius: 5px; }
+        .success { color: #00ff00; }
+        .error { color: #ff0000; }
+        .warning { color: #ffff00; }
+        .viewport { width: 512px; height: 512px; background: #000; border: 2px solid #333; }
+        #dicom-canvas { width: 100%; height: 100%; }
+        .test-buttons { margin: 15px 0; }
+        .test-buttons button { margin: 5px; padding: 10px 15px; background: #0066cc; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .test-buttons button:hover { background: #0099ff; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>DICOM Viewer Test</h1>
+        
+        <div class="test-info">
+            <h3>Test Information</h3>
+            <div id="test-output">Initializing...</div>
+        </div>
+        
+        <div class="test-buttons">
+            <button onclick="testViewer()">Test Viewer</button>
+            <button onclick="testAPI()">Test API</button>
+            <button onclick="testImage()">Test Image Loading</button>
+            <button onclick="clearCanvas()">Clear Canvas</button>
+        </div>
+        
+        <div class="viewport">
+            <canvas id="dicom-canvas" class="dicom-canvas"></canvas>
+        </div>
+    </div>
+    
+    <script>
+        // Test output
+        const testOutput = document.getElementById('test-output');
+        
+        function addTestMessage(message, type = 'success') {
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = new Date().toLocaleTimeString() + ': ' + message;
+            testOutput.appendChild(div);
+            testOutput.scrollTop = testOutput.scrollHeight;
+        }
+        
+        // Set initial study ID
+        window.initialStudyId = 5;
+        
+        addTestMessage('Page loaded, initialStudyId: ' + window.initialStudyId);
+        
+        // Test functions
+        function testViewer() {
+            addTestMessage('Testing viewer object...');
+            if (window.viewer) {
+                addTestMessage('✅ Viewer exists');
+                addTestMessage('Current study: ' + (window.viewer.currentStudy ? 'Yes' : 'No'));
+                addTestMessage('Current images: ' + (window.viewer.currentImages ? window.viewer.currentImages.length : 0));
+                addTestMessage('Current image: ' + (window.viewer.currentImage ? 'Yes' : 'No'));
+            } else {
+                addTestMessage('❌ Viewer object not found', 'error');
+            }
+        }
+        
+        async function testAPI() {
+            addTestMessage('Testing API...');
+            try {
+                const response = await fetch('/viewer/api/studies/5/images/');
+                const data = await response.json();
+                addTestMessage('✅ API response received');
+                addTestMessage('Images found: ' + (data.images ? data.images.length : 0));
+            } catch (error) {
+                addTestMessage('❌ API test failed: ' + error.message, 'error');
+            }
+        }
+        
+        async function testImage() {
+            addTestMessage('Testing image loading...');
+            try {
+                const response = await fetch('/viewer/api/images/1/data/?window_width=400&window_level=40');
+                const data = await response.json();
+                if (data.image_data) {
+                    addTestMessage('✅ Image data received, length: ' + data.image_data.length);
+                    
+                    const img = new Image();
+                    img.onload = () => {
+                        addTestMessage('✅ Image loaded successfully, dimensions: ' + img.width + 'x' + img.height);
+                        
+                        // Draw the image on canvas
+                        const canvas = document.getElementById('dicom-canvas');
+                        const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        addTestMessage('✅ Image drawn on canvas');
+                    };
+                    img.onerror = (e) => {
+                        addTestMessage('❌ Image failed to load: ' + e, 'error');
+                    };
+                    img.src = data.image_data;
+                } else {
+                    addTestMessage('❌ No image data in response', 'error');
+                }
+            } catch (error) {
+                addTestMessage('❌ Image loading test failed: ' + error.message, 'error');
+            }
+        }
+        
+        function clearCanvas() {
+            const canvas = document.getElementById('dicom-canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            addTestMessage('Canvas cleared');
+        }
+    </script>
+    
+    <script src="/static/js/dicom_viewer.js"></script>
+    
+    <script>
+        // Post-load test
+        setTimeout(() => {
+            addTestMessage('=== Post-Load Test ===');
+            if (window.viewer) {
+                addTestMessage('✅ Viewer initialized');
+                if (window.viewer.currentStudy) {
+                    addTestMessage('✅ Study loaded');
+                } else {
+                    addTestMessage('⚠️ No study loaded yet', 'warning');
+                }
+            } else {
+                addTestMessage('❌ Viewer not initialized', 'error');
+            }
+        }, 3000);
+    </script>
+</body>
+</html>
