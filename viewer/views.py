@@ -25,6 +25,8 @@ from .models import (
 )
 from django.contrib.auth.models import Group
 from .serializers import DicomStudySerializer, DicomImageSerializer
+from .forms import FacilityForm
+import re
 
 
 # Ensure required directories exist
@@ -143,17 +145,47 @@ class FacilityListView(AdminRequiredMixin, ListView):
     paginate_by = 20
 
 
+def generate_ae_title(facility_name):
+    """Generate a unique AE Title based on facility name"""
+    # Remove special characters and spaces, convert to uppercase
+    base_ae_title = re.sub(r'[^A-Za-z0-9]', '', facility_name).upper()
+    
+    # Truncate to 12 characters to leave room for suffix if needed
+    base_ae_title = base_ae_title[:12]
+    
+    # If empty after cleaning, use a default
+    if not base_ae_title:
+        base_ae_title = "FACILITY"
+    
+    # Check for uniqueness and add suffix if needed
+    ae_title = base_ae_title
+    counter = 1
+    while Facility.objects.filter(ae_title=ae_title).exists():
+        suffix = str(counter)
+        # Ensure total length doesn't exceed 16 characters
+        ae_title = base_ae_title[:16-len(suffix)] + suffix
+        counter += 1
+    
+    return ae_title
+
+
 class FacilityCreateView(AdminRequiredMixin, CreateView):
     """Admin view to create new facility"""
     model = Facility
+    form_class = FacilityForm
     template_name = 'admin/facility_form.html'
-    fields = ['name', 'address', 'phone', 'email', 'letterhead_logo']
     success_url = reverse_lazy('viewer:facility_list')
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['is_create'] = True
         return context
+    
+    def get_initial(self):
+        """Set initial values for form fields"""
+        initial = super().get_initial()
+        # We'll generate AE Title when form is submitted with facility name
+        return initial
     
     def post(self, request, *args, **kwargs):
         # Handle custom form submission with username/password
@@ -176,9 +208,14 @@ class FacilityCreateView(AdminRequiredMixin, CreateView):
                 # Save facility with user
                 facility = form.save(commit=False)
                 facility.user = user
+                
+                # Generate AE Title if not provided
+                if not facility.ae_title:
+                    facility.ae_title = generate_ae_title(facility.name)
+                
                 facility.save()
                 
-                messages.success(request, f'Facility "{facility.name}" created successfully with login credentials.')
+                messages.success(request, f'Facility "{facility.name}" created successfully with login credentials. AE Title: {facility.ae_title}')
                 return redirect(self.success_url)
             else:
                 messages.error(request, 'Username and password are required for facility creation.')
@@ -190,8 +227,8 @@ class FacilityCreateView(AdminRequiredMixin, CreateView):
 class FacilityUpdateView(AdminRequiredMixin, UpdateView):
     """Admin view to update facility"""
     model = Facility
+    form_class = FacilityForm
     template_name = 'admin/facility_form.html'
-    fields = ['name', 'address', 'phone', 'email', 'letterhead_logo']
     success_url = reverse_lazy('viewer:facility_list')
     
     def get_context_data(self, **kwargs):
