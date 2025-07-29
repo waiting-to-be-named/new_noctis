@@ -1,0 +1,20 @@
+[Unit]
+Description=Noctis DICOM SCP Server
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/workspace
+Environment="DJANGO_SETTINGS_MODULE=noctisview.settings"
+ExecStart=/usr/bin/python3 /workspace/manage.py run_dicom_server
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=append:/workspace/logs/dicom_server.log
+StandardError=append:/workspace/logs/dicom_server_error.log
+
+[Install]
+WantedBy=multi-user.target
