@@ -703,7 +703,9 @@ class DicomViewer {
                         pixel_spacing_x: data.metadata.pixel_spacing_x,
                         pixel_spacing_y: data.metadata.pixel_spacing_y,
                         pixel_spacing: `${data.metadata.pixel_spacing_x},${data.metadata.pixel_spacing_y}`,
-                        slice_thickness: data.metadata.slice_thickness
+                        slice_thickness: data.metadata.slice_thickness,
+                        width: img.width,
+                        height: img.height
                     };
                     // Ensure canvas is properly sized before drawing
                     this.resizeCanvas();
@@ -2633,6 +2635,9 @@ Pixel Count: ${data.pixel_count}`;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
         if (this.currentImage) {
+            // Determine the actual image element (handles both wrapped object and direct Image)
+            const imgElement = this.currentImage.image || this.currentImage;
+            
             // Save context state
             this.ctx.save();
             
@@ -2643,11 +2648,11 @@ Pixel Count: ${data.pixel_count}`;
             this.ctx.translate(this.panX, this.panY);
             
             // Calculate centered position
-            const x = (this.canvas.width - this.currentImage.width) / 2;
-            const y = (this.canvas.height - this.currentImage.height) / 2;
+            const x = (this.canvas.width - imgElement.width) / 2;
+            const y = (this.canvas.height - imgElement.height) / 2;
             
             // Draw the image
-            this.ctx.drawImage(this.currentImage, x, y);
+            this.ctx.drawImage(imgElement, x, y);
             
             // Restore context for UI elements
             this.ctx.restore();
