@@ -235,5 +235,18 @@
     <input type="file" id="hidden-file-input" multiple accept=".dcm,.dicom" style="display: none;">
 
     <script src="{% static 'js/dicom_viewer.js' %}"></script>
+    
+    {% if study_id %}
+    <script>
+        // Auto-load study if study_id is provided
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(() => {
+                if (window.dicomViewer) {
+                    window.dicomViewer.loadStudy({{ study_id }});
+                }
+            }, 500);
+        });
+    </script>
+    {% endif %}
 </body>
 </html>

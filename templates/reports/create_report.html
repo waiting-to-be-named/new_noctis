@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Report - Noctis</title>
+    {% load static %}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        
+        .report-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            color: #fff;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: white;
+        }
+        
+        .btn-primary {
+            background: #007bff;
+        }
+        
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        .btn-success {
+            background: #28a745;
+        }
+        
+        .btn-success:hover {
+            background: #218838;
+        }
+        
+        .report-content {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+        }
+        
+        .report-form {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        
+        .patient-info {
+            background: #333;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .patient-info h3 {
+            color: #fff;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .info-label {
+            color: #888;
+        }
+        
+        .info-value {
+            color: #fff;
+            font-weight: 500;
+        }
+        
+        .form-section {
+            margin-bottom: 25px;
+        }
+        
+        .form-section h3 {
+            color: #fff;
+            font-size: 18px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .form-section textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 12px;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 14px;
+            font-family: inherit;
+            resize: vertical;
+        }
+        
+        .form-section textarea:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+        
+        .sidebar {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            height: fit-content;
+        }
+        
+        .sidebar h3 {
+            color: #fff;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        
+        .template-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .template-btn {
+            padding: 8px 12px;
+            background: #444;
+            border: none;
+            border-radius: 4px;
+            color: #e0e0e0;
+            cursor: pointer;
+            text-align: left;
+            font-size: 13px;
+            transition: background 0.3s;
+        }
+        
+        .template-btn:hover {
+            background: #555;
+        }
+        
+        .macro-section {
+            margin-top: 20px;
+        }
+        
+        .macro-btn {
+            padding: 6px 10px;
+            background: #007bff;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            font-size: 12px;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        
+        .actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .status-draft {
+            background: #ffc107;
+            color: #000;
+        }
+        
+        .status-finalized {
+            background: #28a745;
+            color: white;
+        }
+        
+        .image-preview {
+            background: #333;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .image-preview img {
+            max-width: 100%;
+            border-radius: 4px;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <div class="header">
+            <h1><i class="fas fa-file-medical-alt"></i> Create Radiology Report</h1>
+            <div class="header-actions">
+                <a href="/worklist/" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Worklist
+                </a>
+                <button class="btn btn-primary" onclick="viewImages()">
+                    <i class="fas fa-images"></i> View Images
+                </button>
+            </div>
+        </div>
+        
+        <div class="report-content">
+            <div class="report-form">
+                <div class="patient-info">
+                    <h3>Patient Information</h3>
+                    <div class="info-row">
+                        <span class="info-label">Patient Name:</span>
+                        <span class="info-value" id="patient-name">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Patient ID:</span>
+                        <span class="info-value" id="patient-id">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Study Date:</span>
+                        <span class="info-value" id="study-date">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Modality:</span>
+                        <span class="info-value" id="modality">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Study Description:</span>
+                        <span class="info-value" id="study-description">-</span>
+                    </div>
+                </div>
+                
+                <form id="report-form">
+                    <div class="form-section">
+                        <h3><i class="fas fa-notes-medical"></i> Clinical Information</h3>
+                        <textarea id="clinical-info" readonly placeholder="No clinical information available"></textarea>
+                    </div>
+                    
+                    <div class="form-section">
+                        <h3><i class="fas fa-search"></i> Findings</h3>
+                        <textarea id="findings" placeholder="Enter detailed findings here..."></textarea>
+                    </div>
+                    
+                    <div class="form-section">
+                        <h3><i class="fas fa-lightbulb"></i> Impression</h3>
+                        <textarea id="impression" placeholder="Enter diagnostic impression here..."></textarea>
+                    </div>
+                    
+                    <div class="form-section">
+                        <h3><i class="fas fa-clipboard-list"></i> Recommendations</h3>
+                        <textarea id="recommendations" placeholder="Enter follow-up recommendations here..."></textarea>
+                    </div>
+                </form>
+                
+                <div class="actions">
+                    <div class="status-indicator">
+                        <span>Status:</span>
+                        <span class="status-badge status-draft" id="status-badge">Draft</span>
+                    </div>
+                    <div>
+                        <button class="btn btn-secondary" onclick="saveDraft()">
+                            <i class="fas fa-save"></i> Save Draft
+                        </button>
+                        <button class="btn btn-success" onclick="finalizeReport()">
+                            <i class="fas fa-check-circle"></i> Finalize Report
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sidebar">
+                <h3>Report Templates</h3>
+                <div class="template-list">
+                    <button class="template-btn" onclick="applyTemplate('normal')">Normal Study</button>
+                    <button class="template-btn" onclick="applyTemplate('chest-ct')">Chest CT</button>
+                    <button class="template-btn" onclick="applyTemplate('abdominal-ct')">Abdominal CT</button>
+                    <button class="template-btn" onclick="applyTemplate('brain-mri')">Brain MRI</button>
+                    <button class="template-btn" onclick="applyTemplate('spine-mri')">Spine MRI</button>
+                </div>
+                
+                <div class="macro-section">
+                    <h3>Quick Macros</h3>
+                    <button class="macro-btn" onclick="insertMacro('normal')">Normal</button>
+                    <button class="macro-btn" onclick="insertMacro('unremarkable')">Unremarkable</button>
+                    <button class="macro-btn" onclick="insertMacro('no-acute')">No acute findings</button>
+                    <button class="macro-btn" onclick="insertMacro('follow-up')">Follow-up recommended</button>
+                </div>
+                
+                <div class="image-preview" id="image-preview" style="display: none;">
+                    <h3>Key Image</h3>
+                    <img id="key-image" src="" alt="Key Image">
+                </div>
+            </div>
+        </div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Processing...</p>
+        </div>
+    </div>
+    
+    <script>
+        const studyId = {{ study_id }};
+        let reportData = {};
+        
+        // Load study information
+        async function loadStudyInfo() {
+            try {
+                const response = await fetch(`/viewer/api/studies/${studyId}/info/`);
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('patient-name').textContent = data.patient_name || '-';
+                    document.getElementById('patient-id').textContent = data.patient_id || '-';
+                    document.getElementById('study-date').textContent = data.study_date || '-';
+                    document.getElementById('modality').textContent = data.modality || '-';
+                    document.getElementById('study-description').textContent = data.study_description || '-';
+                    
+                    if (data.clinical_info) {
+                        document.getElementById('clinical-info').value = data.clinical_info;
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading study info:', error);
+            }
+        }
+        
+        // Load existing report if any
+        async function loadExistingReport() {
+            try {
+                const response = await fetch(`/worklist/study/${studyId}/report/`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.findings !== undefined) {
+                        document.getElementById('findings').value = data.findings || '';
+                        document.getElementById('impression').value = data.impression || '';
+                        document.getElementById('recommendations').value = data.recommendations || '';
+                        
+                        if (data.status === 'finalized') {
+                            document.getElementById('status-badge').textContent = 'Finalized';
+                            document.getElementById('status-badge').className = 'status-badge status-finalized';
+                        }
+                        
+                        reportData = data;
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading existing report:', error);
+            }
+        }
+        
+        // Save draft
+        async function saveDraft() {
+            showLoading();
+            const data = {
+                findings: document.getElementById('findings').value,
+                impression: document.getElementById('impression').value,
+                recommendations: document.getElementById('recommendations').value,
+                finalize: false
+            };
+            
+            try {
+                const response = await fetch(`/worklist/study/${studyId}/report/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    hideLoading();
+                    alert('Draft saved successfully!');
+                } else {
+                    hideLoading();
+                    alert('Error saving draft');
+                }
+            } catch (error) {
+                hideLoading();
+                console.error('Error saving draft:', error);
+                alert('Error saving draft');
+            }
+        }
+        
+        // Finalize report
+        async function finalizeReport() {
+            if (!confirm('Are you sure you want to finalize this report? This action cannot be undone.')) {
+                return;
+            }
+            
+            showLoading();
+            const data = {
+                findings: document.getElementById('findings').value,
+                impression: document.getElementById('impression').value,
+                recommendations: document.getElementById('recommendations').value,
+                finalize: true
+            };
+            
+            try {
+                const response = await fetch(`/worklist/study/${studyId}/report/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    hideLoading();
+                    document.getElementById('status-badge').textContent = 'Finalized';
+                    document.getElementById('status-badge').className = 'status-badge status-finalized';
+                    alert('Report finalized successfully!');
+                    
+                    // Redirect back to worklist after a short delay
+                    setTimeout(() => {
+                        window.location.href = '/worklist/';
+                    }, 1500);
+                } else {
+                    hideLoading();
+                    alert('Error finalizing report');
+                }
+            } catch (error) {
+                hideLoading();
+                console.error('Error finalizing report:', error);
+                alert('Error finalizing report');
+            }
+        }
+        
+        // View images
+        function viewImages() {
+            window.open(`/viewer/study/${studyId}/`, '_blank');
+        }
+        
+        // Apply template
+        function applyTemplate(templateType) {
+            const templates = {
+                'normal': {
+                    findings: 'The examination is within normal limits. No acute abnormalities are identified.',
+                    impression: 'Normal study.',
+                    recommendations: 'No follow-up required.'
+                },
+                'chest-ct': {
+                    findings: 'Lungs: Clear bilaterally without consolidation, mass, or pleural effusion.\nMediastinum: Normal contours without lymphadenopathy.\nHeart: Normal size and configuration.\nBones: No acute osseous abnormality.',
+                    impression: '',
+                    recommendations: ''
+                },
+                'abdominal-ct': {
+                    findings: 'Liver: Normal size and attenuation without focal lesions.\nGallbladder: Normal.\nPancreas: Normal.\nSpleen: Normal size.\nKidneys: Normal size and enhancement bilaterally.\nBowel: Normal caliber without obstruction.',
+                    impression: '',
+                    recommendations: ''
+                },
+                'brain-mri': {
+                    findings: 'Brain parenchyma: Normal gray-white matter differentiation. No acute infarct, hemorrhage, or mass effect.\nVentricles: Normal size and configuration.\nExtra-axial spaces: No extra-axial collection.',
+                    impression: '',
+                    recommendations: ''
+                },
+                'spine-mri': {
+                    findings: 'Vertebral bodies: Normal height and alignment. Normal marrow signal.\nIntervertebral discs: Preserved disc height and hydration.\nSpinal canal: Patent without stenosis.\nNeural foramina: Patent bilaterally.',
+                    impression: '',
+                    recommendations: ''
+                }
+            };
+            
+            if (templates[templateType]) {
+                const template = templates[templateType];
+                document.getElementById('findings').value = template.findings;
+                document.getElementById('impression').value = template.impression;
+                document.getElementById('recommendations').value = template.recommendations;
+            }
+        }
+        
+        // Insert macro
+        function insertMacro(macroType) {
+            const macros = {
+                'normal': 'within normal limits',
+                'unremarkable': 'unremarkable',
+                'no-acute': 'No acute findings',
+                'follow-up': 'Follow-up recommended in 3-6 months'
+            };
+            
+            const activeElement = document.activeElement;
+            if (activeElement && activeElement.tagName === 'TEXTAREA') {
+                const macro = macros[macroType] || '';
+                const start = activeElement.selectionStart;
+                const end = activeElement.selectionEnd;
+                const text = activeElement.value;
+                activeElement.value = text.substring(0, start) + macro + text.substring(end);
+                activeElement.setSelectionRange(start + macro.length, start + macro.length);
+                activeElement.focus();
+            }
+        }
+        
+        // Utility functions
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+        }
+        
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+        
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStudyInfo();
+            loadExistingReport();
+        });
+    </script>
+</body>
+</html>

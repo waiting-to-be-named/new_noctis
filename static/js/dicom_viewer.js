@@ -324,7 +324,7 @@ class DicomViewer {
         progressText.textContent = `Uploading ${validFiles.length} files...`;
         
         try {
-            const response = await fetch('/api/upload/', {
+            const response = await fetch('/viewer/api/upload/', {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -465,7 +465,7 @@ class DicomViewer {
         progressText.textContent = `Uploading ${dicomFiles.length} DICOM files...`;
         
         try {
-            const response = await fetch('/api/upload-folder/', {
+            const response = await fetch('/viewer/api/upload-folder/', {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -2335,5 +2335,5 @@ class DicomViewer {
 
 // Initialize the viewer when the page loads
 document.addEventListener('DOMContentLoaded', () => {
-    new DicomViewer();
+    window.dicomViewer = new DicomViewer();
 });

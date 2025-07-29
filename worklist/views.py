@@ -113,7 +113,7 @@ def view_study_from_worklist(request, entry_id):
     
     if entry.study:
         # Redirect to viewer with study ID
-        return redirect('viewer:viewer', study_id=entry.study.id)
+        return redirect('viewer:viewer_with_study', study_id=entry.study.id)
     else:
         return JsonResponse({'error': 'No images available for this entry'}, status=404)
 
@@ -203,20 +203,28 @@ def create_report(request, study_id):
         })
     
     else:
-        # GET request - return existing report if any
-        try:
-            report = Report.objects.filter(study=study).latest('created_at')
-            return JsonResponse({
-                'findings': report.findings,
-                'impression': report.impression,
-                'recommendations': report.recommendations,
-                'status': report.status,
-                'radiologist': report.radiologist.get_full_name() or report.radiologist.username,
-                'created_at': report.created_at.isoformat(),
-                'finalized_at': report.finalized_at.isoformat() if report.finalized_at else None
+        # Check if it's an AJAX request
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            # GET request - return existing report if any
+            try:
+                report = Report.objects.filter(study=study).latest('created_at')
+                return JsonResponse({
+                    'findings': report.findings,
+                    'impression': report.impression,
+                    'recommendations': report.recommendations,
+                    'status': report.status,
+                    'radiologist': report.radiologist.get_full_name() or report.radiologist.username,
+                    'created_at': report.created_at.isoformat(),
+                    'finalized_at': report.finalized_at.isoformat() if report.finalized_at else None
+                })
+            except Report.DoesNotExist:
+                return JsonResponse({})
+        else:
+            # Regular GET request - render the report creation page
+            return render(request, 'reports/create_report.html', {
+                'study_id': study_id,
+                'study': study
             })
-        except Report.DoesNotExist:
-            return JsonResponse({})
 
 
 @login_required
