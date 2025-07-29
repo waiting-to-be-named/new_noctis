@@ -194,6 +194,15 @@ body {
     color: #fff;
 }
 
+.btn-delete {
+    background: #dc3545;
+    color: #fff;
+}
+
+.btn-delete:hover {
+    background: #c82333;
+}
+
 .status-badge {
     padding: 4px 12px;
     border-radius: 12px;
