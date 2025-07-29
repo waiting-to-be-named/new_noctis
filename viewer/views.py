@@ -941,16 +941,16 @@ def get_study_images(request, study_id):
         for image in images:
             image_data = {
                 'id': image.id,
-                'instance_number': image.instance_number,
-                'series_number': image.series.series_number,
+                'instance_number': int(image.instance_number) if image.instance_number is not None else None,
+                'series_number': int(image.series.series_number) if image.series and image.series.series_number is not None else None,
                 'series_description': image.series.series_description,
-                'rows': image.rows,
-                'columns': image.columns,
-                'pixel_spacing_x': image.pixel_spacing_x,
-                'pixel_spacing_y': image.pixel_spacing_y,
-                'slice_thickness': image.slice_thickness,
-                'window_width': image.window_width,
-                'window_center': image.window_center,
+                'rows': int(image.rows) if image.rows is not None else None,
+                'columns': int(image.columns) if image.columns is not None else None,
+                'pixel_spacing_x': float(image.pixel_spacing_x) if image.pixel_spacing_x is not None else None,
+                'pixel_spacing_y': float(image.pixel_spacing_y) if image.pixel_spacing_y is not None else None,
+                'slice_thickness': float(image.slice_thickness) if image.slice_thickness is not None else None,
+                'window_width': float(image.window_width) if image.window_width is not None else None,
+                'window_center': float(image.window_center) if image.window_center is not None else None,
             }
             images_data.append(image_data)
         
