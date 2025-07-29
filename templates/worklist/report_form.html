@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Noctis - Write Report</title>
+    {% load static %}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="{% static 'css/worklist.css' %}">
+    <style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f4f6f9;
+            margin: 0;
+            padding: 0;
+        }
+        .report-container {
+            max-width: 900px;
+            margin: 30px auto;
+            padding: 20px;
+            background: #fff;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .report-container h2 {
+            margin-top: 0;
+        }
+        textarea {
+            width: 100%;
+            resize: vertical;
+            min-height: 120px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .btn {
+            border: none;
+            padding: 10px 20px;
+            margin-right: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-primary {
+            background: #28a745;
+            color: #fff;
+        }
+        .btn-secondary {
+            background: #007bff;
+            color: #fff;
+        }
+        .btn-cancel {
+            background: #6c757d;
+            color: #fff;
+        }
+        .status-indicator {
+            padding: 4px 10px;
+            background: #ffc107;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #212529;
+        }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <h2><i class="fas fa-file-alt"></i> Radiology Report - {{ study.patient_name }}</h2>
+        <p>Study Date: {{ study.study_date }} | Modality: {{ study.modality }}</p>
+        <p id="report-status" class="status-indicator" style="display:none;"></p>
+
+        <label><strong>Findings</strong></label>
+        <textarea id="findings"></textarea>
+
+        <label><strong>Impression</strong></label>
+        <textarea id="impression"></textarea>
+
+        <label><strong>Recommendations</strong></label>
+        <textarea id="recommendations"></textarea>
+
+        <div style="margin-top:20px;">
+            <button class="btn btn-secondary" onclick="saveReport(false)"><i class="fas fa-save"></i> Save Draft</button>
+            <button class="btn btn-primary" onclick="saveReport(true)"><i class="fas fa-check"></i> Finalize</button>
+            <button class="btn btn-cancel" onclick="window.history.back()"><i class="fas fa-times"></i> Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        const csrftoken = (function() {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; csrftoken=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+        })();
+
+        // Build AJAX url to fetch existing report data
+        const ajaxUrl = window.location.pathname + '?ajax=1';
+
+        fetch(ajaxUrl, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(resp => resp.ok ? resp.json() : {})
+        .then(data => {
+            if (data && Object.keys(data).length) {
+                document.getElementById('findings').value = data.findings || '';
+                document.getElementById('impression').value = data.impression || '';
+                document.getElementById('recommendations').value = data.recommendations || '';
+                document.getElementById('report-status').style.display = 'inline-block';
+                document.getElementById('report-status').textContent = 'Status: ' + (data.status || 'draft');
+            }
+        })
+        .catch(err => console.error('Failed to load report', err));
+
+        function saveReport(finalize) {
+            const payload = {
+                findings: document.getElementById('findings').value,
+                impression: document.getElementById('impression').value,
+                recommendations: document.getElementById('recommendations').value,
+                finalize: finalize
+            };
+
+            fetch(window.location.pathname, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(resp => resp.json())
+            .then(data => {
+                if (data.success) {
+                    alert(finalize ? 'Report finalized!' : 'Draft saved!');
+                    if (finalize) {
+                        window.location.href = '/worklist/';
+                    }
+                } else {
+                    alert('Failed to save report');
+                }
+            })
+            .catch(err => {
+                console.error('Save error', err);
+                alert('An error occurred while saving');
+            });
+        }
+    </script>
+</body>
+</html>
