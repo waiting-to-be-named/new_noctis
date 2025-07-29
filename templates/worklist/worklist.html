@@ -543,27 +543,41 @@
         
         function loadChatMessages() {
             fetch(`/worklist/api/chat/?filter=${currentChatFilter}`)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     const list = document.getElementById('chat-messages');
                     list.innerHTML = '';
-                    data.messages.forEach(msg => {
-                        const item = document.createElement('div');
-                        item.className = `chat-message ${msg.message_type}`;
-                        item.innerHTML = `
-                            <div class="message-header">
-                                <span class="message-sender">${msg.sender_name}</span>
-                                <span class="message-type">${msg.message_type}</span>
-                                <span class="message-time">${new Date(msg.created_at).toLocaleString()}</span>
-                            </div>
-                            <div class="message-content">${msg.message}</div>
-                        `;
-                        list.appendChild(item);
-                    });
-                    // Scroll to bottom
-                    list.scrollTop = list.scrollHeight;
+                    
+                    if (data.messages && data.messages.length > 0) {
+                        data.messages.forEach(msg => {
+                            const item = document.createElement('div');
+                            item.className = `chat-message ${msg.message_type}`;
+                            item.innerHTML = `
+                                <div class="message-header">
+                                    <span class="message-sender">${msg.sender_name || 'Unknown'}</span>
+                                    <span class="message-type">${msg.message_type || 'user_chat'}</span>
+                                    <span class="message-time">${new Date(msg.created_at).toLocaleString()}</span>
+                                </div>
+                                <div class="message-content">${msg.message || ''}</div>
+                            `;
+                            list.appendChild(item);
+                        });
+                        // Scroll to bottom
+                        list.scrollTop = list.scrollHeight;
+                    } else {
+                        list.innerHTML = '<div class="no-messages">No messages found</div>';
+                    }
                 })
-                .catch(error => console.error('Error loading chat messages:', error));
+                .catch(error => {
+                    console.error('Error loading chat messages:', error);
+                    const list = document.getElementById('chat-messages');
+                    list.innerHTML = '<div class="error-message">Error loading messages</div>';
+                });
         }
         
         function sendMessage() {
@@ -572,7 +586,21 @@
             const message = messageInput.value.trim();
             const facilityId = facilitySelect.value;
             
-            if (!message) return;
+            if (!message) {
+                alert('Please enter a message');
+                return;
+            }
+            
+            if (!facilityId) {
+                alert('Please select a facility');
+                return;
+            }
+            
+            // Disable send button to prevent double-sending
+            const sendButton = document.querySelector('.message-input button');
+            const originalText = sendButton.innerHTML;
+            sendButton.disabled = true;
+            sendButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
             
             fetch('/worklist/api/chat/send/', {
                 method: 'POST',
@@ -585,16 +613,30 @@
                     facility_id: facilityId
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     messageInput.value = '';
                     loadChatMessages();
+                    checkNotifications(); // Update notification count
                 } else {
-                    alert('Error sending message: ' + data.error);
+                    alert('Error sending message: ' + (data.error || 'Unknown error'));
                 }
             })
-            .catch(error => console.error('Error sending message:', error));
+            .catch(error => {
+                console.error('Error sending message:', error);
+                alert('Error sending message. Please try again.');
+            })
+            .finally(() => {
+                // Re-enable send button
+                sendButton.disabled = false;
+                sendButton.innerHTML = originalText;
+            });
         }
         
         function markAsRead(notificationId) {
@@ -716,7 +758,7 @@
         }
         
         function checkChatMessages() {
-            // This would be called when new chat messages arrive
+            // Check for new chat messages specifically
             checkNotifications();
         }
         

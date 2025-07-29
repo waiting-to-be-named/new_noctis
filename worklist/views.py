@@ -6,6 +6,7 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.db.models import Q
+from django.contrib.auth.models import User
 from viewer.models import (
     DicomStudy, WorklistEntry, Facility, Report, 
     Notification, DicomSeries, DicomImage, ChatMessage
@@ -416,9 +417,10 @@ def api_notifications_count(request):
         is_read=False
     ).count()
     
+    # Count unread messages including facility-wide messages
     unread_messages = ChatMessage.objects.filter(
-        recipient=request.user,
-        is_read=False
+        Q(recipient=request.user, is_read=False) |
+        Q(recipient__isnull=True, is_read=False)  # Facility-wide messages
     ).count()
     
     return JsonResponse({
@@ -469,8 +471,11 @@ def api_chat_messages(request):
     """API endpoint for chat messages with filtering"""
     filter_type = request.GET.get('filter', 'all')
     
+    # Get messages where user is sender, recipient, or facility-wide messages
     messages = ChatMessage.objects.filter(
-        Q(sender=request.user) | Q(recipient=request.user)
+        Q(sender=request.user) | 
+        Q(recipient=request.user) |
+        Q(recipient__isnull=True)  # Facility-wide messages
     )
     
     if filter_type != 'all':
@@ -481,7 +486,7 @@ def api_chat_messages(request):
     data = [{
         'id': m.id,
         'sender_name': m.sender.get_full_name() or m.sender.username,
-        'recipient_name': m.recipient.get_full_name() or m.recipient.username if m.recipient else 'All',
+        'recipient_name': m.recipient.get_full_name() or m.recipient.username if m.recipient else 'Facility',
         'message_type': m.message_type,
         'message': m.message,
         'is_read': m.is_read,
@@ -505,33 +510,39 @@ def api_chat_send(request):
             return JsonResponse({'success': False, 'error': 'Message cannot be empty'})
         
         facility = None
-        recipient = None
+        recipients = []
         
         if facility_id:
             try:
                 facility = Facility.objects.get(id=facility_id)
                 # Find facility staff to send message to
-                # For now, we'll send to all facility users
+                # Get all users associated with this facility
+                if facility.user:
+                    recipients.append(facility.user)
+                # Also get any users who have this facility assigned
+                facility_users = User.objects.filter(worklistentry__facility=facility).distinct()
+                recipients.extend(facility_users)
             except Facility.DoesNotExist:
                 return JsonResponse({'success': False, 'error': 'Facility not found'})
         
-        # Create chat message
+        # Create chat message (facility-wide message)
         chat_message = ChatMessage.objects.create(
             sender=request.user,
-            recipient=recipient,
+            recipient=None,  # None means facility-wide message
             facility=facility,
             message_type='user_chat',
             message=message_text
         )
         
-        # Create notification for recipient
-        if recipient:
-            Notification.objects.create(
-                recipient=recipient,
-                notification_type='chat',
-                title='New Chat Message',
-                message=f'{request.user.get_full_name() or request.user.username}: {message_text[:50]}...'
-            )
+        # Create notifications for all facility recipients
+        for recipient in recipients:
+            if recipient != request.user:  # Don't notify self
+                Notification.objects.create(
+                    recipient=recipient,
+                    notification_type='chat',
+                    title='New Chat Message',
+                    message=f'{request.user.get_full_name() or request.user.username}: {message_text[:50]}...'
+                )
         
         return JsonResponse({'success': True})
         
@@ -546,7 +557,9 @@ def api_chat_send(request):
 def api_chat_clear(request):
     """Clear chat history"""
     deleted_count = ChatMessage.objects.filter(
-        Q(sender=request.user) | Q(recipient=request.user)
+        Q(sender=request.user) | 
+        Q(recipient=request.user) |
+        Q(recipient__isnull=True)  # Also clear facility-wide messages
     ).delete()[0]
     
     return JsonResponse({'success': True, 'deleted_count': deleted_count})

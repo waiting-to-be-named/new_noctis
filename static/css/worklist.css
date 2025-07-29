@@ -529,6 +529,17 @@ body {
     margin-top: 5px;
 }
 
+.no-messages, .error-message {
+    text-align: center;
+    padding: 20px;
+    color: #999;
+    font-style: italic;
+}
+
+.error-message {
+    color: #ff4444;
+}
+
 .chat-input-area {
     border-top: 1px solid #555;
     padding: 10px;
