@@ -260,6 +260,22 @@
                 <h3 class="action-title">DICOM Viewer</h3>
                 <p class="action-desc">View and analyze medical images with advanced tools</p>
             </div>
+            
+            <div class="action-card" onclick="window.location.href='{% url \"viewer:facility_login\" %}'">
+                <div class="action-icon">
+                    <i class="fas fa-hospital"></i>
+                </div>
+                <h3 class="action-title">Facility Login</h3>
+                <p class="action-desc">Access facility-specific studies and reports</p>
+            </div>
+            
+            <div class="action-card" onclick="window.location.href='{% url \"viewer:facility_dashboard\" %}'">
+                <div class="action-icon">
+                    <i class="fas fa-tachometer-alt"></i>
+                </div>
+                <h3 class="action-title">Facility Dashboard</h3>
+                <p class="action-desc">Manage your facility's studies and statistics</p>
+            </div>
         </div>
         
         <a href="/viewer/" class="launch-btn">

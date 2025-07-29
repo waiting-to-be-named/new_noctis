@@ -196,6 +196,56 @@
             margin-top: 5px;
         }
         
+        .form-section {
+            background: rgba(0, 255, 0, 0.05);
+            border: 1px solid #00ff00;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .form-section h3 {
+            color: #00ff00;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+        
+        .section-description {
+            color: #ccc;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        
+        .password-strength {
+            margin-top: 5px;
+            font-size: 12px;
+        }
+        
+        .password-strength.weak {
+            color: #ff4444;
+        }
+        
+        .password-strength.medium {
+            color: #ffaa00;
+        }
+        
+        .password-strength.strong {
+            color: #00ff00;
+        }
+        
+        .password-match {
+            margin-top: 5px;
+            font-size: 12px;
+        }
+        
+        .password-match.match {
+            color: #00ff00;
+        }
+        
+        .password-match.mismatch {
+            color: #ff4444;
+        }
+        
         .messages {
             margin-bottom: 20px;
         }
@@ -293,6 +343,45 @@
                            required>
                 </div>
                 
+                <!-- Facility User Account Section -->
+                <div class="form-section">
+                    <h3><i class="fas fa-user-lock"></i> Facility Login Credentials</h3>
+                    <p class="section-description">Create login credentials for this facility to access their studies only.</p>
+                    
+                    <div class="form-group">
+                        <label for="facility_username" class="required">Username</label>
+                        <input type="text" 
+                               name="facility_username" 
+                               id="facility_username"
+                               class="form-control" 
+                               placeholder="facility_username"
+                               value="{{ form.facility_username.value|default:'' }}"
+                               required>
+                        <div class="helptext">Username for facility login (must be unique)</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="facility_password" class="required">Password</label>
+                        <input type="password" 
+                               name="facility_password" 
+                               id="facility_password"
+                               class="form-control" 
+                               placeholder="Enter secure password"
+                               required>
+                        <div class="helptext">Password must be at least 8 characters long</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="facility_password_confirm" class="required">Confirm Password</label>
+                        <input type="password" 
+                               name="facility_password_confirm" 
+                               id="facility_password_confirm"
+                               class="form-control" 
+                               placeholder="Confirm password"
+                               required>
+                    </div>
+                </div>
+                
                 <div class="form-group">
                     <label for="{{ form.letterhead_logo.id_for_label }}">Letterhead Logo</label>
                     {{ form.letterhead_logo.errors }}
@@ -339,6 +428,103 @@
                 label.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Choose Logo File';
                 label.style.borderColor = '#666';
                 label.style.background = '#333';
+            }
+        });
+        
+        // Password strength validation
+        const passwordInput = document.getElementById('facility_password');
+        const confirmInput = document.getElementById('facility_password_confirm');
+        
+        function checkPasswordStrength(password) {
+            let strength = 0;
+            let feedback = '';
+            
+            if (password.length >= 8) strength++;
+            if (password.match(/[a-z]/)) strength++;
+            if (password.match(/[A-Z]/)) strength++;
+            if (password.match(/[0-9]/)) strength++;
+            if (password.match(/[^a-zA-Z0-9]/)) strength++;
+            
+            if (strength < 3) {
+                feedback = 'Weak password';
+                return { strength: 'weak', feedback };
+            } else if (strength < 5) {
+                feedback = 'Medium strength password';
+                return { strength: 'medium', feedback };
+            } else {
+                feedback = 'Strong password';
+                return { strength: 'strong', feedback };
+            }
+        }
+        
+        function updatePasswordStrength() {
+            const password = passwordInput.value;
+            const strengthDiv = document.getElementById('password-strength') || createStrengthDiv();
+            
+            if (password.length === 0) {
+                strengthDiv.style.display = 'none';
+                return;
+            }
+            
+            const result = checkPasswordStrength(password);
+            strengthDiv.textContent = result.feedback;
+            strengthDiv.className = `password-strength ${result.strength}`;
+            strengthDiv.style.display = 'block';
+        }
+        
+        function createStrengthDiv() {
+            const div = document.createElement('div');
+            div.id = 'password-strength';
+            passwordInput.parentNode.appendChild(div);
+            return div;
+        }
+        
+        function checkPasswordMatch() {
+            const password = passwordInput.value;
+            const confirm = confirmInput.value;
+            const matchDiv = document.getElementById('password-match') || createMatchDiv();
+            
+            if (confirm.length === 0) {
+                matchDiv.style.display = 'none';
+                return;
+            }
+            
+            if (password === confirm) {
+                matchDiv.textContent = 'Passwords match';
+                matchDiv.className = 'password-match match';
+            } else {
+                matchDiv.textContent = 'Passwords do not match';
+                matchDiv.className = 'password-match mismatch';
+            }
+            matchDiv.style.display = 'block';
+        }
+        
+        function createMatchDiv() {
+            const div = document.createElement('div');
+            div.id = 'password-match';
+            confirmInput.parentNode.appendChild(div);
+            return div;
+        }
+        
+        // Add event listeners
+        passwordInput.addEventListener('input', updatePasswordStrength);
+        confirmInput.addEventListener('input', checkPasswordMatch);
+        
+        // Form validation
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const password = passwordInput.value;
+            const confirm = confirmInput.value;
+            
+            if (password !== confirm) {
+                e.preventDefault();
+                alert('Passwords do not match!');
+                return false;
+            }
+            
+            if (password.length < 8) {
+                e.preventDefault();
+                alert('Password must be at least 8 characters long!');
+                return false;
             }
         });
     </script>

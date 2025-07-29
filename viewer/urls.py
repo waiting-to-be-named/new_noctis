@@ -8,6 +8,11 @@ urlpatterns = [
     path('', views.DicomViewerView.as_view(), name='viewer'),
     path('study/<int:study_id>/', views.DicomViewerView.as_view(), name='viewer_with_study'),
     
+    # Facility authentication
+    path('facility/login/', views.FacilityLoginView.as_view(), name='facility_login'),
+    path('facility/dashboard/', views.FacilityDashboardView.as_view(), name='facility_dashboard'),
+    path('facility/logout/', views.facility_logout, name='facility_logout'),
+    
     # Admin functionality
     path('admin/facilities/', views.FacilityListView.as_view(), name='facility_list'),
     path('admin/facilities/new/', views.FacilityCreateView.as_view(), name='facility_create'),

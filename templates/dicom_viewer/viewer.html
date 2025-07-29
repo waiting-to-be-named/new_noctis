@@ -7,8 +7,163 @@
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/dicom_viewer.css' %}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* Professional dropdown styles */
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background: rgba(26, 26, 26, 0.95);
+            border: 1px solid #00ff00;
+            border-radius: 8px;
+            min-width: 200px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+        }
+        
+        .dropdown-content.show {
+            display: block;
+        }
+        
+        .dropdown-content a {
+            color: #e0e0e0;
+            padding: 12px 16px;
+            text-decoration: none;
+            display: block;
+            transition: all 0.3s ease;
+            border-bottom: 1px solid #333;
+        }
+        
+        .dropdown-content a:last-child {
+            border-bottom: none;
+        }
+        
+        .dropdown-content a:hover {
+            background: rgba(0, 255, 0, 0.1);
+            color: #00ff00;
+        }
+        
+        .dropdown-content a i {
+            margin-right: 10px;
+            width: 16px;
+            text-align: center;
+        }
+        
+        /* Facility user header */
+        .facility-header {
+            background: rgba(26, 26, 26, 0.95);
+            border-bottom: 2px solid #00ff00;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(10px);
+        }
+        
+        .facility-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .facility-name {
+            color: #00ff00;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        
+        .facility-user {
+            color: #ccc;
+            font-size: 14px;
+        }
+        
+        .facility-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+            color: #000;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #00cc00 0%, #009900 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 255, 0, 0.4);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+            color: #fff;
+        }
+        
+        .btn-danger:hover {
+            background: linear-gradient(135deg, #cc0000 0%, #990000 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 68, 68, 0.4);
+        }
+        
+        /* Enhanced tool buttons */
+        .tool-btn.dropdown {
+            position: relative;
+        }
+        
+        .tool-btn.dropdown::after {
+            content: '\f107';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            margin-left: 5px;
+            transition: transform 0.3s ease;
+        }
+        
+        .tool-btn.dropdown.active::after {
+            transform: rotate(180deg);
+        }
+    </style>
 </head>
 <body>
+    {% if is_facility_user %}
+    <div class="facility-header">
+        <div class="facility-info">
+            <i class="fas fa-hospital"></i>
+            <div>
+                <div class="facility-name">{{ facility_name }}</div>
+                <div class="facility-user">Facility User</div>
+            </div>
+        </div>
+        <div class="facility-actions">
+            <a href="{% url 'viewer:facility_dashboard' %}" class="btn btn-primary">
+                <i class="fas fa-tachometer-alt"></i>
+                Dashboard
+            </a>
+            <a href="{% url 'viewer:facility_logout' %}" class="btn btn-danger">
+                <i class="fas fa-sign-out-alt"></i>
+                Logout
+            </a>
+        </div>
+    </div>
+    {% endif %}
+    
     <div id="dicom-viewer" class="dicom-viewer">
         <!-- Left Toolbar -->
         <div class="toolbar">
@@ -57,10 +212,70 @@
                     <i class="fas fa-robot"></i>
                     <span>AI</span>
                 </button>
-                <button class="tool-btn" data-tool="3d" title="3D Reconstruction">
-                    <i class="fas fa-cube"></i>
-                    <span>3D</span>
-                </button>
+                
+                <!-- 3D Dropdown -->
+                <div class="dropdown">
+                    <button class="tool-btn dropdown" data-tool="3d" title="3D Reconstruction">
+                        <i class="fas fa-cube"></i>
+                        <span>3D</span>
+                    </button>
+                    <div class="dropdown-content" id="3d-dropdown">
+                        <a href="#" data-3d="mip">
+                            <i class="fas fa-layer-group"></i>
+                            Maximum Intensity Projection (MIP)
+                        </a>
+                        <a href="#" data-3d="minip">
+                            <i class="fas fa-layer-group"></i>
+                            Minimum Intensity Projection (MinIP)
+                        </a>
+                        <a href="#" data-3d="sagittal">
+                            <i class="fas fa-arrows-alt-v"></i>
+                            Sagittal Reconstruction
+                        </a>
+                        <a href="#" data-3d="coronal">
+                            <i class="fas fa-arrows-alt-h"></i>
+                            Coronal Reconstruction
+                        </a>
+                        <a href="#" data-3d="volume">
+                            <i class="fas fa-cube"></i>
+                            Volume Rendering
+                        </a>
+                        <a href="#" data-3d="surface">
+                            <i class="fas fa-shapes"></i>
+                            Surface Rendering
+                        </a>
+                    </div>
+                </div>
+                
+                <!-- Reconstruction Dropdown -->
+                <div class="dropdown">
+                    <button class="tool-btn dropdown" data-tool="reconstruction" title="Advanced Reconstruction">
+                        <i class="fas fa-magic"></i>
+                        <span>Recon</span>
+                    </button>
+                    <div class="dropdown-content" id="reconstruction-dropdown">
+                        <a href="#" data-recon="curved">
+                            <i class="fas fa-curve"></i>
+                            Curved Planar Reconstruction
+                        </a>
+                        <a href="#" data-recon="oblique">
+                            <i class="fas fa-arrows-alt"></i>
+                            Oblique Reconstruction
+                        </a>
+                        <a href="#" data-recon="multiplanar">
+                            <i class="fas fa-th-large"></i>
+                            Multiplanar Reconstruction
+                        </a>
+                        <a href="#" data-recon="stretched">
+                            <i class="fas fa-expand-arrows-alt"></i>
+                            Stretched Curved Reconstruction
+                        </a>
+                        <a href="#" data-recon="virtual">
+                            <i class="fas fa-eye"></i>
+                            Virtual Endoscopy
+                        </a>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -257,6 +472,74 @@
                 alert('{{ initial_study_error }}');
             }, 100);
         {% endif %}
+        
+        // Dropdown functionality
+        document.querySelectorAll('.dropdown').forEach(dropdown => {
+            const button = dropdown.querySelector('.tool-btn');
+            const content = dropdown.querySelector('.dropdown-content');
+            
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Close other dropdowns
+                document.querySelectorAll('.dropdown-content').forEach(otherContent => {
+                    if (otherContent !== content) {
+                        otherContent.classList.remove('show');
+                        otherContent.parentElement.querySelector('.tool-btn').classList.remove('active');
+                    }
+                });
+                
+                // Toggle current dropdown
+                content.classList.toggle('show');
+                button.classList.toggle('active');
+            });
+            
+            // Handle dropdown item clicks
+            content.querySelectorAll('a').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const action = link.getAttribute('data-3d') || link.getAttribute('data-recon');
+                    const text = link.textContent.trim();
+                    
+                    // Handle 3D actions
+                    if (link.getAttribute('data-3d')) {
+                        handle3DAction(action, text);
+                    }
+                    
+                    // Handle reconstruction actions
+                    if (link.getAttribute('data-recon')) {
+                        handleReconstructionAction(action, text);
+                    }
+                    
+                    // Close dropdown
+                    content.classList.remove('show');
+                    button.classList.remove('active');
+                });
+            });
+        });
+        
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.dropdown')) {
+                document.querySelectorAll('.dropdown-content').forEach(content => {
+                    content.classList.remove('show');
+                    content.parentElement.querySelector('.tool-btn').classList.remove('active');
+                });
+            }
+        });
+        
+        function handle3DAction(action, text) {
+            console.log(`3D Action: ${action} - ${text}`);
+            // Implement 3D reconstruction logic here
+            alert(`3D Reconstruction: ${text}\n\nThis feature will be implemented in the next update.`);
+        }
+        
+        function handleReconstructionAction(action, text) {
+            console.log(`Reconstruction Action: ${action} - ${text}`);
+            // Implement reconstruction logic here
+            alert(`Advanced Reconstruction: ${text}\n\nThis feature will be implemented in the next update.`);
+        }
         
         // Clinical Information functionality
         function toggleClinicalInfo() {
