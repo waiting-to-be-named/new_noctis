@@ -16,6 +16,9 @@ urlpatterns = [
     # View study from worklist
     path('entry/<int:entry_id>/view/', views.view_study_from_worklist, name='view_study'),
     
+    # Delete worklist entry
+    path('entry/<int:entry_id>/delete/', views.delete_worklist_entry, name='delete_entry'),
+    
     # Report management
     path('study/<int:study_id>/report/', views.create_report, name='create_report'),
     path('report/<int:report_id>/print/', views.print_report, name='print_report'),
