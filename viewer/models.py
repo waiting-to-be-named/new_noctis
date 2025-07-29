@@ -205,7 +205,26 @@ class DicomImage(models.Model):
                     print(f"File not found in any of the attempted paths: {alt_paths}")
                     return None
                 
-            return pydicom.dcmread(file_path)
+            # Try reading with multiple methods
+            try:
+                # Method 1: Standard reading
+                return pydicom.dcmread(file_path)
+            except Exception as e1:
+                print(f"Standard DICOM reading failed: {e1}")
+                try:
+                    # Method 2: Force reading (more permissive)
+                    return pydicom.dcmread(file_path, force=True)
+                except Exception as e2:
+                    print(f"Force DICOM reading failed: {e2}")
+                    try:
+                        # Method 3: Read as bytes
+                        with open(file_path, 'rb') as f:
+                            file_bytes = f.read()
+                        return pydicom.dcmread(io.BytesIO(file_bytes), force=True)
+                    except Exception as e3:
+                        print(f"Bytes DICOM reading failed: {e3}")
+                        return None
+                        
         except Exception as e:
             print(f"Error loading DICOM from {self.file_path}: {e}")
             print(f"Attempted file path: {file_path if 'file_path' in locals() else 'unknown'}")
@@ -213,10 +232,16 @@ class DicomImage(models.Model):
     
     def get_pixel_array(self):
         """Get pixel array from DICOM file"""
-        dicom_data = self.load_dicom_data()
-        if dicom_data and hasattr(dicom_data, 'pixel_array'):
-            return dicom_data.pixel_array
-        return None
+        try:
+            dicom_data = self.load_dicom_data()
+            if dicom_data and hasattr(dicom_data, 'pixel_array'):
+                return dicom_data.pixel_array
+            else:
+                print(f"No pixel array found in DICOM data for image {self.id}")
+                return None
+        except Exception as e:
+            print(f"Error getting pixel array for image {self.id}: {e}")
+            return None
     
     def apply_windowing(self, pixel_array, window_width=None, window_level=None, inverted=False):
         """Apply window/level to pixel array"""
@@ -247,9 +272,14 @@ class DicomImage(models.Model):
             if inverted:
                 image_data = 255 - image_data
             
+            # Ensure the result is in valid range
+            image_data = np.clip(image_data, 0, 255)
+            
             return image_data.astype(np.uint8)
         except Exception as e:
             print(f"Error applying windowing: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def get_processed_image_base64(self, window_width=None, window_level=None, inverted=False):
@@ -276,6 +306,8 @@ class DicomImage(models.Model):
             return f"data:image/png;base64,{image_base64}"
         except Exception as e:
             print(f"Error processing image {self.id}: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def save_dicom_metadata(self):

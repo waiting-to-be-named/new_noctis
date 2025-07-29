@@ -25,6 +25,7 @@ from .models import (
 )
 from django.contrib.auth.models import Group
 from .serializers import DicomStudySerializer, DicomImageSerializer
+import io
 
 
 # Ensure required directories exist
@@ -330,38 +331,42 @@ def upload_dicom_files(request):
                 # Save file with unique name to avoid conflicts
                 import uuid
                 unique_filename = f"{uuid.uuid4()}_{file.name}"
-                file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file.read()))
+                
+                # Read file content once to avoid pointer issues
+                file.seek(0)
+                file_content = file.read()
+                file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file_content))
                 
                 # Try to read DICOM data with multiple fallback methods
                 dicom_data = None
                 try:
                     # Method 1: Try reading from file path
-                    dicom_data = pydicom.dcmread(default_storage.path(file_path))
+                    if hasattr(default_storage, 'path'):
+                        print(f"Trying to read DICOM from file path: {default_storage.path(file_path)}")
+                        dicom_data = pydicom.dcmread(default_storage.path(file_path))
+                    else:
+                        # Method 2: Try reading from bytes
+                        print(f"Trying to read DICOM from bytes for file: {file.name}")
+                        dicom_data = pydicom.dcmread(io.BytesIO(file_content))
                 except Exception as e1:
+                    print(f"Method 1 failed for {file.name}: {e1}")
                     try:
-                        # Method 2: Try reading from file object
-                        file.seek(0)  # Reset file pointer
-                        dicom_data = pydicom.dcmread(file)
-                        # Re-save the file after successful read
-                        file.seek(0)
-                        file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file.read()))
+                        # Method 3: Try reading with force=True (more permissive)
+                        if hasattr(default_storage, 'path'):
+                            print(f"Trying force=True from file path: {default_storage.path(file_path)}")
+                            dicom_data = pydicom.dcmread(default_storage.path(file_path), force=True)
+                        else:
+                            print(f"Trying force=True from bytes for file: {file.name}")
+                            dicom_data = pydicom.dcmread(io.BytesIO(file_content), force=True)
                     except Exception as e2:
+                        print(f"Failed to read DICOM file {file.name}: {e1}, {e2}")
+                        # Clean up the saved file
                         try:
-                            # Method 3: Try reading as bytes
-                            file.seek(0)
-                            file_bytes = file.read()
-                            dicom_data = pydicom.dcmread(file_bytes)
-                            # Save the bytes
-                            file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file_bytes))
-                        except Exception as e3:
-                            print(f"Failed to read DICOM file {file.name}: {e1}, {e2}, {e3}")
-                            # Clean up the saved file
-                            try:
-                                default_storage.delete(file_path)
-                            except:
-                                pass
-                            errors.append(f"Could not read DICOM data from {file.name}")
-                            continue
+                            default_storage.delete(file_path)
+                        except:
+                            pass
+                        errors.append(f"Could not read DICOM data from {file.name}")
+                        continue
                 
                 # Validate that we have essential DICOM tags
                 if not dicom_data:
@@ -515,6 +520,18 @@ def upload_dicom_files(request):
                     except:
                         photometric_interpretation = 'MONOCHROME2'
                 
+                # Parse pixel spacing
+                pixel_spacing_x = None
+                pixel_spacing_y = None
+                if hasattr(dicom_data, 'PixelSpacing'):
+                    try:
+                        pixel_spacing = dicom_data.PixelSpacing
+                        if isinstance(pixel_spacing, (list, tuple)) and len(pixel_spacing) >= 2:
+                            pixel_spacing_x = float(pixel_spacing[0])
+                            pixel_spacing_y = float(pixel_spacing[1])
+                    except:
+                        pass
+                
                 image, created = DicomImage.objects.get_or_create(
                     series=series,
                     sop_instance_uid=image_instance_uid,
@@ -527,9 +544,11 @@ def upload_dicom_files(request):
                         'samples_per_pixel': samples_per_pixel,
                         'photometric_interpretation': photometric_interpretation,
                         'pixel_spacing': str(getattr(dicom_data, 'PixelSpacing', '')),
+                        'pixel_spacing_x': pixel_spacing_x,
+                        'pixel_spacing_y': pixel_spacing_y,
                         'slice_thickness': float(getattr(dicom_data, 'SliceThickness', 0)),
-                        'window_center': str(getattr(dicom_data, 'WindowCenter', '')),
-                        'window_width': str(getattr(dicom_data, 'WindowWidth', '')),
+                        'window_center': float(getattr(dicom_data, 'WindowCenter', 40)),
+                        'window_width': float(getattr(dicom_data, 'WindowWidth', 400)),
                     }
                 )
                 
@@ -864,9 +883,11 @@ def upload_dicom_folder(request):
                                 'samples_per_pixel': samples_per_pixel,
                                 'photometric_interpretation': photometric_interpretation,
                                 'pixel_spacing': str(getattr(dicom_data, 'PixelSpacing', '')),
+                                'pixel_spacing_x': pixel_spacing_x,
+                                'pixel_spacing_y': pixel_spacing_y,
                                 'slice_thickness': float(getattr(dicom_data, 'SliceThickness', 0)),
-                                'window_center': str(getattr(dicom_data, 'WindowCenter', '')),
-                                'window_width': str(getattr(dicom_data, 'WindowWidth', '')),
+                                'window_center': float(getattr(dicom_data, 'WindowCenter', 40)),
+                                'window_width': float(getattr(dicom_data, 'WindowWidth', 400)),
                             }
                         )
                         
@@ -986,9 +1007,15 @@ def get_image_data(request, image_id):
         
         # Convert to appropriate types
         if window_width:
-            window_width = float(window_width)
+            try:
+                window_width = float(window_width)
+            except (ValueError, TypeError):
+                window_width = 400
         if window_level:
-            window_level = float(window_level)
+            try:
+                window_level = float(window_level)
+            except (ValueError, TypeError):
+                window_level = 40
         
         print(f"Processing image with WW: {window_width}, WL: {window_level}, inverted: {inverted}")
         
