@@ -83,6 +83,17 @@
                     <div class="patient-info" id="patient-info">
                         Patient: - | Study Date: - | Modality: -
                     </div>
+                    <div class="clinical-info-section" id="clinical-info-section" style="display: none;">
+                        <div class="clinical-info-header">
+                            <h4><i class="fas fa-file-medical"></i> Clinical Information</h4>
+                            <button class="btn-toggle" onclick="toggleClinicalInfo()">
+                                <i class="fas fa-chevron-up"></i>
+                            </button>
+                        </div>
+                        <div class="clinical-info-content" id="clinical-info-content">
+                            <p id="clinical-info-text">No clinical information available</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -246,6 +257,52 @@
                 alert('{{ initial_study_error }}');
             }, 100);
         {% endif %}
+        
+        // Clinical Information functionality
+        function toggleClinicalInfo() {
+            const content = document.getElementById('clinical-info-content');
+            const toggleBtn = document.querySelector('.btn-toggle i');
+            const section = document.getElementById('clinical-info-section');
+            
+            if (content.classList.contains('collapsed')) {
+                content.classList.remove('collapsed');
+                toggleBtn.className = 'fas fa-chevron-up';
+                section.classList.add('expanded');
+            } else {
+                content.classList.add('collapsed');
+                toggleBtn.className = 'fas fa-chevron-down';
+                section.classList.remove('expanded');
+            }
+        }
+        
+        // Function to load and display clinical information
+        function loadClinicalInfo(studyId) {
+            fetch(`/viewer/api/study/${studyId}/clinical-info/`)
+                .then(response => response.json())
+                .then(data => {
+                    const section = document.getElementById('clinical-info-section');
+                    const textElement = document.getElementById('clinical-info-text');
+                    
+                    if (data.clinical_info && data.clinical_info.trim()) {
+                        textElement.textContent = data.clinical_info;
+                        section.style.display = 'block';
+                    } else {
+                        textElement.textContent = 'No clinical information available';
+                        section.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading clinical info:', error);
+                    document.getElementById('clinical-info-section').style.display = 'none';
+                });
+        }
+        
+        // Load clinical info for initial study if present
+        document.addEventListener('DOMContentLoaded', function() {
+            if (window.initialStudyId) {
+                loadClinicalInfo(window.initialStudyId);
+            }
+        });
     </script>
     <script src="{% static 'js/dicom_viewer.js' %}"></script>
 </body>

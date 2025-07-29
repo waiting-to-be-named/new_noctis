@@ -17,8 +17,15 @@
                     <i class="fas fa-home"></i> Home
                 </button>
                 {% if is_admin or is_radiologist %}
-                <div id="notification-count" class="notification-badge" style="display: none;">
-                    <i class="fas fa-bell"></i> <span>0</span> New Studies
+                <div class="notification-area">
+                    <button id="notification-bell" class="notification-bell" onclick="toggleNotifications()">
+                        <i class="fas fa-bell"></i>
+                        <span id="notification-count" class="notification-count">0</span>
+                    </button>
+                    <button id="chat-bell" class="chat-bell" onclick="toggleChat()">
+                        <i class="fas fa-comments"></i>
+                        <span id="chat-count" class="chat-count">0</span>
+                    </button>
                 </div>
                 {% endif %}
             </div>
@@ -118,6 +125,11 @@
                                     <button class="btn btn-report" onclick="writeReport({{ entry.study.id }})">
                                         <i class="fas fa-file-alt"></i> Report
                                     </button>
+                                    {% if entry.study.reports.exists %}
+                                    <button class="btn btn-print" onclick="printReport({{ entry.study.reports.first.id }})">
+                                        <i class="fas fa-print"></i> Print
+                                    </button>
+                                    {% endif %}
                                     {% endif %}
                                     {% endif %}
                                 </div>
@@ -160,6 +172,62 @@
                 <button onclick="saveClinicalInfo()" class="btn btn-view">Save</button>
                 <button onclick="closeClinicalModal()" class="btn">Cancel</button>
             </div>
+        </div>
+    </div>
+    
+    <!-- Notifications Panel -->
+    <div id="notifications-panel" class="notifications-panel">
+        <div class="panel-header">
+            <h3><i class="fas fa-bell"></i> Notifications</h3>
+            <button onclick="closeNotifications()" class="close-btn">&times;</button>
+        </div>
+        <div class="notifications-filter">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="new_study">New Studies</button>
+            <button class="filter-btn" data-filter="system_error">System Errors</button>
+            <button class="filter-btn" data-filter="system">System</button>
+        </div>
+        <div class="notifications-list" id="notifications-list">
+            <!-- Notifications will be loaded here -->
+        </div>
+        <div class="notifications-actions">
+            <button onclick="markAllAsRead()" class="btn btn-secondary">Mark All Read</button>
+            <button onclick="clearOldNotifications()" class="btn btn-secondary">Clear Old</button>
+        </div>
+    </div>
+    
+    <!-- Chat Panel -->
+    <div id="chat-panel" class="chat-panel">
+        <div class="panel-header">
+            <h3><i class="fas fa-comments"></i> Chat</h3>
+            <button onclick="closeChat()" class="close-btn">&times;</button>
+        </div>
+        <div class="chat-filter">
+            <button class="filter-btn active" data-filter="all">All Messages</button>
+            <button class="filter-btn" data-filter="system_upload">System Uploads</button>
+            <button class="filter-btn" data-filter="user_chat">User Chats</button>
+        </div>
+        <div class="chat-messages" id="chat-messages">
+            <!-- Chat messages will be loaded here -->
+        </div>
+        <div class="chat-input-area">
+            <div class="facility-selector">
+                <select id="chat-facility" class="form-select">
+                    <option value="">Select Facility</option>
+                    {% for facility in facilities %}
+                    <option value="{{ facility.id }}">{{ facility.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="message-input">
+                <input type="text" id="chat-message-input" placeholder="Type your message..." class="form-control">
+                <button onclick="sendMessage()" class="btn btn-primary">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+        <div class="chat-actions">
+            <button onclick="clearChatHistory()" class="btn btn-secondary">Clear Chat History</button>
         </div>
     </div>
     
@@ -354,6 +422,10 @@
             window.location.href = `/worklist/study/${studyId}/report/`;
         }
         
+        function printReport(reportId) {
+            window.open(`/worklist/report/${reportId}/print/`, '_blank');
+        }
+        
         function getCookie(name) {
             let cookieValue = null;
             if (document.cookie && document.cookie !== '') {
@@ -378,21 +450,240 @@
             return token;
         }
         
-        // Check for notifications
+        // Notification and Chat functionality
         {% if is_admin or is_radiologist %}
-        function checkNotifications() {
-            fetch('/worklist/notifications/')
+        let currentNotificationFilter = 'all';
+        let currentChatFilter = 'all';
+        
+        function toggleNotifications() {
+            const panel = document.getElementById('notifications-panel');
+            const chatPanel = document.getElementById('chat-panel');
+            chatPanel.style.display = 'none'; // Close chat if open
+            panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+            if (panel.style.display === 'block') {
+                loadNotifications();
+            }
+        }
+        
+        function toggleChat() {
+            const panel = document.getElementById('chat-panel');
+            const notifPanel = document.getElementById('notifications-panel');
+            notifPanel.style.display = 'none'; // Close notifications if open
+            panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+            if (panel.style.display === 'block') {
+                loadChatMessages();
+            }
+        }
+        
+        function closeNotifications() {
+            document.getElementById('notifications-panel').style.display = 'none';
+        }
+        
+        function closeChat() {
+            document.getElementById('chat-panel').style.display = 'none';
+        }
+        
+        function loadNotifications() {
+            fetch(`/worklist/api/notifications/?filter=${currentNotificationFilter}`)
                 .then(response => response.json())
                 .then(data => {
-                    const badge = document.getElementById('notification-count');
-                    if (data.notifications && data.notifications.length > 0) {
-                        badge.style.display = 'block';
-                        badge.querySelector('span').textContent = data.notifications.length;
-                    } else {
-                        badge.style.display = 'none';
+                    const list = document.getElementById('notifications-list');
+                    list.innerHTML = '';
+                    data.notifications.forEach(notif => {
+                        const item = document.createElement('div');
+                        item.className = `notification-item ${notif.is_read ? 'read' : 'unread'}`;
+                        item.innerHTML = `
+                            <div class="notification-header">
+                                <span class="notification-type">${notif.notification_type}</span>
+                                <span class="notification-time">${new Date(notif.created_at).toLocaleString()}</span>
+                            </div>
+                            <div class="notification-title">${notif.title}</div>
+                            <div class="notification-message">${notif.message}</div>
+                            ${!notif.is_read ? '<button onclick="markAsRead(' + notif.id + ')" class="btn btn-sm">Mark Read</button>' : ''}
+                        `;
+                        list.appendChild(item);
+                    });
+                })
+                .catch(error => console.error('Error loading notifications:', error));
+        }
+        
+        function loadChatMessages() {
+            fetch(`/worklist/api/chat/?filter=${currentChatFilter}`)
+                .then(response => response.json())
+                .then(data => {
+                    const list = document.getElementById('chat-messages');
+                    list.innerHTML = '';
+                    data.messages.forEach(msg => {
+                        const item = document.createElement('div');
+                        item.className = `chat-message ${msg.message_type}`;
+                        item.innerHTML = `
+                            <div class="message-header">
+                                <span class="message-sender">${msg.sender_name}</span>
+                                <span class="message-type">${msg.message_type}</span>
+                                <span class="message-time">${new Date(msg.created_at).toLocaleString()}</span>
+                            </div>
+                            <div class="message-content">${msg.message}</div>
+                        `;
+                        list.appendChild(item);
+                    });
+                    // Scroll to bottom
+                    list.scrollTop = list.scrollHeight;
+                })
+                .catch(error => console.error('Error loading chat messages:', error));
+        }
+        
+        function sendMessage() {
+            const messageInput = document.getElementById('chat-message-input');
+            const facilitySelect = document.getElementById('chat-facility');
+            const message = messageInput.value.trim();
+            const facilityId = facilitySelect.value;
+            
+            if (!message) return;
+            
+            fetch('/worklist/api/chat/send/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken()
+                },
+                body: JSON.stringify({
+                    message: message,
+                    facility_id: facilityId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    messageInput.value = '';
+                    loadChatMessages();
+                } else {
+                    alert('Error sending message: ' + data.error);
+                }
+            })
+            .catch(error => console.error('Error sending message:', error));
+        }
+        
+        function markAsRead(notificationId) {
+            fetch(`/worklist/api/notifications/${notificationId}/read/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCSRFToken()
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadNotifications();
+                    checkNotifications();
+                }
+            })
+            .catch(error => console.error('Error marking as read:', error));
+        }
+        
+        function markAllAsRead() {
+            fetch('/worklist/api/notifications/mark-all-read/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCSRFToken()
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadNotifications();
+                    checkNotifications();
+                }
+            })
+            .catch(error => console.error('Error marking all as read:', error));
+        }
+        
+        function clearOldNotifications() {
+            if (confirm('Clear all read notifications older than 7 days?')) {
+                fetch('/worklist/api/notifications/clear-old/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCSRFToken()
                     }
                 })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        loadNotifications();
+                        checkNotifications();
+                    }
+                })
+                .catch(error => console.error('Error clearing old notifications:', error));
+            }
+        }
+        
+        function clearChatHistory() {
+            if (confirm('Clear all chat messages? This action cannot be undone.')) {
+                fetch('/worklist/api/chat/clear/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCSRFToken()
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        loadChatMessages();
+                        checkChatMessages();
+                    }
+                })
+                .catch(error => console.error('Error clearing chat history:', error));
+            }
+        }
+        
+        // Filter button event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Notification filters
+            document.querySelectorAll('.notifications-filter .filter-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.notifications-filter .filter-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    currentNotificationFilter = this.dataset.filter;
+                    loadNotifications();
+                });
+            });
+            
+            // Chat filters
+            document.querySelectorAll('.chat-filter .filter-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.chat-filter .filter-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    currentChatFilter = this.dataset.filter;
+                    loadChatMessages();
+                });
+            });
+            
+            // Enter key to send message
+            document.getElementById('chat-message-input').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+        });
+        
+        function checkNotifications() {
+            fetch('/worklist/api/notifications/count/')
+                .then(response => response.json())
+                .then(data => {
+                    const notifCount = document.getElementById('notification-count');
+                    const chatCount = document.getElementById('chat-count');
+                    
+                    notifCount.textContent = data.unread_notifications || 0;
+                    notifCount.style.display = data.unread_notifications > 0 ? 'inline' : 'none';
+                    
+                    chatCount.textContent = data.unread_messages || 0;
+                    chatCount.style.display = data.unread_messages > 0 ? 'inline' : 'none';
+                })
                 .catch(error => console.error('Error checking notifications:', error));
+        }
+        
+        function checkChatMessages() {
+            // This would be called when new chat messages arrive
+            checkNotifications();
         }
         
         // Check notifications every 30 seconds

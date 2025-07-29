@@ -23,6 +23,7 @@ from .models import (
     DicomStudy, DicomSeries, DicomImage, Measurement, Annotation,
     Facility, Report, WorklistEntry, AIAnalysis, Notification
 )
+from django.contrib.auth.models import Group
 from .serializers import DicomStudySerializer, DicomImageSerializer
 
 
@@ -488,6 +489,10 @@ def upload_dicom_files(request):
         print(f"Unexpected error in upload_dicom_files: {e}")
         import traceback
         traceback.print_exc()
+        
+        # Create error notification
+        create_system_error_notification(f"DICOM upload error: {str(e)}", request.user)
+        
         return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
 
 
@@ -655,6 +660,22 @@ def upload_dicom_folder(request):
                     }
                 )
                 
+                # Create notifications for new study uploads
+                if created:
+                    try:
+                        # Notify radiologists
+                        radiologist_group = Group.objects.get(name='Radiologists')
+                        for radiologist in radiologist_group.user_set.all():
+                            Notification.objects.create(
+                                recipient=radiologist,
+                                notification_type='new_study',
+                                title='New Study Uploaded',
+                                message=f'New {modality} study uploaded for {patient_name} - {study_description}',
+                                related_study=study
+                            )
+                    except Group.DoesNotExist:
+                        pass
+                
                 # Create worklist entry if study was created
                 if created:
                     try:
@@ -805,6 +826,10 @@ def upload_dicom_folder(request):
         print(f"Unexpected error in upload_dicom_folder: {e}")
         import traceback
         traceback.print_exc()
+        
+        # Create error notification
+        create_system_error_notification(f"DICOM folder upload error: {str(e)}", request.user)
+        
         return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
 
 
@@ -1675,3 +1700,46 @@ def parse_dicom_time(time_str):
         except:
             pass
     return None
+
+
+@login_required
+def api_study_clinical_info(request, study_id):
+    """Get clinical information for a study"""
+    try:
+        study = DicomStudy.objects.get(id=study_id)
+        return JsonResponse({
+            'success': True,
+            'clinical_info': study.clinical_info,
+            'referring_physician': study.referring_physician,
+            'accession_number': study.accession_number
+        })
+    except DicomStudy.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Study not found'
+        })
+
+
+def create_system_error_notification(error_message, user=None):
+    """Create system error notification"""
+    try:
+        # Notify administrators
+        admin_users = User.objects.filter(is_superuser=True)
+        for admin in admin_users:
+            Notification.objects.create(
+                recipient=admin,
+                notification_type='system_error',
+                title='System Error',
+                message=error_message
+            )
+        
+        # Also notify the user if provided
+        if user and user.is_authenticated:
+            Notification.objects.create(
+                recipient=user,
+                notification_type='system_error',
+                title='Upload Error',
+                message=error_message
+            )
+    except Exception as e:
+        print(f"Error creating system error notification: {e}")
