@@ -137,6 +137,8 @@ class DicomImage(models.Model):
                 else:
                     file_path = str(self.file_path)
             
+            print(f"Attempting to load DICOM from: {file_path}")
+            
             # Check if file exists
             if not os.path.exists(file_path):
                 print(f"DICOM file not found: {file_path}")
@@ -157,18 +159,27 @@ class DicomImage(models.Model):
                     print(f"File not found in any of the attempted paths: {alt_paths}")
                     return None
                 
-            return pydicom.dcmread(file_path)
+            print(f"Loading DICOM from: {file_path}")
+            dicom_data = pydicom.dcmread(file_path)
+            print(f"Successfully loaded DICOM data for image {self.id}")
+            return dicom_data
         except Exception as e:
             print(f"Error loading DICOM from {self.file_path}: {e}")
             print(f"Attempted file path: {file_path if 'file_path' in locals() else 'unknown'}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def get_pixel_array(self):
         """Get pixel array from DICOM file"""
         dicom_data = self.load_dicom_data()
         if dicom_data and hasattr(dicom_data, 'pixel_array'):
-            return dicom_data.pixel_array
-        return None
+            pixel_array = dicom_data.pixel_array
+            print(f"Successfully extracted pixel array for image {self.id}: shape={pixel_array.shape}, dtype={pixel_array.dtype}")
+            return pixel_array
+        else:
+            print(f"Could not extract pixel array for image {self.id}")
+            return None
     
     def apply_windowing(self, pixel_array, window_width=None, window_level=None, inverted=False):
         """Apply window/level to pixel array"""
@@ -180,12 +191,16 @@ class DicomImage(models.Model):
             ww = window_width if window_width is not None else (self.window_width or 400)
             wl = window_level if window_level is not None else (self.window_center or 40)
             
+            print(f"Applying windowing: WW={ww}, WL={wl}, inverted={inverted}")
+            
             # Convert to float for calculations
             image_data = pixel_array.astype(np.float32)
             
             # Apply window/level
             min_val = wl - ww / 2
             max_val = wl + ww / 2
+            
+            print(f"Window range: {min_val} to {max_val}")
             
             # Clip and normalize
             image_data = np.clip(image_data, min_val, max_val)
@@ -199,35 +214,56 @@ class DicomImage(models.Model):
             if inverted:
                 image_data = 255 - image_data
             
-            return image_data.astype(np.uint8)
+            # Convert to uint8
+            image_data = image_data.astype(np.uint8)
+            
+            print(f"Windowing complete: min={image_data.min()}, max={image_data.max()}")
+            return image_data
+            
         except Exception as e:
             print(f"Error applying windowing: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def get_processed_image_base64(self, window_width=None, window_level=None, inverted=False):
         """Get processed image as base64 string"""
         try:
+            print(f"Processing image {self.id} with WW: {window_width}, WL: {window_level}, inverted: {inverted}")
+            
             pixel_array = self.get_pixel_array()
             if pixel_array is None:
                 print(f"Could not get pixel array for image {self.id}")
                 return None
+            
+            print(f"Pixel array shape: {pixel_array.shape}, dtype: {pixel_array.dtype}")
+            print(f"Pixel array min: {pixel_array.min()}, max: {pixel_array.max()}")
             
             processed_array = self.apply_windowing(pixel_array, window_width, window_level, inverted)
             if processed_array is None:
                 print(f"Could not apply windowing for image {self.id}")
                 return None
             
+            print(f"Processed array shape: {processed_array.shape}, dtype: {processed_array.dtype}")
+            print(f"Processed array min: {processed_array.min()}, max: {processed_array.max()}")
+            
             # Convert to PIL Image
             pil_image = Image.fromarray(processed_array, mode='L')
+            print(f"PIL image size: {pil_image.size}, mode: {pil_image.mode}")
             
             # Convert to base64
             buffer = io.BytesIO()
             pil_image.save(buffer, format='PNG')
             image_base64 = base64.b64encode(buffer.getvalue()).decode()
             
-            return f"data:image/png;base64,{image_base64}"
+            result = f"data:image/png;base64,{image_base64}"
+            print(f"Successfully created base64 image for {self.id}, length: {len(result)}")
+            
+            return result
         except Exception as e:
             print(f"Error processing image {self.id}: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def save_dicom_metadata(self):
