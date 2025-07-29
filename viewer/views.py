@@ -178,7 +178,7 @@ class FacilityCreateView(AdminRequiredMixin, CreateView):
                 facility.user = user
                 facility.save()
                 
-                messages.success(request, f'Facility "{facility.name}" created successfully with login credentials.')
+                messages.success(request, f'Facility "{facility.name}" created successfully with login credentials. AE Title: {facility.ae_title}')
                 return redirect(self.success_url)
             else:
                 messages.error(request, 'Username and password are required for facility creation.')

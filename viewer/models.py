@@ -10,6 +10,8 @@ import numpy as np
 import io
 import base64
 from django.utils import timezone
+import random
+import string
 
 
 class Facility(models.Model):
@@ -21,6 +23,7 @@ class Facility(models.Model):
     letterhead_logo = models.ImageField(upload_to='facility_logos/', null=True, blank=True)
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True, related_name='facility')
     created_at = models.DateTimeField(auto_now_add=True)
+    ae_title = models.CharField(max_length=16, unique=True, null=True, blank=True, help_text="DICOM AE Title automatically generated for this facility")
     
     class Meta:
         verbose_name_plural = "Facilities"
@@ -28,6 +31,26 @@ class Facility(models.Model):
     
     def __str__(self):
         return self.name
+
+    def generate_ae_title(self):
+        """Generate a unique 16-character AE Title based on facility name"""
+        # Base component derives from alphanumeric chars of the name (max 10 chars)
+        base = "".join(c for c in self.name.upper() if c.isalnum())[:10]
+        # Remaining length is filled with random uppercase letters/digits
+        remaining_len = 16 - len(base)
+        suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=remaining_len))
+        return (base + suffix)[:16]
+
+    def save(self, *args, **kwargs):
+        # Auto-generate AE title if not provided
+        if not self.ae_title or self.ae_title.strip() == "":
+            # Ensure uniqueness by retrying generation if collision occurs
+            for _ in range(5):
+                candidate = self.generate_ae_title()
+                if not Facility.objects.filter(ae_title=candidate).exclude(pk=self.pk).exists():
+                    self.ae_title = candidate
+                    break
+        super().save(*args, **kwargs)
 
 
 class DicomStudy(models.Model):
