@@ -98,8 +98,8 @@
                             <td>{{ entry.modality }}</td>
                             <td>{{ entry.scheduled_procedure_step_start_date|date:"Y-m-d" }} {{ entry.scheduled_procedure_step_start_time|time:"H:i" }}</td>
                             <td>
-                                <span class="status-badge status-{{ entry.status }}">
-                                    {{ entry.get_status_display }}
+                                <span class="status-badge status-{{ entry.display_status }}">
+                                    {{ entry.status_display }}
                                 </span>
                             </td>
                             <td>{{ entry.facility.name|default:"N/A" }}</td>

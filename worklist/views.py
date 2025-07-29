@@ -81,6 +81,29 @@ class WorklistView(LoginRequiredMixin, ListView):
         context['modalities'] = ['CT', 'MR', 'CR', 'DX', 'US', 'MG', 'PT', 'NM']
         context['is_radiologist'] = self.request.user.groups.filter(name='Radiologists').exists()
         context['is_admin'] = self.request.user.is_superuser
+        
+        # Add status information for each entry
+        for entry in context['entries']:
+            if entry.study:
+                # Check if there's a finalized report
+                finalized_report = Report.objects.filter(
+                    study=entry.study,
+                    status='finalized'
+                ).first()
+                
+                if finalized_report:
+                    entry.display_status = 'completed'
+                    entry.status_display = 'Completed'
+                elif entry.status == 'in_progress':
+                    entry.display_status = 'in_progress'
+                    entry.status_display = 'In Progress'
+                else:
+                    entry.display_status = 'scheduled'
+                    entry.status_display = 'Scheduled'
+            else:
+                entry.display_status = entry.status
+                entry.status_display = entry.get_status_display()
+        
         return context
 
 
@@ -110,6 +133,11 @@ def add_clinical_info(request, entry_id):
 def view_study_from_worklist(request, entry_id):
     """Launch viewer with images from worklist entry"""
     entry = get_object_or_404(WorklistEntry, id=entry_id)
+    
+    # Update status to "in_progress" when radiologist opens images
+    if request.user.groups.filter(name='Radiologists').exists():
+        entry.status = 'in_progress'
+        entry.save()
     
     if entry.study:
         # Redirect to viewer with study ID
@@ -181,6 +209,12 @@ def create_report(request, study_id):
         if data.get('finalize'):
             report.status = 'finalized'
             report.finalized_at = timezone.now()
+            
+            # Update worklist entry status to completed
+            if study.worklist_entries.exists():
+                worklist_entry = study.worklist_entries.first()
+                worklist_entry.status = 'completed'
+                worklist_entry.save()
             
             # Create notification for facility
             if study.facility:
