@@ -1159,31 +1159,227 @@ body {
     color: #fff;
 }
 
-/* Clinical Information Section */
+/* Enhanced Patient Info Panel */
+.patient-info-panel {
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 10px;
+}
+
+.patient-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.info-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+}
+
+.info-label {
+    font-weight: 600;
+    color: #888;
+    min-width: 80px;
+}
+
+.info-value {
+    color: #fff;
+    font-weight: 500;
+}
+
+/* Notification Bell */
+.notification-bell-container {
+    position: relative;
+}
+
+.notification-bell {
+    background: #333;
+    border: 1px solid #555;
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.notification-bell:hover {
+    background: #444;
+    border-color: #666;
+    transform: translateY(-1px);
+}
+
+.notification-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #ff4444;
+    color: white;
+    font-size: 11px;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.notification-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 10px;
+    width: 350px;
+    background: #252525;
+    border: 1px solid #444;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    z-index: 1000;
+    max-height: 400px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.notification-header {
+    padding: 15px;
+    border-bottom: 1px solid #444;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.notification-header h4 {
+    margin: 0;
+    color: #fff;
+    font-size: 16px;
+}
+
+.clear-all-btn {
+    background: none;
+    border: 1px solid #666;
+    color: #ccc;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.clear-all-btn:hover {
+    background: #444;
+    color: #fff;
+}
+
+.notification-list {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 320px;
+}
+
+.no-notifications {
+    text-align: center;
+    color: #888;
+    padding: 40px 20px;
+    margin: 0;
+}
+
+.notification-item {
+    padding: 15px;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    transition: background 0.2s ease;
+}
+
+.notification-item:hover {
+    background: #2a2a2a;
+}
+
+.notification-item.unread {
+    background: #1a2a1a;
+    border-left: 3px solid #00ff00;
+}
+
+.notification-content h5 {
+    margin: 0 0 5px 0;
+    color: #fff;
+    font-size: 14px;
+}
+
+.notification-content p {
+    margin: 0 0 5px 0;
+    color: #ccc;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.notification-time {
+    font-size: 11px;
+    color: #888;
+}
+
+.mark-read-btn {
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.mark-read-btn:hover {
+    background: #333;
+    color: #00ff00;
+}
+
+/* Enhanced Clinical Information Section */
 .clinical-info-section {
     background: #2a2a2a;
-    border: 1px solid #555;
-    border-radius: 5px;
+    border: 2px solid #444;
+    border-radius: 8px;
     margin-top: 10px;
     overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.clinical-info-section.expanded {
+    border-color: #00ff00;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
 }
 
 .clinical-info-header {
     background: #333;
-    padding: 8px 12px;
+    padding: 12px 16px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.clinical-info-header:hover {
+    background: #3a3a3a;
 }
 
 .clinical-info-header h4 {
     margin: 0;
-    font-size: 14px;
+    font-size: 15px;
     color: #00ff00;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+}
+
+.clinical-info-header h4 i {
+    font-size: 18px;
 }
 
 .btn-toggle {
@@ -1191,9 +1387,10 @@ body {
     border: none;
     color: #ccc;
     cursor: pointer;
-    font-size: 12px;
-    padding: 2px;
-    border-radius: 3px;
+    font-size: 14px;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
 }
 
 .btn-toggle:hover {
@@ -1202,24 +1399,55 @@ body {
 }
 
 .clinical-info-content {
-    padding: 12px;
-    border-top: 1px solid #555;
-    max-height: 150px;
+    padding: 16px;
+    border-top: 1px solid #444;
+    max-height: 200px;
     overflow-y: auto;
+    transition: max-height 0.3s ease;
+}
+
+.clinical-info-content.collapsed {
+    max-height: 0;
+    padding: 0 16px;
+    overflow: hidden;
+}
+
+.clinical-history,
+.clinical-notes,
+.referring-physician {
+    margin-bottom: 16px;
+}
+
+.clinical-history:last-child,
+.clinical-notes:last-child,
+.referring-physician:last-child {
+    margin-bottom: 0;
+}
+
+.clinical-info-content h5 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    color: #00ff00;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .clinical-info-content p {
     margin: 0;
     color: #ccc;
-    font-size: 13px;
-    line-height: 1.4;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
 }
 
-.clinical-info-content.collapsed {
-    display: none;
-}
-
-.clinical-info.expanded {
-    background: #1a3a1a;
-    border-color: #00ff00;
+/* Responsive adjustments for clinical info */
+@media (max-width: 1200px) {
+    .clinical-info-section {
+        margin-top: 8px;
+    }
+    
+    .clinical-info-content {
+        max-height: 150px;
+    }
 }

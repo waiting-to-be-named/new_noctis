@@ -961,6 +961,7 @@ def get_study_images(request, study_id):
                 'study_date': study.study_date,
                 'modality': study.modality,
                 'study_description': study.study_description,
+                'institution_name': study.institution_name,
             },
             'images': images_data
         })
@@ -2124,3 +2125,63 @@ def generate_general_analysis(image, modality, body_part):
         ],
         'recommendations': 'Clinical correlation and comparison with prior imaging recommended.'
     }
+
+
+@login_required
+def get_notifications(request):
+    """Get notifications for the current user"""
+    notifications = Notification.objects.filter(
+        recipient=request.user
+    ).order_by('-created_at')[:20]
+    
+    data = []
+    for notification in notifications:
+        data.append({
+            'id': notification.id,
+            'title': notification.title,
+            'message': notification.message,
+            'notification_type': notification.notification_type,
+            'is_read': notification.is_read,
+            'created_at': notification.created_at.isoformat(),
+            'related_study_id': notification.related_study_id if notification.related_study else None
+        })
+    
+    return JsonResponse(data, safe=False)
+
+
+@login_required
+def get_unread_notification_count(request):
+    """Get count of unread notifications"""
+    count = Notification.objects.filter(
+        recipient=request.user,
+        is_read=False
+    ).count()
+    
+    return JsonResponse({'count': count})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(['POST'])
+def mark_notification_read(request, notification_id):
+    """Mark a notification as read"""
+    try:
+        notification = Notification.objects.get(
+            id=notification_id,
+            recipient=request.user
+        )
+        notification.is_read = True
+        notification.save()
+        
+        return JsonResponse({'success': True})
+    except Notification.DoesNotExist:
+        return JsonResponse({'error': 'Notification not found'}, status=404)
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(['POST'])
+def clear_all_notifications(request):
+    """Clear all notifications for the current user"""
+    Notification.objects.filter(recipient=request.user).delete()
+    return JsonResponse({'success': True})

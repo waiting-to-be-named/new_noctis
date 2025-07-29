@@ -343,12 +343,9 @@ class DicomViewer {
         progressText.textContent = `Uploading ${validFiles.length} files...`;
         
         try {
-            const response = await fetch('/viewer/api/upload/', {
+            const response = await fetch('/viewer/upload/', {
                 method: 'POST',
-                body: formData,
-                headers: {
-                    'X-CSRFToken': this.getCSRFToken()
-                }
+                body: formData
             });
             
             progressFill.style.width = '100%';
@@ -726,17 +723,16 @@ class DicomViewer {
     
     updatePatientInfo() {
         if (!this.currentStudy) {
-            const patientInfo = document.getElementById('patient-info');
-            if (patientInfo) {
-                patientInfo.textContent = 'Patient: - | Study Date: - | Modality: -';
-            }
+            document.getElementById('patient-name').textContent = '-';
+            document.getElementById('study-date').textContent = '-';
+            document.getElementById('modality').textContent = '-';
             return;
         }
         
-        const patientInfo = document.getElementById('patient-info');
-        if (patientInfo) {
-            patientInfo.textContent = `Patient: ${this.currentStudy.patient_name} | Study Date: ${this.currentStudy.study_date} | Modality: ${this.currentStudy.modality}`;
-        }
+        // Update individual patient info fields
+        document.getElementById('patient-name').textContent = this.currentStudy.patient_name || 'Unknown';
+        document.getElementById('study-date').textContent = this.currentStudy.study_date || '-';
+        document.getElementById('modality').textContent = this.currentStudy.modality || '-';
         
         // Update image info in right panel if elements exist
         const currentImageData = this.currentImages[this.currentImageIndex];
@@ -747,16 +743,17 @@ class DicomViewer {
             const infoInstitution = document.getElementById('info-institution');
             
             if (infoDimensions) {
-                infoDimensions.textContent = `${currentImageData.columns}x${currentImageData.rows}`;
+                infoDimensions.textContent = `${currentImageData.columns || 0}x${currentImageData.rows || 0}`;
             }
             if (infoPixelSpacing) {
-                infoPixelSpacing.textContent = 
-                    `${currentImageData.pixel_spacing_x || 'Unknown'}\\${currentImageData.pixel_spacing_y || 'Unknown'}`;
+                const spacingX = currentImageData.pixel_spacing_x || 'Unknown';
+                const spacingY = currentImageData.pixel_spacing_y || 'Unknown';
+                infoPixelSpacing.textContent = `${spacingX}\\${spacingY}`;
             }
             if (infoSeries) {
                 infoSeries.textContent = currentImageData.series_description || 'Unknown';
             }
-            if (infoInstitution) {
+            if (infoInstitution && this.currentStudy) {
                 infoInstitution.textContent = this.currentStudy.institution_name || 'Unknown';
             }
         }
@@ -2507,10 +2504,15 @@ ${this.aiAnalysisResults.recommendations || 'None'}`;
     }
 }
 
-// Initialize the viewer when the page loads
+// Initialize viewer
 let viewer;
-document.addEventListener('DOMContentLoaded', () => {
-    // Get initial study ID from global variable (if set by template)
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize the viewer with the initial study ID if provided
     const initialStudyId = window.initialStudyId || null;
+    console.log('Initializing DicomViewer with study ID:', initialStudyId);
     viewer = new DicomViewer(initialStudyId);
+    
+    // Make viewer globally accessible for debugging
+    window.dicomViewer = viewer;
 });
