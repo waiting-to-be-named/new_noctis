@@ -12,6 +12,7 @@ import base64
 from django.utils import timezone
 import random
 import string
+from django.core.files.storage import default_storage
 
 
 class Facility(models.Model):
@@ -168,39 +169,45 @@ class DicomImage(models.Model):
         return f"Image {self.instance_number}"
     
     def load_dicom_data(self):
-        """Load and return pydicom dataset"""
-        if not self.file_path:
-            print(f"No file path for DicomImage {self.id}")
-            return None
-            
+        """Load DICOM data from file"""
         try:
-            # Handle both FileField and string paths
-            if hasattr(self.file_path, 'path'):
-                file_path = self.file_path.path
-            else:
-                # Check if it's a relative path, make it absolute
-                if not os.path.isabs(str(self.file_path)):
-                    from django.conf import settings
-                    file_path = os.path.join(settings.MEDIA_ROOT, str(self.file_path))
-                else:
-                    file_path = str(self.file_path)
+            if not self.file_path:
+                print(f"No file path for image {self.id}")
+                return None
             
-            # Check if file exists
+            # Convert FieldFile to string if necessary
+            file_path_str = str(self.file_path) if hasattr(self.file_path, '__str__') else self.file_path
+            
+            # Try to get the full file path
+            try:
+                # First try using default_storage.path (works for local filesystem)
+                file_path = default_storage.path(file_path_str)
+                if os.path.exists(file_path):
+                    return pydicom.dcmread(file_path)
+            except (NotImplementedError, AttributeError):
+                # Storage backend doesn't support .path() method (e.g., cloud storage)
+                pass
+            
+            # Try opening the file through default_storage
+            try:
+                with default_storage.open(file_path_str, 'rb') as f:
+                    return pydicom.dcmread(f)
+            except Exception as e:
+                print(f"Failed to open file through storage: {e}")
+            
+            # Fallback: Try alternative paths
             if not os.path.exists(file_path):
-                print(f"DICOM file not found: {file_path}")
-                print(f"Current working directory: {os.getcwd()}")
-                print(f"File path from model: {self.file_path}")
-                # Try alternative paths
+                # Try different possible paths
                 alt_paths = [
-                    os.path.join(os.getcwd(), 'media', str(self.file_path).replace('dicom_files/', '')),
-                    os.path.join(os.getcwd(), str(self.file_path)),
-                    str(self.file_path)
+                    os.path.join(settings.MEDIA_ROOT, file_path_str),
+                    os.path.join(settings.BASE_DIR, 'media', file_path_str),
+                    file_path_str,  # Try the path as-is
                 ]
+                
                 for alt_path in alt_paths:
                     if os.path.exists(alt_path):
                         print(f"Found file at alternative path: {alt_path}")
-                        file_path = alt_path
-                        break
+                        return pydicom.dcmread(alt_path)
                 else:
                     print(f"File not found in any of the attempted paths: {alt_paths}")
                     return None
@@ -208,15 +215,60 @@ class DicomImage(models.Model):
             return pydicom.dcmread(file_path)
         except Exception as e:
             print(f"Error loading DICOM from {self.file_path}: {e}")
-            print(f"Attempted file path: {file_path if 'file_path' in locals() else 'unknown'}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def get_pixel_array(self):
         """Get pixel array from DICOM file"""
         dicom_data = self.load_dicom_data()
-        if dicom_data and hasattr(dicom_data, 'pixel_array'):
-            return dicom_data.pixel_array
-        return None
+        if not dicom_data:
+            return None
+            
+        try:
+            # Try to get pixel array directly
+            if hasattr(dicom_data, 'pixel_array'):
+                return dicom_data.pixel_array
+            
+            # Try to access PixelData and convert manually
+            if hasattr(dicom_data, 'PixelData'):
+                # Get image dimensions
+                rows = getattr(dicom_data, 'Rows', 0)
+                columns = getattr(dicom_data, 'Columns', 0)
+                samples_per_pixel = getattr(dicom_data, 'SamplesPerPixel', 1)
+                bits_allocated = getattr(dicom_data, 'BitsAllocated', 16)
+                
+                if rows > 0 and columns > 0:
+                    # Determine data type based on bits allocated
+                    if bits_allocated <= 8:
+                        dtype = np.uint8
+                    elif bits_allocated <= 16:
+                        dtype = np.uint16
+                    else:
+                        dtype = np.uint32
+                    
+                    # Convert pixel data to numpy array
+                    pixel_data = dicom_data.PixelData
+                    pixel_array = np.frombuffer(pixel_data, dtype=dtype)
+                    
+                    # Reshape based on image dimensions
+                    if samples_per_pixel == 1:
+                        # Grayscale image
+                        pixel_array = pixel_array.reshape((rows, columns))
+                    else:
+                        # Color image
+                        pixel_array = pixel_array.reshape((rows, columns, samples_per_pixel))
+                    
+                    return pixel_array
+            
+            print(f"No pixel data found in DICOM file for image {self.id}")
+            return None
+            
+        except Exception as e:
+            print(f"Error extracting pixel array for image {self.id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
     
     def apply_windowing(self, pixel_array, window_width=None, window_level=None, inverted=False):
         """Apply window/level to pixel array"""
@@ -260,6 +312,28 @@ class DicomImage(models.Model):
                 print(f"Could not get pixel array for image {self.id}")
                 return None
             
+            # Handle different pixel array dimensions
+            if len(pixel_array.shape) > 2:
+                # Multi-frame or color image - take first frame/channel
+                if len(pixel_array.shape) == 3:
+                    if pixel_array.shape[0] < pixel_array.shape[2]:
+                        # Likely (frames, height, width) - take first frame
+                        pixel_array = pixel_array[0]
+                    else:
+                        # Likely (height, width, channels) - convert to grayscale
+                        if pixel_array.shape[2] == 3:  # RGB
+                            pixel_array = np.mean(pixel_array, axis=2)
+                        else:
+                            pixel_array = pixel_array[:, :, 0]
+                elif len(pixel_array.shape) == 4:
+                    # (frames, height, width, channels) - take first frame, first channel
+                    pixel_array = pixel_array[0, :, :, 0]
+            
+            # Ensure we have a 2D array
+            if len(pixel_array.shape) != 2:
+                print(f"Unexpected pixel array shape for image {self.id}: {pixel_array.shape}")
+                return None
+            
             processed_array = self.apply_windowing(pixel_array, window_width, window_level, inverted)
             if processed_array is None:
                 print(f"Could not apply windowing for image {self.id}")
@@ -276,6 +350,8 @@ class DicomImage(models.Model):
             return f"data:image/png;base64,{image_base64}"
         except Exception as e:
             print(f"Error processing image {self.id}: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def save_dicom_metadata(self):
