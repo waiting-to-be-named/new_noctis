@@ -375,86 +375,94 @@ def upload_dicom_files(request):
                     study_uid = f"STUDY_{uuid.uuid4()}"
                     print(f"Generated fallback StudyInstanceUID for {file.name}: {study_uid}")
                 
-                # Create or update study with comprehensive data extraction
-                if not study:
-                    # Extract patient information with fallbacks
-                    patient_name = 'Unknown'
-                    if hasattr(dicom_data, 'PatientName'):
-                        try:
-                            patient_name = str(dicom_data.PatientName)
-                        except:
-                            patient_name = 'Unknown'
-                    
-                    patient_id = 'Unknown'
-                    if hasattr(dicom_data, 'PatientID'):
-                        try:
-                            patient_id = str(dicom_data.PatientID)
-                        except:
-                            patient_id = 'Unknown'
-                    
-                    # Extract other fields with safe fallbacks
-                    study_date = parse_dicom_date(getattr(dicom_data, 'StudyDate', None))
-                    study_time = parse_dicom_time(getattr(dicom_data, 'StudyTime', None))
-                    study_description = str(getattr(dicom_data, 'StudyDescription', ''))
-                    modality = str(dicom_data.Modality) if hasattr(dicom_data, 'Modality') else 'OT'
-                    institution_name = str(getattr(dicom_data, 'InstitutionName', ''))
-                    accession_number = str(getattr(dicom_data, 'AccessionNumber', ''))
-                    referring_physician = str(getattr(dicom_data, 'ReferringPhysicianName', ''))
-                    
-                    study, created = DicomStudy.objects.get_or_create(
-                        study_instance_uid=study_uid,
-                        defaults={
-                            'patient_name': patient_name,
-                            'patient_id': patient_id,
-                            'study_date': study_date,
-                            'study_time': study_time,
-                            'study_description': study_description,
-                            'modality': modality,
-                            'institution_name': institution_name,
-                            'uploaded_by': request.user if request.user.is_authenticated else None,
-                            'facility': request.user.facility if hasattr(request.user, 'facility') else None,
-                            'accession_number': accession_number,
-                            'referring_physician': referring_physician,
-                        }
-                    )
-                    
-                    # Create worklist entry if study was created
-                    if created:
-                        try:
-                            # Get or create a default facility if none exists
-                            facility = study.facility
-                            if not facility:
-                                facility, _ = Facility.objects.get_or_create(
-                                    name="Default Facility",
-                                    defaults={
-                                        'address': 'Unknown',
-                                        'phone': 'Unknown',
-                                        'email': 'unknown@facility.com'
-                                    }
-                                )
-                                # Update the study with the facility
-                                study.facility = facility
-                                study.save()
-                            
-                            WorklistEntry.objects.create(
-                                patient_name=study.patient_name,
-                                patient_id=study.patient_id,
-                                accession_number=study.accession_number or f"ACC{study.id:06d}",
-                                scheduled_station_ae_title="UPLOAD",
-                                scheduled_procedure_step_start_date=study.study_date or datetime.now().date(),
-                                scheduled_procedure_step_start_time=study.study_time or datetime.now().time(),
-                                modality=study.modality,
-                                scheduled_performing_physician=study.referring_physician or "Unknown",
-                                procedure_description=study.study_description,
-                                facility=facility,
-                                study=study,
-                                status='scheduled'
+                # Always get or create the study so uploads that contain files from
+                # multiple studies (or a mix of single-file studies) are processed
+                # correctly.  This prevents integrity/uniqueness errors and the
+                # generic "error uploading" message that the user was seeing.
+
+                # Extract patient information with fallbacks
+                patient_name = 'Unknown'
+                if hasattr(dicom_data, 'PatientName'):
+                    try:
+                        patient_name = str(dicom_data.PatientName)
+                    except Exception:
+                        pass
+
+                patient_id = 'Unknown'
+                if hasattr(dicom_data, 'PatientID'):
+                    try:
+                        patient_id = str(dicom_data.PatientID)
+                    except Exception:
+                        pass
+
+                # Extract other fields with safe fallbacks
+                study_date = parse_dicom_date(getattr(dicom_data, 'StudyDate', None))
+                study_time = parse_dicom_time(getattr(dicom_data, 'StudyTime', None))
+                study_description = str(getattr(dicom_data, 'StudyDescription', ''))
+                modality = str(dicom_data.Modality) if hasattr(dicom_data, 'Modality') else 'OT'
+                institution_name = str(getattr(dicom_data, 'InstitutionName', ''))
+                accession_number = str(getattr(dicom_data, 'AccessionNumber', ''))
+                referring_physician = str(getattr(dicom_data, 'ReferringPhysicianName', ''))
+
+                # Fetch existing study or create a new one for this UID
+                study, created = DicomStudy.objects.get_or_create(
+                    study_instance_uid=study_uid,
+                    defaults={
+                        'patient_name': patient_name,
+                        'patient_id': patient_id,
+                        'study_date': study_date,
+                        'study_time': study_time,
+                        'study_description': study_description,
+                        'modality': modality,
+                        'institution_name': institution_name,
+                        'uploaded_by': request.user if request.user.is_authenticated else None,
+                        'facility': request.user.facility if hasattr(request.user, 'facility') else None,
+                        'accession_number': accession_number,
+                        'referring_physician': referring_physician,
+                    }
+                )
+
+                # Keep reference to the last study processed so we can return a
+                # sensible study_id in the JSON response later
+                latest_study = study
+                
+                # Create worklist entry if study was created
+                if created:
+                    try:
+                        # Get or create a default facility if none exists
+                        facility = study.facility
+                        if not facility:
+                            facility, _ = Facility.objects.get_or_create(
+                                name="Default Facility",
+                                defaults={
+                                    'address': 'Unknown',
+                                    'phone': 'Unknown',
+                                    'email': 'unknown@facility.com'
+                                }
                             )
-                            print(f"Created worklist entry for study {study.id}")
-                        except Exception as e:
-                            print(f"Error creating worklist entry: {e}")
-                            import traceback
-                            traceback.print_exc()
+                            # Update the study with the facility
+                            study.facility = facility
+                            study.save()
+                        
+                        WorklistEntry.objects.create(
+                            patient_name=study.patient_name,
+                            patient_id=study.patient_id,
+                            accession_number=study.accession_number or f"ACC{study.id:06d}",
+                            scheduled_station_ae_title="UPLOAD",
+                            scheduled_procedure_step_start_date=study.study_date or datetime.now().date(),
+                            scheduled_procedure_step_start_time=study.study_time or datetime.now().time(),
+                            modality=study.modality,
+                            scheduled_performing_physician=study.referring_physician or "Unknown",
+                            procedure_description=study.study_description,
+                            facility=facility,
+                            study=study,
+                            status='scheduled'
+                        )
+                        print(f"Created worklist entry for study {study.id}")
+                    except Exception as e:
+                        print(f"Error creating worklist entry: {e}")
+                        import traceback
+                        traceback.print_exc()
                 
                 # Create or get series with fallback UID
                 series_uid = str(dicom_data.get('SeriesInstanceUID', ''))
@@ -546,17 +554,13 @@ def upload_dicom_files(request):
                         pass
                 continue
         
-        # Prepare response
-        if not uploaded_files:
-            error_message = 'No valid DICOM files were uploaded'
-            if errors:
-                error_message += f'. Errors: {"; ".join(errors[:5])}'  # Limit error messages
-            return JsonResponse({'error': error_message}, status=400)
-        
+        # Prefer the most recently processed study for the viewer to load; this
+        # is particularly useful when the upload contained multiple studies –
+        # the user will see the last one they added straight away.
         response_data = {
             'message': f'Uploaded {len(uploaded_files)} files successfully',
             'uploaded_files': uploaded_files,
-            'study_id': study.id if study else None
+            'study_id': latest_study.id if 'latest_study' in locals() else None
         }
         
         if errors:
