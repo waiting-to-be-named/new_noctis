@@ -615,3 +615,18 @@ body {
 .btn-print:hover {
     background: #7b1fa2;
 }
+
+.btn-delete {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin: 2px;
+    font-size: 12px;
+}
+
+.btn-delete:hover {
+    background: #c82333;
+}
