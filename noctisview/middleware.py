@@ -72,7 +72,9 @@ class CSRFMiddleware(MiddlewareMixin):
     
     def process_view(self, request, callback, callback_args, callback_kwargs):
         # Skip CSRF check for specific API endpoints that handle file uploads
-        if hasattr(callback, '__name__') and any(name in callback.__name__ for name in ['upload', 'save']):
+        if (request.path.startswith('/viewer/api/upload/') or 
+            request.path.startswith('/viewer/api/upload-folder/') or
+            (hasattr(callback, '__name__') and any(name in callback.__name__ for name in ['upload', 'save']))):
             return None
             
         # Skip CSRF for API endpoints that are explicitly marked as csrf_exempt

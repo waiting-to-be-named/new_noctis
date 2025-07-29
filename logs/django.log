@@ -177,3 +177,47 @@ DEBUG 2025-07-29 12:14:19,359 middleware 4822 139700427806400 Request duration: 
 INFO 2025-07-29 12:14:19,359 middleware 4822 139700427806400 API Response: GET /viewer/api/images/4/data/ - Status: 200
 DEBUG 2025-07-29 12:14:19,359 middleware 4822 139700427806400 Response size: 5813 bytes
 INFO 2025-07-29 12:14:19,359 basehttp 4822 139700427806400 "GET /viewer/api/images/4/data/ HTTP/1.1" 200 5813
+INFO 2025-07-29 12:29:56,120 middleware 1923 140151386714368 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:29:56,121 middleware 1923 140151386714368 Request body size: 20 bytes
+DEBUG 2025-07-29 12:29:56,121 middleware 1923 140151386714368 Request duration: POST /viewer/api/upload/ took 0.001s
+INFO 2025-07-29 12:29:56,121 middleware 1923 140151386714368 API Response: POST /viewer/api/upload/ - Status: 400
+DEBUG 2025-07-29 12:29:56,121 middleware 1923 140151386714368 Response size: 30 bytes
+WARNING 2025-07-29 12:29:56,121 log 1923 140151386714368 Bad Request: /viewer/api/upload/
+INFO 2025-07-29 12:29:56,416 middleware 1923 140151386714368 API Request: GET /viewer/api/upload/
+WARNING 2025-07-29 12:29:56,417 log 1923 140151386714368 Method Not Allowed (GET): /viewer/api/upload/
+DEBUG 2025-07-29 12:29:56,417 middleware 1923 140151386714368 Request duration: GET /viewer/api/upload/ took 0.000s
+INFO 2025-07-29 12:29:56,417 middleware 1923 140151386714368 API Response: GET /viewer/api/upload/ - Status: 405
+DEBUG 2025-07-29 12:29:56,417 middleware 1923 140151386714368 Response size: 0 bytes
+INFO 2025-07-29 12:29:57,046 middleware 1923 140151386714368 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:29:57,047 middleware 1923 140151386714368 Request body size: 20 bytes
+DEBUG 2025-07-29 12:29:57,047 middleware 1923 140151386714368 Request duration: POST /viewer/api/upload/ took 0.000s
+INFO 2025-07-29 12:29:57,047 middleware 1923 140151386714368 API Response: POST /viewer/api/upload/ - Status: 400
+DEBUG 2025-07-29 12:29:57,047 middleware 1923 140151386714368 Response size: 30 bytes
+WARNING 2025-07-29 12:29:57,047 log 1923 140151386714368 Bad Request: /viewer/api/upload/
+INFO 2025-07-29 12:30:24,009 middleware 1990 140637043028224 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:30:24,009 middleware 1990 140637043028224 Request body size: 131786 bytes
+DEBUG 2025-07-29 12:30:24,017 middleware 1990 140637043028224 Request duration: POST /viewer/api/upload/ took 0.008s
+INFO 2025-07-29 12:30:24,017 middleware 1990 140637043028224 API Response: POST /viewer/api/upload/ - Status: 200
+DEBUG 2025-07-29 12:30:24,017 middleware 1990 140637043028224 Response size: 91 bytes
+INFO 2025-07-29 12:30:27,441 middleware 2011 140145254555904 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:30:27,441 middleware 2011 140145254555904 Request body size: 20 bytes
+DEBUG 2025-07-29 12:30:27,442 middleware 2011 140145254555904 Request duration: POST /viewer/api/upload/ took 0.000s
+INFO 2025-07-29 12:30:27,442 middleware 2011 140145254555904 API Response: POST /viewer/api/upload/ - Status: 400
+DEBUG 2025-07-29 12:30:27,442 middleware 2011 140145254555904 Response size: 30 bytes
+WARNING 2025-07-29 12:30:27,442 log 2011 140145254555904 Bad Request: /viewer/api/upload/
+INFO 2025-07-29 12:30:27,726 middleware 2011 140145254555904 API Request: GET /viewer/api/upload/
+WARNING 2025-07-29 12:30:27,726 log 2011 140145254555904 Method Not Allowed (GET): /viewer/api/upload/
+DEBUG 2025-07-29 12:30:27,726 middleware 2011 140145254555904 Request duration: GET /viewer/api/upload/ took 0.000s
+INFO 2025-07-29 12:30:27,726 middleware 2011 140145254555904 API Response: GET /viewer/api/upload/ - Status: 405
+DEBUG 2025-07-29 12:30:27,726 middleware 2011 140145254555904 Response size: 0 bytes
+INFO 2025-07-29 12:30:28,013 middleware 2011 140145254555904 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:30:28,013 middleware 2011 140145254555904 Request body size: 131786 bytes
+DEBUG 2025-07-29 12:30:28,021 middleware 2011 140145254555904 Request duration: POST /viewer/api/upload/ took 0.008s
+INFO 2025-07-29 12:30:28,021 middleware 2011 140145254555904 API Response: POST /viewer/api/upload/ - Status: 200
+DEBUG 2025-07-29 12:30:28,022 middleware 2011 140145254555904 Response size: 91 bytes
+INFO 2025-07-29 12:30:28,316 middleware 2011 140145254555904 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:30:28,316 middleware 2011 140145254555904 Request body size: 20 bytes
+DEBUG 2025-07-29 12:30:28,317 middleware 2011 140145254555904 Request duration: POST /viewer/api/upload/ took 0.000s
+INFO 2025-07-29 12:30:28,317 middleware 2011 140145254555904 API Response: POST /viewer/api/upload/ - Status: 400
+DEBUG 2025-07-29 12:30:28,317 middleware 2011 140145254555904 Response size: 30 bytes
+WARNING 2025-07-29 12:30:28,317 log 2011 140145254555904 Bad Request: /viewer/api/upload/

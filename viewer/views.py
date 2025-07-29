@@ -26,6 +26,7 @@ from .models import (
 from django.contrib.auth.models import Group
 from .serializers import DicomStudySerializer, DicomImageSerializer
 import io
+import pathlib
 
 
 # Ensure required directories exist
@@ -342,8 +343,11 @@ def upload_dicom_files(request):
                 try:
                     # Method 1: Try reading from file path
                     if hasattr(default_storage, 'path'):
-                        print(f"Trying to read DICOM from file path: {default_storage.path(file_path)}")
-                        dicom_data = pydicom.dcmread(default_storage.path(file_path))
+                        file_physical_path = default_storage.path(file_path)
+                        print(f"Trying to read DICOM from file path: {file_physical_path}")
+                        # Ensure the path is normalized for the current OS
+                        normalized_path = str(pathlib.Path(file_physical_path).resolve())
+                        dicom_data = pydicom.dcmread(normalized_path)
                     else:
                         # Method 2: Try reading from bytes
                         print(f"Trying to read DICOM from bytes for file: {file.name}")
@@ -353,8 +357,10 @@ def upload_dicom_files(request):
                     try:
                         # Method 3: Try reading with force=True (more permissive)
                         if hasattr(default_storage, 'path'):
-                            print(f"Trying force=True from file path: {default_storage.path(file_path)}")
-                            dicom_data = pydicom.dcmread(default_storage.path(file_path), force=True)
+                            file_physical_path = default_storage.path(file_path)
+                            normalized_path = str(pathlib.Path(file_physical_path).resolve())
+                            print(f"Trying force=True from file path: {normalized_path}")
+                            dicom_data = pydicom.dcmread(normalized_path, force=True)
                         else:
                             print(f"Trying force=True from bytes for file: {file.name}")
                             dicom_data = pydicom.dcmread(io.BytesIO(file_content), force=True)
@@ -570,6 +576,7 @@ def upload_dicom_files(request):
             error_message = 'No valid DICOM files were uploaded'
             if errors:
                 error_message += f'. Errors: {"; ".join(errors[:5])}'  # Limit error messages
+            print(f"Upload failed: {error_message}")
             return JsonResponse({'error': error_message}, status=400)
         
         response_data = {
@@ -580,7 +587,9 @@ def upload_dicom_files(request):
         
         if errors:
             response_data['warnings'] = errors[:5]  # Include warnings for partial success
+            print(f"Upload completed with warnings: {errors[:5]}")
         
+        print(f"Upload successful: {len(uploaded_files)} files uploaded")
         return JsonResponse(response_data)
         
     except Exception as e:
