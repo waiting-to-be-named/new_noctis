@@ -260,13 +260,27 @@ class DicomImage(models.Model):
                 print(f"Could not get pixel array for image {self.id}")
                 return None
             
-            processed_array = self.apply_windowing(pixel_array, window_width, window_level, inverted)
-            if processed_array is None:
-                print(f"Could not apply windowing for image {self.id}")
-                return None
+            # If the pixel data already has 3 dimensions (e.g. RGB) we skip
+            # window/level processing and use the data as-is.  This prevents
+            # crashes when colour images are uploaded (e.g. some ultrasound or
+            # photograph DICOMs) and eliminates the blank canvas the user
+            # reported when pressing “View”.
+
+            if pixel_array.ndim == 3 and pixel_array.shape[-1] in (3, 4):
+                # Ensure the data is in 0-255 uint8 range
+                if pixel_array.dtype != np.uint8:
+                    pixel_array = np.clip(pixel_array, 0, 255).astype(np.uint8)
+                processed_array = pixel_array
+                pil_mode = 'RGB' if pixel_array.shape[-1] == 3 else 'RGBA'
+            else:
+                processed_array = self.apply_windowing(pixel_array, window_width, window_level, inverted)
+                if processed_array is None:
+                    print(f"Could not apply windowing for image {self.id}")
+                    return None
+                pil_mode = 'L'
             
             # Convert to PIL Image
-            pil_image = Image.fromarray(processed_array, mode='L')
+            pil_image = Image.fromarray(processed_array, mode=pil_mode)
             
             # Convert to base64
             buffer = io.BytesIO()
