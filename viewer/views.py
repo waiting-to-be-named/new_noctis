@@ -871,6 +871,18 @@ def upload_dicom_folder(request):
                             except:
                                 photometric_interpretation = 'MONOCHROME2'
                         
+                        # Extract pixel spacing
+                        pixel_spacing_x = None
+                        pixel_spacing_y = None
+                        if hasattr(dicom_data, 'PixelSpacing'):
+                            try:
+                                pixel_spacing = dicom_data.PixelSpacing
+                                if isinstance(pixel_spacing, (list, tuple)) and len(pixel_spacing) >= 2:
+                                    pixel_spacing_x = float(pixel_spacing[0])
+                                    pixel_spacing_y = float(pixel_spacing[1])
+                            except:
+                                pass
+                        
                         image, created = DicomImage.objects.get_or_create(
                             series=series,
                             sop_instance_uid=image_instance_uid,

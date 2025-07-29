@@ -174,16 +174,33 @@ class DicomImage(models.Model):
             return None
             
         try:
+            # Clean up path for cross-platform compatibility
+            original_path = str(self.file_path)
+            
+            # Handle Windows absolute paths
+            if ':' in original_path and len(original_path) > 2:
+                # It's a Windows absolute path, extract relative part
+                clean_path = original_path[2:].replace('\\', '/')
+                if clean_path.startswith('/'):
+                    clean_path = clean_path[1:]
+                
+                # Extract just the dicom_files/filename part if present
+                if 'dicom_files' in clean_path:
+                    idx = clean_path.find('dicom_files')
+                    clean_path = clean_path[idx:]
+                else:
+                    # Just use dicom_files/basename
+                    clean_path = f"dicom_files/{os.path.basename(clean_path)}"
+            else:
+                clean_path = original_path.replace('\\', '/')
+            
             # Handle both FileField and string paths
             if hasattr(self.file_path, 'path'):
                 file_path = self.file_path.path
             else:
-                # Check if it's a relative path, make it absolute
-                if not os.path.isabs(str(self.file_path)):
-                    from django.conf import settings
-                    file_path = os.path.join(settings.MEDIA_ROOT, str(self.file_path))
-                else:
-                    file_path = str(self.file_path)
+                # Build full path
+                from django.conf import settings
+                file_path = os.path.join(settings.MEDIA_ROOT, clean_path)
             
             # Check if file exists
             if not os.path.exists(file_path):
@@ -191,15 +208,25 @@ class DicomImage(models.Model):
                 print(f"Current working directory: {os.getcwd()}")
                 print(f"File path from model: {self.file_path}")
                 # Try alternative paths
+                basename = os.path.basename(original_path)
                 alt_paths = [
-                    os.path.join(os.getcwd(), 'media', str(self.file_path).replace('dicom_files/', '')),
-                    os.path.join(os.getcwd(), str(self.file_path)),
-                    str(self.file_path)
+                    os.path.join(settings.MEDIA_ROOT, 'dicom_files', basename),
+                    os.path.join(settings.MEDIA_ROOT, clean_path),
+                    os.path.join(os.getcwd(), 'media', 'dicom_files', basename),
+                    os.path.join(os.getcwd(), 'media', clean_path)
                 ]
                 for alt_path in alt_paths:
                     if os.path.exists(alt_path):
                         print(f"Found file at alternative path: {alt_path}")
                         file_path = alt_path
+                        # Update the stored path for future use
+                        if 'dicom_files' in alt_path:
+                            idx = alt_path.find('dicom_files')
+                            new_path = alt_path[idx:]
+                            if new_path.startswith(settings.MEDIA_ROOT):
+                                new_path = os.path.relpath(alt_path, settings.MEDIA_ROOT)
+                            self.file_path = new_path
+                            self.save(update_fields=['file_path'])
                         break
                 else:
                     print(f"File not found in any of the attempted paths: {alt_paths}")
