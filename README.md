@@ -68,15 +68,34 @@ python manage.py makemigrations
 python manage.py migrate
 ```
 
-5. Create a superuser:
-```bash
-python manage.py createsuperuser
-```
+5. Remove test data and setup for real users:
+   
+   **Option A: Interactive Setup Script (Recommended)**
+   ```bash
+   python3 setup_real_users.py
+   ```
+   This script will guide you through removing test data and setting up real users.
+   
+   **Option B: Manual Setup**
+   ```bash
+   # First, check what test data exists
+   python manage.py remove_test_data
+   
+   # Remove test data and create a real facility
+   python manage.py remove_test_data --confirm \
+     --facility-name "Your Hospital Name" \
+     --facility-address "123 Medical Center Dr" \
+     --facility-phone "555-123-4567" \
+     --facility-email "info@yourhospital.com"
+   
+   # Create a superuser (real admin account)
+   python manage.py createsuperuser
+   ```
 
 6. Run the development server:
-```bash
-python manage.py runserver
-```
+   ```bash
+   python manage.py runserver
+   ```
 
 7. Access the system at `http://localhost:8000`
 
