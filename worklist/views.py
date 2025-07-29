@@ -113,7 +113,7 @@ def view_study_from_worklist(request, entry_id):
     
     if entry.study:
         # Redirect to viewer with study ID
-        return redirect('viewer:viewer', study_id=entry.study.id)
+        return redirect('viewer:viewer_with_study', study_id=entry.study.id)
     else:
         return JsonResponse({'error': 'No images available for this entry'}, status=404)
 
@@ -203,20 +203,36 @@ def create_report(request, study_id):
         })
     
     else:
-        # GET request - return existing report if any
-        try:
-            report = Report.objects.filter(study=study).latest('created_at')
-            return JsonResponse({
-                'findings': report.findings,
-                'impression': report.impression,
-                'recommendations': report.recommendations,
-                'status': report.status,
-                'radiologist': report.radiologist.get_full_name() or report.radiologist.username,
-                'created_at': report.created_at.isoformat(),
-                'finalized_at': report.finalized_at.isoformat() if report.finalized_at else None
-            })
-        except Report.DoesNotExist:
-            return JsonResponse({})
+        # GET request - check if it's an AJAX request or regular page load
+        if request.headers.get('Content-Type') == 'application/json' or request.headers.get('Accept') == 'application/json':
+            # AJAX request - return existing report if any
+            try:
+                report = Report.objects.filter(study=study).latest('created_at')
+                return JsonResponse({
+                    'findings': report.findings,
+                    'impression': report.impression,
+                    'recommendations': report.recommendations,
+                    'status': report.status,
+                    'radiologist': report.radiologist.get_full_name() or report.radiologist.username,
+                    'created_at': report.created_at.isoformat(),
+                    'finalized_at': report.finalized_at.isoformat() if report.finalized_at else None
+                })
+            except Report.DoesNotExist:
+                return JsonResponse({})
+        else:
+            # Regular page request - render report creation template
+            try:
+                report = Report.objects.filter(study=study).latest('created_at')
+            except Report.DoesNotExist:
+                report = None
+            
+            context = {
+                'study': study,
+                'report': report,
+                'is_radiologist': request.user.groups.filter(name='Radiologists').exists(),
+                'is_admin': request.user.is_superuser
+            }
+            return render(request, 'worklist/report.html', context)
 
 
 @login_required
