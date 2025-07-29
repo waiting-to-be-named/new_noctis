@@ -185,7 +185,7 @@
                             <div class="action-buttons">
                                 {% if entry.study %}
                                 <button class="btn btn-view" onclick="viewStudy({{ entry.id }})">
-                                    <i class="fas fa-eye"></i> View
+                                    <i class="fas fa-eye"></i> View Image
                                 </button>
                                     {% if entry.study.reports.exists %}
                                         {% with report=entry.study.reports.first %}
