@@ -4,7 +4,7 @@ from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from .models import (
     Facility, DicomStudy, DicomSeries, DicomImage, Measurement, 
-    Annotation, Report, WorklistEntry, AIAnalysis, Notification
+    Annotation, Report, WorklistEntry, AIAnalysis, Notification, FacilityStaff
 )
 
 # Register your models here.
@@ -108,3 +108,10 @@ class AnnotationAdmin(admin.ModelAdmin):
             'fields': ('created_by', 'created_at')
         }),
     )
+
+
+@admin.register(FacilityStaff)
+class FacilityStaffAdmin(admin.ModelAdmin):
+    list_display = ['user', 'facility', 'created_at']
+    search_fields = ['user__username', 'facility__name']
+    list_filter = ['facility']

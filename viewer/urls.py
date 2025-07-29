@@ -12,6 +12,7 @@ urlpatterns = [
     path('admin/facilities/', views.FacilityListView.as_view(), name='facility_list'),
     path('admin/facilities/new/', views.FacilityCreateView.as_view(), name='facility_create'),
     path('admin/facilities/<int:pk>/edit/', views.FacilityUpdateView.as_view(), name='facility_edit'),
+    path('admin/facilities/<int:pk>/delete/', views.facility_delete, name='facility_delete'),
     path('admin/radiologists/', views.RadiologistListView.as_view(), name='radiologist_list'),
     path('admin/radiologists/new/', views.create_radiologist, name='radiologist_create'),
     

@@ -57,10 +57,19 @@
                     <i class="fas fa-robot"></i>
                     <span>AI</span>
                 </button>
-                <button class="tool-btn" data-tool="3d" title="3D Reconstruction">
-                    <i class="fas fa-cube"></i>
-                    <span>3D</span>
-                </button>
+                <div class="dropdown">
+                    <button class="tool-btn dropdown-toggle" title="3D Reconstruction" onclick="const m=document.getElementById('dropdown-3d');m.style.display = (m.style.display==='block') ? 'none' : 'block';">
+                        <i class="fas fa-cube"></i>
+                        <span>3D</span>
+                        <i class="fas fa-chevron-down" style="margin-left:4px;"></i>
+                    </button>
+                    <div id="dropdown-3d" class="dropdown-menu" style="display:none;">
+                        <button class="dropdown-item" data-3d="mpr">Multi-planar (MPR)</button>
+                        <button class="dropdown-item" data-3d="bone">Bone window</button>
+                        <button class="dropdown-item" data-3d="angiogram">CT-Angiogram</button>
+                        <button class="dropdown-item" data-3d="virtual_surgery">Virtual surgery</button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -302,7 +311,41 @@
             if (window.initialStudyId) {
                 loadClinicalInfo(window.initialStudyId);
             }
+
+            // 3D dropdown behaviour
+            document.addEventListener('click', function(evt){
+                const menu = document.getElementById('dropdown-3d');
+                if(!menu) return;
+                if(!evt.target.closest('.dropdown')){
+                    menu.style.display = 'none';
+                }
+            });
+
+            const dropdownMenu = document.getElementById('dropdown-3d');
+            if(dropdownMenu){
+                dropdownMenu.querySelectorAll('.dropdown-item').forEach(function(item){
+                    item.addEventListener('click', function(){
+                        const reconType = this.getAttribute('data-3d');
+                        dropdownMenu.style.display='none';
+                        if(window.currentSeriesId){
+                            perform3DReconstruction(window.currentSeriesId, reconType);
+                        } else {
+                            alert('Load a series first.');
+                        }
+                    });
+                });
+            }
         });
+
+        function perform3DReconstruction(seriesId, reconType){
+            fetch(`/viewer/api/series/${seriesId}/3d-reconstruction/?type=${reconType}`)
+                .then(r=>r.json())
+                .then(data=>{
+                    console.log('3D Reconstruction data', data);
+                    alert('3D reconstruction ('+reconType+') ready – integrate rendering logic here.');
+                })
+                .catch(err=>alert('Error performing 3D reconstruction: '+err));
+        }
     </script>
     <script src="{% static 'js/dicom_viewer.js' %}"></script>
 </body>

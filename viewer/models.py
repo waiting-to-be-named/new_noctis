@@ -28,6 +28,27 @@ class Facility(models.Model):
     def __str__(self):
         return self.name
 
+# -- NEW CODE: FacilityStaff model to map a login user to their Facility --
+class FacilityStaff(models.Model):
+    """Link a Django auth ``User`` to a ``Facility`` so that we can easily check
+    which facility a logged-in user belongs to.  The reverse relation
+    ``user.facility_staff`` is relied upon in multiple views (viewer & worklist) –
+    adding this model makes those look-ups work out of the box.
+    Only non-admin users that upload or review their own studies will be added
+    to this table.
+    """
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="facility_staff")
+    facility = models.ForeignKey(Facility, on_delete=models.CASCADE, related_name="staff_members")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = "Facility staff"
+        unique_together = ("user", "facility")
+
+    def __str__(self):
+        return f"{self.user.username} – {self.facility.name}"
+
 
 class DicomStudy(models.Model):
     """Model to represent a DICOM study"""

@@ -314,6 +314,28 @@
                     <div class="helptext">Upload an image file (PNG, JPG, GIF) for the facility letterhead. Recommended size: 200x100px</div>
                 </div>
                 
+                <!-- NEW: Facility staff login credentials -->
+                <hr style="border:1px solid #333; margin:40px 0;">
+                <h3 style="color:#00ff00; margin-bottom:20px;">
+                    <i class="fas fa-user-lock"></i> Facility Login Credentials (optional)
+                </h3>
+
+                <div class="form-group">
+                    <label for="id_staff_username">Username</label>
+                    <input type="text" name="staff_username" id="id_staff_username" class="form-control" placeholder="facility_user">
+                    <div class="helptext">If provided, a user account will be created and linked to this facility.</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="id_staff_password">Password</label>
+                    <input type="password" name="staff_password" id="id_staff_password" class="form-control" placeholder="••••••••">
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_staff_email">Email (optional)</label>
+                    <input type="email" name="staff_email" id="id_staff_email" class="form-control" placeholder="user@facility.com">
+                </div>
+                
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-save"></i> 

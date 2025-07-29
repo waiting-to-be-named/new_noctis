@@ -257,6 +257,9 @@
                             <a href="{% url 'viewer:facility_edit' facility.pk %}" class="btn btn-edit">
                                 <i class="fas fa-edit"></i> Edit
                             </a>
+                            <a href="{% url 'viewer:facility_delete' facility.pk %}" class="btn btn-secondary" style="margin-left:6px;" onclick="return confirm('Are you sure you want to delete this facility? All associated data will be removed.');">
+                                <i class="fas fa-trash"></i> Delete
+                            </a>
                         </td>
                     </tr>
                     {% endfor %}
