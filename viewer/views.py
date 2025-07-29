@@ -294,9 +294,27 @@ def upload_dicom_files(request):
                         }
                     )
                     
-                    # Create worklist entry if study was created
-                    if created:
-                        try:
+                    # Create or update/attach worklist entry so that the study is visible in the worklist
+                    try:
+                        # Try to find an existing entry using accession number first, then study UID
+                        worklist_entry = None
+                        if study.accession_number:
+                            worklist_entry = WorklistEntry.objects.filter(accession_number=study.accession_number).first()
+                        if not worklist_entry:
+                            worklist_entry = WorklistEntry.objects.filter(study=study).first()
+                        
+                        if worklist_entry:
+                            # Update the entry with the study link and mark as completed
+                            worklist_entry.study = study
+                            worklist_entry.status = 'completed'
+                            # Ensure mandatory scheduling fields are populated
+                            if not worklist_entry.scheduled_procedure_step_start_date:
+                                worklist_entry.scheduled_procedure_step_start_date = study.study_date or datetime.now().date()
+                            if not worklist_entry.scheduled_procedure_step_start_time:
+                                worklist_entry.scheduled_procedure_step_start_time = study.study_time or datetime.now().time()
+                            worklist_entry.save()
+                        else:
+                            # No existing entry – create a new completed entry so that it appears in the UI
                             WorklistEntry.objects.create(
                                 patient_name=study.patient_name,
                                 patient_id=study.patient_id,
@@ -309,10 +327,10 @@ def upload_dicom_files(request):
                                 procedure_description=study.study_description,
                                 facility=study.facility or Facility.objects.first(),
                                 study=study,
-                                status='completed'
+                                status='completed',
                             )
-                        except Exception as e:
-                            print(f"Error creating worklist entry: {e}")
+                    except Exception as e:
+                        print(f"Error creating/updating worklist entry: {e}")
                 
                 # Create or get series with fallback UID
                 series_uid = str(dicom_data.get('SeriesInstanceUID', ''))
@@ -594,8 +612,25 @@ def upload_dicom_folder(request):
                 )
                 
                 # Create worklist entry if study was created
-                if created:
-                    try:
+                try:
+                    # Try to find an existing entry using accession number first, then study link
+                    worklist_entry = None
+                    if study.accession_number:
+                        worklist_entry = WorklistEntry.objects.filter(accession_number=study.accession_number).first()
+                    if not worklist_entry:
+                        worklist_entry = WorklistEntry.objects.filter(study=study).first()
+
+                    if worklist_entry:
+                        # Update existing entry and mark as completed
+                        worklist_entry.study = study
+                        worklist_entry.status = 'completed'
+                        if not worklist_entry.scheduled_procedure_step_start_date:
+                            worklist_entry.scheduled_procedure_step_start_date = study.study_date or datetime.now().date()
+                        if not worklist_entry.scheduled_procedure_step_start_time:
+                            worklist_entry.scheduled_procedure_step_start_time = study.study_time or datetime.now().time()
+                        worklist_entry.save()
+                    else:
+                        # No matching entry – create one so the study appears in the worklist
                         WorklistEntry.objects.create(
                             patient_name=study.patient_name,
                             patient_id=study.patient_id,
@@ -608,10 +643,10 @@ def upload_dicom_folder(request):
                             procedure_description=study.study_description,
                             facility=study.facility or Facility.objects.first(),
                             study=study,
-                            status='completed'
+                            status='completed',
                         )
-                    except Exception as e:
-                        print(f"Error creating worklist entry: {e}")
+                except Exception as e:
+                    print(f"Error creating/updating worklist entry: {e}")
                 
                 # Process each file in the study
                 for i, dicom_data in enumerate(study_data['dicom_data']):

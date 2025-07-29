@@ -52,6 +52,13 @@ class WorklistView(LoginRequiredMixin, ListView):
         if modality:
             queryset = queryset.filter(modality=modality)
             
+        # Filter by facility if facility id provided in query params (used by dropdown)
+        facility_id = self.request.GET.get('facility')
+        if facility_id:
+            try:
+                queryset = queryset.filter(facility_id=int(facility_id))
+            except ValueError:
+                pass  # Ignore invalid facility ids
         return queryset
     
     def get_context_data(self, **kwargs):
