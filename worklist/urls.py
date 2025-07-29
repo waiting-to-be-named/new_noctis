@@ -13,6 +13,9 @@ urlpatterns = [
     # Clinical info
     path('entry/<int:entry_id>/clinical-info/', views.add_clinical_info, name='add_clinical_info'),
     
+    # Delete worklist entry (admin only)
+    path('entry/<int:entry_id>/delete/', views.delete_worklist_entry, name='delete_worklist_entry'),
+    
     # View study from worklist
     path('entry/<int:entry_id>/view/', views.view_study_from_worklist, name='view_study'),
     
