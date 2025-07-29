@@ -574,3 +574,17 @@ def create_system_upload_message(study, user):
         message=f'New study uploaded: {study.patient_name} - {study.study_description or study.modality}',
         related_study=study
     )
+
+
+@login_required
+@require_http_methods(['POST'])
+def delete_worklist_entry(request, entry_id):
+    """Delete a worklist entry (admin only)."""
+    entry = get_object_or_404(WorklistEntry, id=entry_id)
+
+    # Only administrators (superusers) can delete worklist entries
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    entry.delete()
+    return JsonResponse({'success': True})
