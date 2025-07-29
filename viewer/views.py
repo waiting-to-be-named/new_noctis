@@ -554,6 +554,14 @@ def upload_dicom_files(request):
                 
                 if created:
                     uploaded_files.append(file.name)
+                else:
+                    # Image already exists, but still add to uploaded files with a note
+                    uploaded_files.append(f"{file.name} (already exists)")
+                    # Clean up the duplicate file we just saved
+                    try:
+                        default_storage.delete(file_path)
+                    except:
+                        pass
                 
             except Exception as e:
                 print(f"Error processing file {file.name}: {e}")
@@ -893,6 +901,14 @@ def upload_dicom_folder(request):
                         
                         if created:
                             uploaded_files.append(study_data['files'][i])
+                        else:
+                            # Image already exists, but still add to uploaded files with a note
+                            uploaded_files.append(f"{study_data['files'][i]} (already exists)")
+                            # Clean up the duplicate file we just saved
+                            try:
+                                default_storage.delete(study_data['file_paths'][i])
+                            except:
+                                pass
                             
                     except Exception as e:
                         print(f"Error processing image in study {study_uid}: {e}")
