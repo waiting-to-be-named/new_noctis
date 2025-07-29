@@ -178,21 +178,20 @@ class DicomImage(models.Model):
             if hasattr(self.file_path, 'path'):
                 file_path = self.file_path.path
             else:
-                # Check if it's a relative path, make it absolute
-                if not os.path.isabs(str(self.file_path)):
-                    from django.conf import settings
-                    file_path = os.path.join(settings.MEDIA_ROOT, str(self.file_path))
-                else:
-                    file_path = str(self.file_path)
+                # Use Django's settings to get the correct media root
+                from django.conf import settings
+                file_path = os.path.join(settings.MEDIA_ROOT, str(self.file_path))
             
             # Check if file exists
             if not os.path.exists(file_path):
                 print(f"DICOM file not found: {file_path}")
                 print(f"Current working directory: {os.getcwd()}")
                 print(f"File path from model: {self.file_path}")
+                print(f"MEDIA_ROOT: {settings.MEDIA_ROOT}")
+                
                 # Try alternative paths
                 alt_paths = [
-                    os.path.join(os.getcwd(), 'media', str(self.file_path).replace('dicom_files/', '')),
+                    os.path.join(os.getcwd(), 'media', str(self.file_path)),
                     os.path.join(os.getcwd(), str(self.file_path)),
                     str(self.file_path)
                 ]

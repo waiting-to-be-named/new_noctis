@@ -616,6 +616,7 @@ class DicomViewer {
             }
             
             const data = await response.json();
+            console.log('Study data received:', data);
             
             if (!data.images || data.images.length === 0) {
                 throw new Error('No images found in this study');
@@ -689,6 +690,11 @@ class DicomViewer {
             }
             
             const data = await response.json();
+            console.log('Image data received:', { 
+                hasImageData: !!data.image_data, 
+                hasMetadata: !!data.metadata,
+                imageDataLength: data.image_data ? data.image_data.length : 0
+            });
             
             if (data.image_data) {
                 const img = new Image();
