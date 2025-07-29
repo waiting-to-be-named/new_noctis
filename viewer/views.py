@@ -25,6 +25,7 @@ from .models import (
 )
 from django.contrib.auth.models import Group
 from .serializers import DicomStudySerializer, DicomImageSerializer
+import io
 
 
 # Ensure required directories exist
@@ -311,6 +312,11 @@ def upload_dicom_files(request):
                     errors.append(f"File {file.name} is too large (max 100MB)")
                     continue
                 
+                # Check for minimum file size (DICOM files should be at least 128 bytes)
+                if file_size < 128:
+                    errors.append(f"File {file.name} is too small to be a valid DICOM file")
+                    continue
+                
                 # Accept any file that might be DICOM (more permissive)
                 is_dicom_candidate = (
                     file_name.endswith(('.dcm', '.dicom')) or
@@ -327,41 +333,33 @@ def upload_dicom_files(request):
                     errors.append(f"File {file.name} does not appear to be a DICOM file")
                     continue
                 
+                # Try to read DICOM data first before saving to validate it's actually DICOM
+                dicom_data = None
+                try:
+                    # Read file content and try to parse as DICOM
+                    file.seek(0)
+                    file_bytes = file.read()
+                    
+                    # Try to read as DICOM
+                    dicom_data = pydicom.dcmread(io.BytesIO(file_bytes), force=True)
+                    
+                    # Basic DICOM validation - check for essential tags
+                    if not hasattr(dicom_data, 'pixel_array') and not hasattr(dicom_data, 'PixelData'):
+                        # Allow DICOM without pixel data (like SR, PR files)
+                        print(f"Warning: {file.name} is DICOM but has no pixel data")
+                    
+                except Exception as e:
+                    print(f"Failed to read DICOM file {file.name}: {e}")
+                    errors.append(f"Could not read DICOM data from {file.name}: {str(e)}")
+                    continue
+                
                 # Save file with unique name to avoid conflicts
                 import uuid
                 unique_filename = f"{uuid.uuid4()}_{file.name}"
-                file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file.read()))
                 
-                # Try to read DICOM data with multiple fallback methods
-                dicom_data = None
-                try:
-                    # Method 1: Try reading from file path
-                    dicom_data = pydicom.dcmread(default_storage.path(file_path))
-                except Exception as e1:
-                    try:
-                        # Method 2: Try reading from file object
-                        file.seek(0)  # Reset file pointer
-                        dicom_data = pydicom.dcmread(file)
-                        # Re-save the file after successful read
-                        file.seek(0)
-                        file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file.read()))
-                    except Exception as e2:
-                        try:
-                            # Method 3: Try reading as bytes
-                            file.seek(0)
-                            file_bytes = file.read()
-                            dicom_data = pydicom.dcmread(file_bytes)
-                            # Save the bytes
-                            file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file_bytes))
-                        except Exception as e3:
-                            print(f"Failed to read DICOM file {file.name}: {e1}, {e2}, {e3}")
-                            # Clean up the saved file
-                            try:
-                                default_storage.delete(file_path)
-                            except:
-                                pass
-                            errors.append(f"Could not read DICOM data from {file.name}")
-                            continue
+                # Reset file pointer and save
+                file.seek(0)
+                file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file_bytes))
                 
                 # Validate that we have essential DICOM tags
                 if not dicom_data:
@@ -369,7 +367,7 @@ def upload_dicom_files(request):
                     continue
                 
                 # Get study UID with fallback
-                study_uid = str(dicom_data.get('StudyInstanceUID', ''))
+                study_uid = str(getattr(dicom_data, 'StudyInstanceUID', ''))
                 if not study_uid:
                     # Try to generate a fallback study UID
                     study_uid = f"STUDY_{uuid.uuid4()}"
@@ -396,7 +394,7 @@ def upload_dicom_files(request):
                     study_date = parse_dicom_date(getattr(dicom_data, 'StudyDate', None))
                     study_time = parse_dicom_time(getattr(dicom_data, 'StudyTime', None))
                     study_description = str(getattr(dicom_data, 'StudyDescription', ''))
-                    modality = str(dicom_data.Modality) if hasattr(dicom_data, 'Modality') else 'OT'
+                    modality = str(getattr(dicom_data, 'Modality', 'OT'))
                     institution_name = str(getattr(dicom_data, 'InstitutionName', ''))
                     accession_number = str(getattr(dicom_data, 'AccessionNumber', ''))
                     referring_physician = str(getattr(dicom_data, 'ReferringPhysicianName', ''))
@@ -457,7 +455,7 @@ def upload_dicom_files(request):
                             traceback.print_exc()
                 
                 # Create or get series with fallback UID
-                series_uid = str(dicom_data.get('SeriesInstanceUID', ''))
+                series_uid = str(getattr(dicom_data, 'SeriesInstanceUID', ''))
                 if not series_uid:
                     series_uid = f"SERIES_{uuid.uuid4()}"
                     print(f"Generated fallback SeriesInstanceUID for {file.name}: {series_uid}")
@@ -466,14 +464,14 @@ def upload_dicom_files(request):
                     study=study,
                     series_instance_uid=series_uid,
                     defaults={
-                        'series_number': int(dicom_data.get('SeriesNumber', 0)),
+                        'series_number': int(getattr(dicom_data, 'SeriesNumber', 0)),
                         'series_description': str(getattr(dicom_data, 'SeriesDescription', '')),
-                        'modality': str(dicom_data.Modality) if hasattr(dicom_data, 'Modality') else 'OT',
+                        'modality': str(getattr(dicom_data, 'Modality', 'OT')),
                     }
                 )
                 
                 # Create image with fallback UID
-                image_instance_uid = str(dicom_data.get('SOPInstanceUID', ''))
+                image_instance_uid = str(getattr(dicom_data, 'SOPInstanceUID', ''))
                 if not image_instance_uid:
                     image_instance_uid = f"IMAGE_{uuid.uuid4()}"
                     print(f"Generated fallback SOPInstanceUID for {file.name}: {image_instance_uid}")
@@ -515,29 +513,70 @@ def upload_dicom_files(request):
                     except:
                         photometric_interpretation = 'MONOCHROME2'
                 
+                # Extract pixel spacing
+                pixel_spacing = getattr(dicom_data, 'PixelSpacing', None)
+                pixel_spacing_x = None
+                pixel_spacing_y = None
+                if pixel_spacing and len(pixel_spacing) >= 2:
+                    try:
+                        pixel_spacing_x = float(pixel_spacing[0])
+                        pixel_spacing_y = float(pixel_spacing[1])
+                    except:
+                        pass
+                
+                # Extract windowing parameters
+                window_center = getattr(dicom_data, 'WindowCenter', None)
+                window_width = getattr(dicom_data, 'WindowWidth', None)
+                
+                if window_center is not None:
+                    try:
+                        # Handle multiple window centers (use first one)
+                        if hasattr(window_center, '__iter__') and not isinstance(window_center, str):
+                            window_center = float(window_center[0])
+                        else:
+                            window_center = float(window_center)
+                    except:
+                        window_center = None
+                
+                if window_width is not None:
+                    try:
+                        # Handle multiple window widths (use first one)
+                        if hasattr(window_width, '__iter__') and not isinstance(window_width, str):
+                            window_width = float(window_width[0])
+                        else:
+                            window_width = float(window_width)
+                    except:
+                        window_width = None
+                
                 image, created = DicomImage.objects.get_or_create(
                     series=series,
                     sop_instance_uid=image_instance_uid,
                     defaults={
-                        'image_number': int(dicom_data.get('InstanceNumber', 0)),
+                        'instance_number': int(getattr(dicom_data, 'InstanceNumber', 0)),
                         'file_path': file_path,
                         'rows': rows,
                         'columns': columns,
                         'bits_allocated': bits_allocated,
                         'samples_per_pixel': samples_per_pixel,
                         'photometric_interpretation': photometric_interpretation,
-                        'pixel_spacing': str(getattr(dicom_data, 'PixelSpacing', '')),
+                        'pixel_spacing_x': pixel_spacing_x,
+                        'pixel_spacing_y': pixel_spacing_y,
                         'slice_thickness': float(getattr(dicom_data, 'SliceThickness', 0)),
-                        'window_center': str(getattr(dicom_data, 'WindowCenter', '')),
-                        'window_width': str(getattr(dicom_data, 'WindowWidth', '')),
+                        'window_center': window_center,
+                        'window_width': window_width,
                     }
                 )
                 
                 if created:
                     uploaded_files.append(file.name)
+                    print(f"Successfully uploaded and processed {file.name}")
+                else:
+                    print(f"Image {file.name} already exists in database")
                 
             except Exception as e:
                 print(f"Error processing file {file.name}: {e}")
+                import traceback
+                traceback.print_exc()
                 errors.append(f"Error processing {file.name}: {str(e)}")
                 if 'file_path' in locals():
                     try:
