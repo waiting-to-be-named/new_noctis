@@ -1552,6 +1552,13 @@ class DicomViewer {
                     if (measurement.hounsfield_min !== undefined) {
                         displayText += ` (${measurement.hounsfield_min.toFixed(1)} - ${measurement.hounsfield_max.toFixed(1)})`;
                     }
+                    // Add enhanced information if available
+                    if (measurement.tissue_type) {
+                        displayText += ` | ${measurement.tissue_type}`;
+                    }
+                    if (measurement.clinical_significance) {
+                        displayText += ` | ${measurement.clinical_significance.split(' - ')[0]}`;
+                    }
                     if (measurement.notes) {
                         displayText += ` - ${measurement.notes}`;
                     }
@@ -2445,13 +2452,42 @@ ${this.aiAnalysisResults.recommendations || 'None'}`;
                     unit: 'HU',
                     hounsfield_min: data.hounsfield_min,
                     hounsfield_max: data.hounsfield_max,
-                    hounsfield_std: data.hounsfield_std
+                    hounsfield_std: data.hounsfield_std,
+                    median_hu: data.median_hu,
+                    ci_lower: data.ci_lower,
+                    ci_upper: data.ci_upper,
+                    coefficient_of_variation: data.coefficient_of_variation,
+                    roi_area_mm2: data.roi_area_mm2,
+                    tissue_type: data.tissue_type,
+                    clinical_significance: data.clinical_significance,
+                    anatomical_context: data.anatomical_context,
+                    reference_range: data.reference_range
                 });
                 this.updateDisplay();
                 
-                // Show HU values in alert
+                // Show enhanced HU values in detailed alert
                 if (data.hounsfield_mean !== undefined) {
-                    alert(`Hounsfield Unit Measurements:\n\nMean: ${data.hounsfield_mean.toFixed(1)} HU\nMin: ${data.hounsfield_min.toFixed(1)} HU\nMax: ${data.hounsfield_max.toFixed(1)} HU\nStd Dev: ${data.hounsfield_std.toFixed(1)} HU`);
+                    const message = `Hounsfield Unit Analysis (Enhanced):
+
+📊 STATISTICAL DATA:
+Mean: ${data.hounsfield_mean.toFixed(1)} HU
+Median: ${data.median_hu.toFixed(1)} HU
+Range: ${data.hounsfield_min.toFixed(1)} - ${data.hounsfield_max.toFixed(1)} HU
+Std Dev: ${data.hounsfield_std.toFixed(1)} HU
+95% CI: ${data.ci_lower.toFixed(1)} - ${data.ci_upper.toFixed(1)} HU
+CV: ${data.coefficient_of_variation.toFixed(1)}%
+
+🔬 CLINICAL INTERPRETATION:
+Tissue Type: ${data.tissue_type}
+Anatomical Context: ${data.anatomical_context}
+Clinical Significance: ${data.clinical_significance}
+Reference Range: ${data.reference_range}
+
+📐 MEASUREMENT DETAILS:
+ROI Area: ${data.roi_area_mm2.toFixed(1)} mm²
+Pixel Count: ${data.pixel_count}`;
+                    
+                    alert(message);
                 }
             }
         })
