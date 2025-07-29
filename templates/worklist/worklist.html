@@ -206,18 +206,38 @@
             <button class="filter-btn active" data-filter="all">All Messages</button>
             <button class="filter-btn" data-filter="system_upload">System Uploads</button>
             <button class="filter-btn" data-filter="user_chat">User Chats</button>
+            <button class="filter-btn" data-filter="facility_broadcast">Facility Broadcasts</button>
         </div>
         <div class="chat-messages" id="chat-messages">
             <!-- Chat messages will be loaded here -->
         </div>
         <div class="chat-input-area">
-            <div class="facility-selector">
-                <select id="chat-facility" class="form-select">
-                    <option value="">Select Facility</option>
-                    {% for facility in facilities %}
-                    <option value="{{ facility.id }}">{{ facility.name }}</option>
-                    {% endfor %}
-                </select>
+            <div class="targeting-section">
+                <div class="target-type-selector">
+                    <label>
+                        <input type="radio" name="target-type" value="facility" checked> 
+                        <span>Facility Broadcast</span>
+                    </label>
+                    <label>
+                        <input type="radio" name="target-type" value="user"> 
+                        <span>Direct Message</span>
+                    </label>
+                </div>
+                <div class="target-selectors">
+                    <div class="facility-selector" id="facility-selector">
+                        <select id="chat-facility" class="form-select">
+                            <option value="">Select Facility</option>
+                            {% for facility in facilities %}
+                            <option value="{{ facility.id }}">{{ facility.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="user-selector" id="user-selector" style="display: none;">
+                        <select id="chat-user" class="form-select">
+                            <option value="">Select User</option>
+                        </select>
+                    </div>
+                </div>
             </div>
             <div class="message-input">
                 <input type="text" id="chat-message-input" placeholder="Type your message..." class="form-control">
@@ -227,6 +247,9 @@
             </div>
         </div>
         <div class="chat-actions">
+            <button onclick="loadChatUsers()" class="btn btn-info">
+                <i class="fas fa-users"></i> Refresh Users
+            </button>
             <button onclick="clearChatHistory()" class="btn btn-secondary">Clear Chat History</button>
         </div>
     </div>
@@ -508,18 +531,35 @@
         }
         
         function loadChatMessages() {
-            fetch(`/worklist/api/chat/?filter=${currentChatFilter}`)
+            const facilityId = document.getElementById('chat-facility').value;
+            let url = `/worklist/api/chat/?filter=${currentChatFilter}`;
+            if (facilityId) {
+                url += `&facility_id=${facilityId}`;
+            }
+            
+            fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     const list = document.getElementById('chat-messages');
                     list.innerHTML = '';
                     data.messages.forEach(msg => {
                         const item = document.createElement('div');
-                        item.className = `chat-message ${msg.message_type}`;
+                        item.className = `chat-message ${msg.message_type} ${msg.is_own_message ? 'own-message' : ''}`;
+                        
+                        let messageTypeDisplay = msg.message_type.replace('_', ' ').toUpperCase();
+                        let recipientInfo = '';
+                        if (msg.recipient_name && msg.recipient_name !== 'All Facility Staff') {
+                            recipientInfo = `<span class="message-recipient">→ ${msg.recipient_name}</span>`;
+                        } else if (msg.facility_name) {
+                            recipientInfo = `<span class="message-recipient">→ ${msg.facility_name}</span>`;
+                        }
+                        
                         item.innerHTML = `
                             <div class="message-header">
                                 <span class="message-sender">${msg.sender_name}</span>
-                                <span class="message-type">${msg.message_type}</span>
+                                ${msg.sender_role ? `<span class="sender-role">(${msg.sender_role})</span>` : ''}
+                                ${recipientInfo}
+                                <span class="message-type">${messageTypeDisplay}</span>
                                 <span class="message-time">${new Date(msg.created_at).toLocaleString()}</span>
                             </div>
                             <div class="message-content">${msg.message}</div>
@@ -534,11 +574,30 @@
         
         function sendMessage() {
             const messageInput = document.getElementById('chat-message-input');
-            const facilitySelect = document.getElementById('chat-facility');
             const message = messageInput.value.trim();
-            const facilityId = facilitySelect.value;
             
             if (!message) return;
+            
+            const targetType = document.querySelector('input[name="target-type"]:checked').value;
+            let payload = { message: message };
+            
+            if (targetType === 'facility') {
+                const facilityId = document.getElementById('chat-facility').value;
+                if (!facilityId) {
+                    alert('Please select a facility');
+                    return;
+                }
+                payload.facility_id = facilityId;
+                payload.message_type = 'facility_broadcast';
+            } else if (targetType === 'user') {
+                const userId = document.getElementById('chat-user').value;
+                if (!userId) {
+                    alert('Please select a user');
+                    return;
+                }
+                payload.recipient_id = userId;
+                payload.message_type = 'user_chat';
+            }
             
             fetch('/worklist/api/chat/send/', {
                 method: 'POST',
@@ -546,21 +605,62 @@
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCSRFToken()
                 },
-                body: JSON.stringify({
-                    message: message,
-                    facility_id: facilityId
-                })
+                body: JSON.stringify(payload)
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
                     messageInput.value = '';
                     loadChatMessages();
+                    // Show success feedback
+                    console.log('Message sent successfully');
                 } else {
                     alert('Error sending message: ' + data.error);
                 }
             })
             .catch(error => console.error('Error sending message:', error));
+        }
+
+        function loadChatUsers() {
+            fetch('/worklist/api/chat/users/')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Update user select options
+                        const userSelect = document.getElementById('chat-user');
+                        userSelect.innerHTML = '<option value="">Select User</option>';
+                        
+                        data.users.forEach(user => {
+                            const option = document.createElement('option');
+                            option.value = user.id;
+                            option.textContent = `${user.name} (${user.role})${user.facility ? ' - ' + user.facility : ''}`;
+                            userSelect.appendChild(option);
+                        });
+                        
+                        // Store facilities data for reference
+                        window.chatFacilities = data.facilities;
+                        window.currentUser = data.current_user;
+                        
+                        console.log('Chat users loaded successfully');
+                    } else {
+                        console.error('Error loading chat users:', data.error);
+                    }
+                })
+                .catch(error => console.error('Error loading chat users:', error));
+        }
+
+        function toggleTargetSelector() {
+            const targetType = document.querySelector('input[name="target-type"]:checked').value;
+            const facilitySelector = document.getElementById('facility-selector');
+            const userSelector = document.getElementById('user-selector');
+            
+            if (targetType === 'facility') {
+                facilitySelector.style.display = 'block';
+                userSelector.style.display = 'none';
+            } else {
+                facilitySelector.style.display = 'none';
+                userSelector.style.display = 'block';
+            }
         }
         
         function markAsRead(notificationId) {
@@ -685,6 +785,21 @@
             // This would be called when new chat messages arrive
             checkNotifications();
         }
+        
+        // Add event listeners for target type selector
+        document.querySelectorAll('input[name="target-type"]').forEach(radio => {
+            radio.addEventListener('change', toggleTargetSelector);
+        });
+        
+        // Add Enter key listener for chat input
+        document.getElementById('chat-message-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        // Load chat users on page load
+        loadChatUsers();
         
         // Check notifications every 30 seconds
         checkNotifications();

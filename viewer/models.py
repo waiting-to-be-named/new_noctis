@@ -29,6 +29,29 @@ class Facility(models.Model):
         return self.name
 
 
+class FacilityStaff(models.Model):
+    """Model to link users to facilities with roles"""
+    ROLE_CHOICES = [
+        ('admin', 'Administrator'),
+        ('technician', 'Technician'),
+        ('radiologist', 'Radiologist'),
+        ('staff', 'Staff'),
+    ]
+    
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='facility_staff')
+    facility = models.ForeignKey(Facility, on_delete=models.CASCADE, related_name='staff')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='staff')
+    is_primary_contact = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name_plural = "Facility Staff"
+        unique_together = ['user', 'facility']
+    
+    def __str__(self):
+        return f"{self.user.get_full_name() or self.user.username} - {self.facility.name} ({self.role})"
+
+
 class DicomStudy(models.Model):
     """Model to represent a DICOM study"""
     study_instance_uid = models.CharField(max_length=100, unique=True)
@@ -399,10 +422,11 @@ class Notification(models.Model):
 
 
 class ChatMessage(models.Model):
-    """Model for chat messages between radiologist and facility"""
+    """Model for chat messages between users and facilities"""
     MESSAGE_TYPES = [
         ('system_upload', 'System Upload'),
         ('user_chat', 'User Chat'),
+        ('facility_broadcast', 'Facility Broadcast'),
     ]
     
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
@@ -413,6 +437,25 @@ class ChatMessage(models.Model):
     related_study = models.ForeignKey(DicomStudy, on_delete=models.CASCADE, null=True, blank=True)
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    
+    @property
+    def sender_full_name(self):
+        """Get sender's full name or username"""
+        return self.sender.get_full_name() or self.sender.username
+    
+    @property
+    def recipient_full_name(self):
+        """Get recipient's full name or username"""
+        if self.recipient:
+            return self.recipient.get_full_name() or self.recipient.username
+        return 'All Facility Staff'
+    
+    @property
+    def sender_role(self):
+        """Get sender's role in facility"""
+        if hasattr(self.sender, 'facility_staff'):
+            return self.sender.facility_staff.get_role_display()
+        return 'Unknown'
     
     class Meta:
         ordering = ['-created_at']
