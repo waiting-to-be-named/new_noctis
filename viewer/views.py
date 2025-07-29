@@ -24,6 +24,7 @@ from .models import (
     Facility, Report, WorklistEntry, AIAnalysis, Notification
 )
 from .serializers import DicomStudySerializer, DicomImageSerializer
+from worklist.views import create_upload_notification, create_error_notification  # Import notification functions
 
 
 # Ensure required directories exist
@@ -471,7 +472,17 @@ def upload_dicom_files(request):
             error_message = 'No valid DICOM files were uploaded'
             if errors:
                 error_message += f'. Errors: {"; ".join(errors[:5])}'  # Limit error messages
+            # Create error notification
+            if request.user.is_authenticated:
+                facility = None
+                if hasattr(request.user, 'facility_staff'):
+                    facility = request.user.facility_staff.facility
+                create_error_notification(error_message, request.user, facility)
             return JsonResponse({'error': error_message}, status=400)
+        
+        # Create upload notification if study was created
+        if study and request.user.is_authenticated:
+            create_upload_notification(study, request.user)
         
         response_data = {
             'message': f'Uploaded {len(uploaded_files)} files successfully',
@@ -488,6 +499,12 @@ def upload_dicom_files(request):
         print(f"Unexpected error in upload_dicom_files: {e}")
         import traceback
         traceback.print_exc()
+        # Create error notification
+        if request.user.is_authenticated:
+            facility = None
+            if hasattr(request.user, 'facility_staff'):
+                facility = request.user.facility_staff.facility
+            create_error_notification(f'Upload error: {str(e)}', request.user, facility)
         return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
 
 

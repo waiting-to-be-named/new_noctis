@@ -210,6 +210,12 @@
                     <span class="info-label">Study Description</span>
                     <span class="info-value">{{ study.study_description|default:"N/A" }}</span>
                 </div>
+                {% if study.clinical_info %}
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <span class="info-label">Clinical Information</span>
+                    <div class="info-value" style="white-space: pre-wrap; background: #f0f0f0; padding: 10px; border-radius: 4px; margin-top: 5px;">{{ study.clinical_info }}</div>
+                </div>
+                {% endif %}
                 {% if report %}
                 <div class="info-item">
                     <span class="info-label">Report Status</span>

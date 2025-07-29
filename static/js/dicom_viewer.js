@@ -697,6 +697,34 @@ class DicomViewer {
             document.getElementById('info-series').textContent = currentImageData.series_description || 'Unknown';
             document.getElementById('info-institution').textContent = this.currentStudy.institution_name || 'Unknown';
         }
+        
+        // Update clinical information if available
+        const clinicalInfoSection = document.getElementById('clinical-info-section');
+        const clinicalInfoContent = document.getElementById('clinical-info-content');
+        
+        if (this.currentStudy.clinical_info) {
+            clinicalInfoSection.style.display = 'block';
+            clinicalInfoContent.innerHTML = `
+                <div style="background: rgba(0, 255, 0, 0.05); 
+                           padding: 10px; 
+                           border-radius: 4px; 
+                           border: 1px solid rgba(0, 255, 0, 0.2);
+                           color: #e0e0e0;
+                           font-size: 12px;
+                           line-height: 1.5;
+                           white-space: pre-wrap;">
+                    ${this.escapeHtml(this.currentStudy.clinical_info)}
+                </div>
+            `;
+        } else {
+            clinicalInfoSection.style.display = 'none';
+        }
+    }
+    
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
     
     updateSliders() {

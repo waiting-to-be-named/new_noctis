@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User  # Add User model import
 from django.views.generic import ListView, DetailView, CreateView, UpdateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse, HttpResponse
@@ -8,7 +9,7 @@ from django.utils import timezone
 from django.db.models import Q
 from viewer.models import (
     DicomStudy, WorklistEntry, Facility, Report, 
-    Notification, DicomSeries, DicomImage
+    Notification, DicomSeries, DicomImage, Chat  # Add Chat model
 )
 import json
 from django.core.paginator import Paginator
@@ -17,6 +18,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 import io
+from datetime import datetime, timedelta  # Add datetime imports
 
 
 class WorklistView(LoginRequiredMixin, ListView):
@@ -360,7 +362,7 @@ def get_notifications(request):
     notifications = Notification.objects.filter(
         recipient=request.user,
         is_read=False
-    )[:10]
+    ).select_related('related_study')[:20]  # Increased limit for better coverage
     
     data = [{
         'id': n.id,
@@ -382,3 +384,174 @@ def mark_notification_read(request, notification_id):
     notification.is_read = True
     notification.save()
     return JsonResponse({'success': True})
+
+
+@login_required
+def get_chat_messages(request):
+    """Get chat messages for the user's facility"""
+    # Determine user's facility
+    facility = None
+    if hasattr(request.user, 'facility_staff'):
+        facility = request.user.facility_staff.facility
+    elif request.user.is_superuser or request.user.groups.filter(name='Radiologists').exists():
+        # For radiologists/admins, get facility from query parameter
+        facility_id = request.GET.get('facility_id')
+        if facility_id:
+            facility = get_object_or_404(Facility, id=facility_id)
+        else:
+            # Default to the first facility if none specified
+            facility = Facility.objects.first()
+    
+    if not facility:
+        return JsonResponse({'messages': []})
+    
+    # Get messages for this facility
+    messages = Chat.objects.filter(facility=facility).select_related('sender', 'study')[:50]
+    
+    data = [{
+        'id': m.id,
+        'message_type': m.message_type,
+        'message': m.message,
+        'sender_name': m.sender.get_full_name() if m.sender else 'System',
+        'study_id': m.study.id if m.study else None,
+        'created_at': m.created_at.isoformat()
+    } for m in reversed(messages)]  # Reverse to show oldest first
+    
+    return JsonResponse({'messages': data})
+
+
+@login_required
+@require_http_methods(['POST'])
+def send_chat_message(request):
+    """Send a chat message"""
+    data = json.loads(request.body)
+    message_text = data.get('message', '').strip()
+    
+    if not message_text:
+        return JsonResponse({'error': 'Message cannot be empty'}, status=400)
+    
+    # Determine user's facility
+    facility = None
+    if hasattr(request.user, 'facility_staff'):
+        facility = request.user.facility_staff.facility
+    elif request.user.is_superuser or request.user.groups.filter(name='Radiologists').exists():
+        facility_id = data.get('facility_id')
+        if facility_id:
+            facility = get_object_or_404(Facility, id=facility_id)
+        else:
+            facility = Facility.objects.first()
+    
+    if not facility:
+        return JsonResponse({'error': 'No facility found'}, status=400)
+    
+    # Create chat message
+    chat_message = Chat.objects.create(
+        sender=request.user,
+        facility=facility,
+        message_type='user_message',
+        message=message_text
+    )
+    
+    # Create notification for other users in the facility
+    recipients = []
+    if hasattr(request.user, 'facility_staff'):
+        # Sender is facility staff, notify radiologists
+        recipients = User.objects.filter(
+            Q(is_superuser=True) | Q(groups__name='Radiologists')
+        ).distinct()
+    else:
+        # Sender is radiologist/admin, notify facility staff
+        recipients = facility.staff.all()
+    
+    for recipient in recipients:
+        if recipient != request.user:
+            Notification.objects.create(
+                recipient=recipient,
+                notification_type='new_chat',
+                title=f'New message from {request.user.get_full_name() or request.user.username}',
+                message=message_text[:100],
+                is_read=False
+            )
+    
+    return JsonResponse({'success': True, 'message_id': chat_message.id})
+
+
+@login_required
+@require_http_methods(['POST'])
+def clear_old_chat_messages(request):
+    """Clear chat messages older than 30 days"""
+    # Check permissions
+    if not (request.user.is_superuser or request.user.groups.filter(name='Radiologists').exists()):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    
+    # Determine facility
+    facility = None
+    if hasattr(request.user, 'facility_staff'):
+        facility = request.user.facility_staff.facility
+    else:
+        data = json.loads(request.body)
+        facility_id = data.get('facility_id')
+        if facility_id:
+            facility = get_object_or_404(Facility, id=facility_id)
+        else:
+            facility = Facility.objects.first()
+    
+    if not facility:
+        return JsonResponse({'error': 'No facility found'}, status=400)
+    
+    # Delete messages older than 30 days
+    cutoff_date = timezone.now() - timedelta(days=30)
+    deleted_count = Chat.objects.filter(
+        facility=facility,
+        created_at__lt=cutoff_date
+    ).delete()[0]
+    
+    return JsonResponse({'success': True, 'deleted_count': deleted_count})
+
+
+def create_upload_notification(study, uploaded_by):
+    """Create notifications for new study uploads"""
+    # Notify radiologists and admin
+    recipients = User.objects.filter(
+        Q(is_superuser=True) | Q(groups__name='Radiologists')
+    ).distinct()
+    
+    for recipient in recipients:
+        if recipient != uploaded_by:
+            Notification.objects.create(
+                recipient=recipient,
+                notification_type='new_study',
+                title=f'New Study Upload: {study.patient_name}',
+                message=f'Study uploaded by {uploaded_by.get_full_name() or uploaded_by.username}',
+                related_study=study,
+                is_read=False
+            )
+    
+    # Create system upload message in chat
+    if study.facility:
+        Chat.objects.create(
+            facility=study.facility,
+            message_type='system_upload',
+            message=f'New study uploaded: {study.patient_name} - {study.modality} ({study.study_date})',
+            study=study
+        )
+
+
+def create_error_notification(error_message, user, facility=None):
+    """Create system error notifications"""
+    # Create notification for the user
+    Notification.objects.create(
+        recipient=user,
+        notification_type='system_error',
+        title='System Error',
+        message=error_message,
+        is_read=False
+    )
+    
+    # Create system error message in chat if facility is provided
+    if facility:
+        Chat.objects.create(
+            facility=facility,
+            message_type='system_error',
+            message=f'System error: {error_message}'
+        )
