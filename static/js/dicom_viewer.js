@@ -622,6 +622,11 @@ class DicomViewer {
                 studySelect.value = studyId;
             }
             
+            // Load clinical info if available
+            if (window.loadClinicalInfo && studyId) {
+                window.loadClinicalInfo(studyId);
+            }
+            
             console.log('Study loaded successfully');
             
         } catch (error) {
@@ -667,8 +672,8 @@ class DicomViewer {
                     this.loadMeasurements();
                     this.loadAnnotations();
                 };
-                img.onerror = () => {
-                    console.error('Failed to load image data');
+                img.onerror = (error) => {
+                    console.error('Failed to load image data:', error);
                     alert('Failed to load image. Please try again.');
                 };
                 img.src = data.image_data;
@@ -722,20 +727,28 @@ class DicomViewer {
     updateDisplay() {
         if (!this.currentImage) return;
         
-        // Clear canvas
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        // Get canvas dimensions in CSS pixels
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        const canvasWidth = this.canvas.width / devicePixelRatio;
+        const canvasHeight = this.canvas.height / devicePixelRatio;
         
-        // Calculate display parameters
+        // Clear canvas
+        this.ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+        
+        // Calculate display parameters with auto-fit
         const img = this.currentImage.image;
-        const scale = Math.min(
-            (this.canvas.width * this.zoomFactor) / img.width,
-            (this.canvas.height * this.zoomFactor) / img.height
+        let scale = Math.min(
+            canvasWidth / img.width,
+            canvasHeight / img.height
         );
+        
+        // Apply zoom factor
+        scale *= this.zoomFactor;
         
         const displayWidth = img.width * scale;
         const displayHeight = img.height * scale;
-        const x = (this.canvas.width - displayWidth) / 2 + this.panX;
-        const y = (this.canvas.height - displayHeight) / 2 + this.panY;
+        const x = (canvasWidth - displayWidth) / 2 + this.panX;
+        const y = (canvasHeight - displayHeight) / 2 + this.panY;
         
         // Draw image
         this.ctx.drawImage(img, x, y, displayWidth, displayHeight);
@@ -1692,33 +1705,54 @@ class DicomViewer {
         }
         
         const aiPanel = document.getElementById('ai-panel');
-        aiPanel.style.display = 'block';
+        if (aiPanel) {
+            aiPanel.style.display = 'block';
+        }
         
         const resultsDiv = document.getElementById('ai-results');
-        resultsDiv.innerHTML = '<div class="loading">Performing AI analysis...</div>';
+        if (resultsDiv) {
+            resultsDiv.innerHTML = '<div class="loading">Performing AI analysis...</div>';
+        }
         
-                    fetch(`/viewer/api/images/${this.currentImage.id}/ai-analysis/`, {
+        fetch(`/viewer/api/images/${this.currentImage.id}/ai-analysis/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': this.getCSRFToken()
             }
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
         .then(data => {
             this.aiAnalysisResults = data;
             this.showAIHighlights = true;
             this.displayAIResults(data);
-            this.redraw();
+            this.updateDisplay();
         })
         .catch(error => {
-            resultsDiv.innerHTML = '<div class="error">Error performing AI analysis</div>';
             console.error('AI analysis error:', error);
+            if (resultsDiv) {
+                resultsDiv.innerHTML = `<div class="error">Error performing AI analysis: ${error.message}</div>`;
+            }
         });
     }
     
     displayAIResults(results) {
         const resultsDiv = document.getElementById('ai-results');
+        if (!resultsDiv) {
+            console.error('AI results div not found');
+            return;
+        }
+        
+        if (!results || !results.summary) {
+            resultsDiv.innerHTML = '<div class="error">No AI analysis results available</div>';
+            return;
+        }
+        
         resultsDiv.innerHTML = `
             <div class="ai-summary">
                 <h4>Analysis Summary</h4>
@@ -1728,7 +1762,7 @@ class DicomViewer {
             <div class="ai-findings">
                 <h4>Findings</h4>
                 <ul>
-                    ${results.findings.map(f => `
+                    ${(results.findings || []).map(f => `
                         <li>
                             <strong>${f.type}</strong> at (${f.location.x}, ${f.location.y})
                             <br>Size: ${f.size}px, Confidence: ${(f.confidence * 100).toFixed(1)}%
