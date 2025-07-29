@@ -873,17 +873,57 @@ body {
     max-height: 200px;
     overflow-y: auto;
     margin-top: 10px;
+    background: rgba(40, 40, 40, 0.8);
+    border-radius: 4px;
+    padding: 5px;
+}
+
+.measurements-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.measurements-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.measurements-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+.measurements-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
 }
 
 .measurement-item {
-    padding: 8px;
+    padding: 10px;
     margin-bottom: 5px;
-    background: #333;
+    background: rgba(50, 50, 50, 0.9);
     border-radius: 4px;
-    font-size: 12px;
+    font-size: 13px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.measurement-item:hover {
+    background: rgba(60, 60, 60, 0.9);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.measurement-item.highlighted {
+    background: rgba(80, 80, 80, 0.9);
+    border-color: #4CAF50;
+}
+
+.measurement-item strong {
+    color: #4CAF50;
+    margin-right: 8px;
 }
 
 .measurement-item .delete-btn {
