@@ -10,6 +10,7 @@ import numpy as np
 import io
 import base64
 from django.utils import timezone
+import re
 
 
 class Facility(models.Model):
@@ -20,6 +21,7 @@ class Facility(models.Model):
     email = models.EmailField()
     letterhead_logo = models.ImageField(upload_to='facility_logos/', null=True, blank=True)
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True, related_name='facility')
+    ae_title = models.CharField(max_length=16, unique=True, blank=True, help_text="DICOM AE Title for PACS communication")
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -28,6 +30,49 @@ class Facility(models.Model):
     
     def __str__(self):
         return self.name
+    
+    def generate_ae_title(self):
+        """Generate a unique AE title from facility name"""
+        # Remove special characters and spaces, convert to uppercase
+        base_ae = re.sub(r'[^A-Za-z0-9]', '', self.name).upper()
+        
+        # Truncate to max 12 characters to leave room for numbers
+        base_ae = base_ae[:12]
+        
+        # If empty after cleaning, use default
+        if not base_ae:
+            base_ae = "FACILITY"
+        
+        # Check if base AE title is already in use
+        existing_ae_titles = set(
+            Facility.objects.exclude(pk=self.pk).values_list('ae_title', flat=True)
+        )
+        
+        # Try the base AE title first
+        candidate_ae = base_ae
+        counter = 1
+        
+        # If base is taken, try adding numbers
+        while candidate_ae in existing_ae_titles:
+            # Ensure total length doesn't exceed 16 characters
+            counter_str = str(counter)
+            max_base_length = 16 - len(counter_str)
+            candidate_ae = base_ae[:max_base_length] + counter_str
+            counter += 1
+            
+            # Safety check to prevent infinite loop
+            if counter > 9999:
+                import uuid
+                candidate_ae = "FAC" + str(uuid.uuid4().hex)[:5].upper()
+                break
+        
+        return candidate_ae
+    
+    def save(self, *args, **kwargs):
+        """Override save to auto-generate AE title if not provided"""
+        if not self.ae_title:
+            self.ae_title = self.generate_ae_title()
+        super().save(*args, **kwargs)
 
 
 class DicomStudy(models.Model):

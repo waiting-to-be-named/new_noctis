@@ -314,6 +314,28 @@
                     <div class="helptext">Upload an image file (PNG, JPG, GIF) for the facility letterhead. Recommended size: 200x100px</div>
                 </div>
                 
+                <div class="form-group">
+                    <label for="{{ form.ae_title.id_for_label }}">DICOM AE Title</label>
+                    {{ form.ae_title.errors }}
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="text" 
+                               name="{{ form.ae_title.name }}" 
+                               id="{{ form.ae_title.id_for_label }}"
+                               class="form-control" 
+                               placeholder="Auto-generated from facility name"
+                               value="{{ form.ae_title.value|default:'' }}"
+                               maxlength="16"
+                               style="flex: 1;">
+                        <button type="button" 
+                                id="generate-ae-title" 
+                                class="btn btn-secondary"
+                                style="white-space: nowrap;">
+                            <i class="fas fa-magic"></i> Generate
+                        </button>
+                    </div>
+                    <div class="helptext">DICOM Application Entity Title for PACS communication. Maximum 16 characters. Will be auto-generated from facility name if left empty.</div>
+                </div>
+                
                 {% if is_create %}
                 <div class="form-group">
                     <h3 style="color: #00ff00; margin-bottom: 20px; margin-top: 30px;">
@@ -369,6 +391,48 @@
                 label.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Choose Logo File';
                 label.style.borderColor = '#666';
                 label.style.background = '#333';
+            }
+        });
+        
+        // AE Title generation
+        function generateAETitle() {
+            const facilityName = document.getElementById('{{ form.name.id_for_label }}').value;
+            if (!facilityName.trim()) {
+                alert('Please enter a facility name first.');
+                return;
+            }
+            
+            // Generate AE title from facility name
+            let aeTitle = facilityName
+                .replace(/[^A-Za-z0-9]/g, '')  // Remove special characters
+                .toUpperCase()                  // Convert to uppercase
+                .substring(0, 16);              // Limit to 16 characters
+            
+            if (!aeTitle) {
+                aeTitle = 'FACILITY';
+            }
+            
+            document.getElementById('{{ form.ae_title.id_for_label }}').value = aeTitle;
+        }
+        
+        // Auto-generate AE title when facility name changes (if AE title is empty)
+        document.getElementById('{{ form.name.id_for_label }}').addEventListener('input', function() {
+            const aeField = document.getElementById('{{ form.ae_title.id_for_label }}');
+            if (!aeField.value.trim()) {
+                generateAETitle();
+            }
+        });
+        
+        // Manual generation button
+        document.getElementById('generate-ae-title').addEventListener('click', generateAETitle);
+        
+        // Generate AE title on page load if facility name exists but AE title is empty
+        document.addEventListener('DOMContentLoaded', function() {
+            const facilityName = document.getElementById('{{ form.name.id_for_label }}').value;
+            const aeTitle = document.getElementById('{{ form.ae_title.id_for_label }}').value;
+            
+            if (facilityName.trim() && !aeTitle.trim()) {
+                generateAETitle();
             }
         });
     </script>
