@@ -112,6 +112,12 @@ def view_study_from_worklist(request, entry_id):
     entry = get_object_or_404(WorklistEntry, id=entry_id)
     
     if entry.study:
+        # Update status to in_progress when a radiologist (or anyone with access) opens the study
+        # Do not overwrite a completed study
+        if entry.status != 'completed':
+            entry.status = 'in_progress'
+            entry.save(update_fields=['status'])
+
         # Redirect to viewer with study ID
         return redirect('viewer:viewer_with_study', study_id=entry.study.id)
     else:
@@ -178,10 +184,14 @@ def create_report(request, study_id):
             report.impression = data.get('impression', report.impression)
             report.recommendations = data.get('recommendations', report.recommendations)
             
+        # Track whether the report has been finalized in this request
+        report_finalized = False
+
         if data.get('finalize'):
             report.status = 'finalized'
             report.finalized_at = timezone.now()
-            
+            report_finalized = True
+
             # Create notification for facility
             if study.facility:
                 facility_users = study.facility.staff.all()
@@ -193,6 +203,24 @@ def create_report(request, study_id):
                         message=f'The radiology report for {study.patient_name} is now available.',
                         related_study=study
                     )
+
+        # ----------------------------------------------------------------------------
+        # Update related WorklistEntry status
+        # ----------------------------------------------------------------------------
+        try:
+            worklist_entry = WorklistEntry.objects.filter(study=study).first()
+            if worklist_entry:
+                if report_finalized:
+                    # Mark as completed when the report is finalized/saved.
+                    worklist_entry.status = 'completed'
+                else:
+                    # A draft save counts as in-progress.
+                    if worklist_entry.status != 'completed':
+                        worklist_entry.status = 'in_progress'
+                worklist_entry.save(update_fields=['status'])
+        except Exception as e:
+            # Log the error but do not break the response flow
+            print(f"Error updating worklist entry status: {e}")
         
         report.save()
         
