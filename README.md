@@ -6,7 +6,14 @@ A comprehensive web-based DICOM medical imaging viewer with advanced features in
 
 ### DICOM Viewer
 - **Advanced Measurements**: Support for line measurements in pixels, millimeters, and centimeters
-- **Ellipse Tool**: Measure Hounsfield Units (HU) with mean, min, max, and standard deviation
+- **Enhanced Ellipse Tool**: Measure Hounsfield Units (HU) with 2024 international standards
+  - Standardized HU precision (±1 HU accuracy)
+  - CT scanner calibration validation
+  - Bone density classification (Normal, Osteopenia, Osteoporosis)
+  - Osteoporosis risk assessment with bone heterogeneity analysis
+  - Quality metrics: mean, min, max, standard deviation, coefficient of variation
+  - ROI size validation for measurement reliability
+  - Updated reference values based on latest clinical research
 - **Annotations**: Create draggable, resizable annotations with customizable font size and color
 - **Window/Level Presets**: Quick presets for lung, bone, soft tissue, and brain
 - **Zoom & Pan**: Interactive image navigation

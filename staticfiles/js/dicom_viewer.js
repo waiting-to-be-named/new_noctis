@@ -2186,13 +2186,38 @@ class DicomViewer {
                     unit: 'HU',
                     hounsfield_min: data.hounsfield_min,
                     hounsfield_max: data.hounsfield_max,
-                    hounsfield_std: data.hounsfield_std
+                    hounsfield_std: data.hounsfield_std,
+                    bone_density_category: data.bone_density_category,
+                    osteoporosis_risk: data.osteoporosis_risk,
+                    coefficient_of_variation: data.coefficient_of_variation,
+                    calibration_info: data.calibration_info
                 });
                 this.updateDisplay();
                 
-                // Show HU values in alert
+                // Show enhanced HU values with 2024 standardized information
                 if (data.hounsfield_mean !== undefined) {
-                    alert(`Hounsfield Unit Measurements:\n\nMean: ${data.hounsfield_mean.toFixed(1)} HU\nMin: ${data.hounsfield_min.toFixed(1)} HU\nMax: ${data.hounsfield_max.toFixed(1)} HU\nStd Dev: ${data.hounsfield_std.toFixed(1)} HU`);
+                    let alertMessage = `Hounsfield Unit Measurements (2024 Standards):\n\n`;
+                    alertMessage += `Mean: ${data.hounsfield_mean.toFixed(1)} HU\n`;
+                    alertMessage += `Range: ${data.hounsfield_min.toFixed(1)} - ${data.hounsfield_max.toFixed(1)} HU\n`;
+                    alertMessage += `Std Dev: ${data.hounsfield_std.toFixed(1)} HU\n`;
+                    alertMessage += `CV: ${data.coefficient_of_variation.toFixed(1)}%\n`;
+                    alertMessage += `ROI Size: ${data.pixel_count} pixels\n\n`;
+                    
+                    alertMessage += `Bone Density Assessment:\n`;
+                    alertMessage += `Category: ${data.bone_density_category}\n`;
+                    alertMessage += `Risk Level: ${data.osteoporosis_risk}\n\n`;
+                    
+                    alertMessage += `Clinical Interpretation:\n`;
+                    alertMessage += `${data.interpretation}\n\n`;
+                    
+                    if (data.calibration_info) {
+                        alertMessage += `Calibration Info:\n`;
+                        alertMessage += `Type: ${data.calibration_info.rescale_type}\n`;
+                        alertMessage += `Slope: ${data.calibration_info.rescale_slope}\n`;
+                        alertMessage += `Intercept: ${data.calibration_info.rescale_intercept}`;
+                    }
+                    
+                    alert(alertMessage);
                 }
             }
         })
