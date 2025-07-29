@@ -38,3 +38,142 @@ TypeError: MiddlewareMixin.__init__() missing 1 required positional argument: 'g
 ERROR 2025-07-29 07:14:06,724 basehttp 2899 140179142604480 "HEAD / HTTP/1.1" 500 0
 INFO 2025-07-29 08:07:14,594 autoreload 2323 139880513061120 Watching for file changes with StatReloader
 INFO 2025-07-29 08:07:22,611 basehttp 2323 139880169469632 "GET /admin/ HTTP/1.1" 302 0
+INFO 2025-07-29 12:05:35,566 autoreload 2668 139913075200256 Watching for file changes with StatReloader
+INFO 2025-07-29 12:06:32,048 autoreload 2668 139913075200256 /workspace/viewer/views.py changed, reloading.
+INFO 2025-07-29 12:06:32,394 autoreload 2721 140457012117760 Watching for file changes with StatReloader
+INFO 2025-07-29 12:06:42,590 autoreload 2721 140457012117760 /workspace/viewer/models.py changed, reloading.
+INFO 2025-07-29 12:06:42,930 autoreload 2939 139714209620224 Watching for file changes with StatReloader
+INFO 2025-07-29 12:06:50,084 autoreload 2939 139714209620224 /workspace/viewer/models.py changed, reloading.
+INFO 2025-07-29 12:06:50,416 autoreload 2986 139834657067264 Watching for file changes with StatReloader
+INFO 2025-07-29 12:07:00,601 autoreload 2986 139834657067264 /workspace/viewer/models.py changed, reloading.
+INFO 2025-07-29 12:07:00,940 autoreload 3021 139780126220544 Watching for file changes with StatReloader
+INFO 2025-07-29 12:07:16,149 autoreload 3021 139780126220544 /workspace/viewer/views.py changed, reloading.
+INFO 2025-07-29 12:07:16,498 autoreload 3218 139693649654016 Watching for file changes with StatReloader
+INFO 2025-07-29 12:08:11,604 autoreload 3601 140678600294656 Watching for file changes with StatReloader
+WARNING 2025-07-29 12:08:52,891 log 3218 139693376308928 Not Found: /viewer/upload/
+WARNING 2025-07-29 12:08:52,891 basehttp 3218 139693376308928 "POST /viewer/upload/ HTTP/1.1" 404 7832
+INFO 2025-07-29 12:09:00,010 middleware 3218 139693376308928 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:09:00,010 middleware 3218 139693376308928 Request body size: 66058 bytes
+DEBUG 2025-07-29 12:09:00,012 middleware 3218 139693376308928 Request duration: POST /viewer/api/upload/ took 0.001s
+INFO 2025-07-29 12:09:00,012 middleware 3218 139693376308928 API Response: POST /viewer/api/upload/ - Status: 400
+DEBUG 2025-07-29 12:09:00,012 middleware 3218 139693376308928 Response size: 103 bytes
+WARNING 2025-07-29 12:09:00,012 log 3218 139693376308928 Bad Request: /viewer/api/upload/
+WARNING 2025-07-29 12:09:00,013 basehttp 3218 139693376308928 "POST /viewer/api/upload/ HTTP/1.1" 400 103
+INFO 2025-07-29 12:09:14,412 autoreload 3218 139693649654016 /workspace/viewer/views.py changed, reloading.
+INFO 2025-07-29 12:09:14,779 autoreload 4013 140606139035904 Watching for file changes with StatReloader
+INFO 2025-07-29 12:09:24,974 autoreload 4013 140606139035904 /workspace/viewer/models.py changed, reloading.
+INFO 2025-07-29 12:09:25,344 autoreload 4132 140509948875008 Watching for file changes with StatReloader
+INFO 2025-07-29 12:09:26,164 middleware 4132 140509673678528 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:09:26,165 middleware 4132 140509673678528 Request body size: 66058 bytes
+DEBUG 2025-07-29 12:09:26,182 middleware 4132 140509673678528 Request duration: POST /viewer/api/upload/ took 0.017s
+INFO 2025-07-29 12:09:26,182 middleware 4132 140509673678528 API Response: POST /viewer/api/upload/ - Status: 200
+DEBUG 2025-07-29 12:09:26,182 middleware 4132 140509673678528 Response size: 98 bytes
+INFO 2025-07-29 12:09:26,182 basehttp 4132 140509673678528 "POST /viewer/api/upload/ HTTP/1.1" 200 98
+INFO 2025-07-29 12:09:26,184 middleware 4132 140509673678528 API Request: GET /viewer/api/studies/1/images/
+DEBUG 2025-07-29 12:09:26,187 middleware 4132 140509673678528 Request duration: GET /viewer/api/studies/1/images/ took 0.003s
+INFO 2025-07-29 12:09:26,187 middleware 4132 140509673678528 API Response: GET /viewer/api/studies/1/images/ - Status: 200
+DEBUG 2025-07-29 12:09:26,187 middleware 4132 140509673678528 Response size: 423 bytes
+INFO 2025-07-29 12:09:26,188 basehttp 4132 140509673678528 "GET /viewer/api/studies/1/images/ HTTP/1.1" 200 423
+INFO 2025-07-29 12:09:26,189 middleware 4132 140509665285824 API Request: GET /viewer/api/images/1/data/
+DEBUG 2025-07-29 12:09:26,192 middleware 4132 140509665285824 Request duration: GET /viewer/api/images/1/data/ took 0.002s
+INFO 2025-07-29 12:09:26,192 middleware 4132 140509665285824 API Response: GET /viewer/api/images/1/data/ - Status: 500
+DEBUG 2025-07-29 12:09:26,192 middleware 4132 140509665285824 Response size: 70 bytes
+ERROR 2025-07-29 12:09:26,192 log 4132 140509665285824 Internal Server Error: /viewer/api/images/1/data/
+ERROR 2025-07-29 12:09:26,192 basehttp 4132 140509665285824 "GET /viewer/api/images/1/data/ HTTP/1.1" 500 70
+INFO 2025-07-29 12:09:53,713 autoreload 4132 140509948875008 /workspace/viewer/models.py changed, reloading.
+INFO 2025-07-29 12:09:54,119 autoreload 4384 140492510798080 Watching for file changes with StatReloader
+INFO 2025-07-29 12:10:12,387 autoreload 4384 140492510798080 /workspace/viewer/models.py changed, reloading.
+INFO 2025-07-29 12:10:12,762 autoreload 4485 140589956800768 Watching for file changes with StatReloader
+INFO 2025-07-29 12:10:36,023 middleware 4485 140589681075904 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:10:36,023 middleware 4485 140589681075904 Request body size: 66174 bytes
+DEBUG 2025-07-29 12:10:36,032 middleware 4485 140589681075904 Request duration: POST /viewer/api/upload/ took 0.009s
+INFO 2025-07-29 12:10:36,032 middleware 4485 140589681075904 API Response: POST /viewer/api/upload/ - Status: 400
+DEBUG 2025-07-29 12:10:36,032 middleware 4485 140589681075904 Response size: 47 bytes
+WARNING 2025-07-29 12:10:36,032 log 4485 140589681075904 Bad Request: /viewer/api/upload/
+WARNING 2025-07-29 12:10:36,033 basehttp 4485 140589681075904 "POST /viewer/api/upload/ HTTP/1.1" 400 47
+INFO 2025-07-29 12:10:53,220 autoreload 4485 140589956800768 /workspace/viewer/views.py changed, reloading.
+INFO 2025-07-29 12:10:53,616 autoreload 4650 140082471538944 Watching for file changes with StatReloader
+INFO 2025-07-29 12:10:55,478 middleware 4650 140082195457728 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:10:55,478 middleware 4650 140082195457728 Request body size: 66174 bytes
+DEBUG 2025-07-29 12:10:55,484 middleware 4650 140082195457728 Request duration: POST /viewer/api/upload/ took 0.006s
+INFO 2025-07-29 12:10:55,484 middleware 4650 140082195457728 API Response: POST /viewer/api/upload/ - Status: 400
+DEBUG 2025-07-29 12:10:55,484 middleware 4650 140082195457728 Response size: 47 bytes
+WARNING 2025-07-29 12:10:55,485 log 4650 140082195457728 Bad Request: /viewer/api/upload/
+WARNING 2025-07-29 12:10:55,485 basehttp 4650 140082195457728 "POST /viewer/api/upload/ HTTP/1.1" 400 47
+INFO 2025-07-29 12:11:05,927 middleware 4650 140082195457728 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:11:05,927 middleware 4650 140082195457728 Request body size: 175 bytes
+DEBUG 2025-07-29 12:11:05,972 middleware 4650 140082195457728 Request duration: POST /viewer/api/upload/ took 0.045s
+INFO 2025-07-29 12:11:05,972 middleware 4650 140082195457728 API Response: POST /viewer/api/upload/ - Status: 400
+DEBUG 2025-07-29 12:11:05,972 middleware 4650 140082195457728 Response size: 141 bytes
+WARNING 2025-07-29 12:11:05,972 log 4650 140082195457728 Bad Request: /viewer/api/upload/
+WARNING 2025-07-29 12:11:05,972 basehttp 4650 140082195457728 "POST /viewer/api/upload/ HTTP/1.1" 400 141
+INFO 2025-07-29 12:11:13,905 autoreload 4650 140082471538944 /workspace/viewer/views.py changed, reloading.
+INFO 2025-07-29 12:11:14,298 autoreload 4822 139700712444160 Watching for file changes with StatReloader
+INFO 2025-07-29 12:11:15,820 middleware 4822 139700436199104 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:11:15,820 middleware 4822 139700436199104 Request body size: 66174 bytes
+DEBUG 2025-07-29 12:11:15,826 middleware 4822 139700436199104 Request duration: POST /viewer/api/upload/ took 0.006s
+INFO 2025-07-29 12:11:15,826 middleware 4822 139700436199104 API Response: POST /viewer/api/upload/ - Status: 400
+DEBUG 2025-07-29 12:11:15,826 middleware 4822 139700436199104 Response size: 47 bytes
+WARNING 2025-07-29 12:11:15,826 log 4822 139700436199104 Bad Request: /viewer/api/upload/
+WARNING 2025-07-29 12:11:15,826 basehttp 4822 139700436199104 "POST /viewer/api/upload/ HTTP/1.1" 400 47
+INFO 2025-07-29 12:11:18,995 middleware 4822 139700436199104 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:11:18,995 middleware 4822 139700436199104 Request body size: 5450 bytes
+DEBUG 2025-07-29 12:11:19,029 middleware 4822 139700436199104 Request duration: POST /viewer/api/upload/ took 0.035s
+INFO 2025-07-29 12:11:19,030 middleware 4822 139700436199104 API Response: POST /viewer/api/upload/ - Status: 200
+DEBUG 2025-07-29 12:11:19,030 middleware 4822 139700436199104 Response size: 101 bytes
+INFO 2025-07-29 12:11:19,030 basehttp 4822 139700436199104 "POST /viewer/api/upload/ HTTP/1.1" 200 101
+INFO 2025-07-29 12:11:36,639 middleware 4822 139700436199104 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:11:36,639 middleware 4822 139700436199104 Request body size: 4618 bytes
+DEBUG 2025-07-29 12:11:36,643 middleware 4822 139700436199104 Request duration: POST /viewer/api/upload/ took 0.003s
+INFO 2025-07-29 12:11:36,643 middleware 4822 139700436199104 API Response: POST /viewer/api/upload/ - Status: 400
+DEBUG 2025-07-29 12:11:36,643 middleware 4822 139700436199104 Response size: 47 bytes
+WARNING 2025-07-29 12:11:36,643 log 4822 139700436199104 Bad Request: /viewer/api/upload/
+WARNING 2025-07-29 12:11:36,643 basehttp 4822 139700436199104 "POST /viewer/api/upload/ HTTP/1.1" 400 47
+INFO 2025-07-29 12:12:38,503 middleware 4822 139700436199104 API Request: GET /viewer/api/studies/3/images/
+DEBUG 2025-07-29 12:12:38,507 middleware 4822 139700436199104 Request duration: GET /viewer/api/studies/3/images/ took 0.004s
+INFO 2025-07-29 12:12:38,507 middleware 4822 139700436199104 API Response: GET /viewer/api/studies/3/images/ - Status: 200
+DEBUG 2025-07-29 12:12:38,507 middleware 4822 139700436199104 Response size: 380 bytes
+INFO 2025-07-29 12:12:38,508 basehttp 4822 139700436199104 "GET /viewer/api/studies/3/images/ HTTP/1.1" 200 380
+INFO 2025-07-29 12:12:38,510 middleware 4822 139700427806400 API Request: GET /viewer/api/images/2/data/
+DEBUG 2025-07-29 12:12:38,513 middleware 4822 139700427806400 Request duration: GET /viewer/api/images/2/data/ took 0.003s
+INFO 2025-07-29 12:12:38,513 middleware 4822 139700427806400 API Response: GET /viewer/api/images/2/data/ - Status: 500
+DEBUG 2025-07-29 12:12:38,513 middleware 4822 139700427806400 Response size: 70 bytes
+ERROR 2025-07-29 12:12:38,513 log 4822 139700427806400 Internal Server Error: /viewer/api/images/2/data/
+ERROR 2025-07-29 12:12:38,513 basehttp 4822 139700427806400 "GET /viewer/api/images/2/data/ HTTP/1.1" 500 70
+INFO 2025-07-29 12:13:13,230 middleware 4822 139700427806400 API Request: GET /viewer/api/images/1/data/
+DEBUG 2025-07-29 12:13:13,243 middleware 4822 139700427806400 Request duration: GET /viewer/api/images/1/data/ took 0.013s
+INFO 2025-07-29 12:13:13,243 middleware 4822 139700427806400 API Response: GET /viewer/api/images/1/data/ - Status: 200
+DEBUG 2025-07-29 12:13:13,243 middleware 4822 139700427806400 Response size: 87497 bytes
+INFO 2025-07-29 12:13:13,244 basehttp 4822 139700427806400 "GET /viewer/api/images/1/data/ HTTP/1.1" 200 87497
+INFO 2025-07-29 12:13:43,393 middleware 4822 139700427806400 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:13:43,393 middleware 4822 139700427806400 Request body size: 17038 bytes
+DEBUG 2025-07-29 12:13:43,436 middleware 4822 139700427806400 Request duration: POST /viewer/api/upload/ took 0.043s
+INFO 2025-07-29 12:13:43,436 middleware 4822 139700427806400 API Response: POST /viewer/api/upload/ - Status: 200
+DEBUG 2025-07-29 12:13:43,436 middleware 4822 139700427806400 Response size: 98 bytes
+INFO 2025-07-29 12:13:43,436 basehttp 4822 139700427806400 "POST /viewer/api/upload/ HTTP/1.1" 200 98
+INFO 2025-07-29 12:13:43,438 middleware 4822 139700436199104 API Request: GET /viewer/api/studies/4/images/
+DEBUG 2025-07-29 12:13:43,440 middleware 4822 139700436199104 Request duration: GET /viewer/api/studies/4/images/ took 0.002s
+INFO 2025-07-29 12:13:43,440 middleware 4822 139700436199104 API Response: GET /viewer/api/studies/4/images/ - Status: 200
+DEBUG 2025-07-29 12:13:43,440 middleware 4822 139700436199104 Response size: 433 bytes
+INFO 2025-07-29 12:13:43,441 basehttp 4822 139700436199104 "GET /viewer/api/studies/4/images/ HTTP/1.1" 200 433
+INFO 2025-07-29 12:13:43,442 middleware 4822 139700427806400 API Request: GET /viewer/api/images/3/data/
+DEBUG 2025-07-29 12:13:43,445 middleware 4822 139700427806400 Request duration: GET /viewer/api/images/3/data/ took 0.003s
+INFO 2025-07-29 12:13:43,445 middleware 4822 139700427806400 API Response: GET /viewer/api/images/3/data/ - Status: 200
+DEBUG 2025-07-29 12:13:43,445 middleware 4822 139700427806400 Response size: 22123 bytes
+INFO 2025-07-29 12:13:43,445 basehttp 4822 139700427806400 "GET /viewer/api/images/3/data/ HTTP/1.1" 200 22123
+INFO 2025-07-29 12:14:19,311 middleware 4822 139700427806400 API Request: POST /viewer/api/upload/
+DEBUG 2025-07-29 12:14:19,311 middleware 4822 139700427806400 Request body size: 4744 bytes
+DEBUG 2025-07-29 12:14:19,346 middleware 4822 139700427806400 Request duration: POST /viewer/api/upload/ took 0.035s
+INFO 2025-07-29 12:14:19,346 middleware 4822 139700427806400 API Response: POST /viewer/api/upload/ - Status: 200
+DEBUG 2025-07-29 12:14:19,346 middleware 4822 139700427806400 Response size: 98 bytes
+INFO 2025-07-29 12:14:19,347 basehttp 4822 139700427806400 "POST /viewer/api/upload/ HTTP/1.1" 200 98
+INFO 2025-07-29 12:14:19,349 middleware 4822 139700436199104 API Request: GET /viewer/api/studies/5/images/
+DEBUG 2025-07-29 12:14:19,352 middleware 4822 139700436199104 Request duration: GET /viewer/api/studies/5/images/ took 0.003s
+INFO 2025-07-29 12:14:19,353 middleware 4822 139700436199104 API Response: GET /viewer/api/studies/5/images/ - Status: 200
+DEBUG 2025-07-29 12:14:19,353 middleware 4822 139700436199104 Response size: 427 bytes
+INFO 2025-07-29 12:14:19,353 basehttp 4822 139700436199104 "GET /viewer/api/studies/5/images/ HTTP/1.1" 200 427
+INFO 2025-07-29 12:14:19,356 middleware 4822 139700427806400 API Request: GET /viewer/api/images/4/data/
+DEBUG 2025-07-29 12:14:19,359 middleware 4822 139700427806400 Request duration: GET /viewer/api/images/4/data/ took 0.003s
+INFO 2025-07-29 12:14:19,359 middleware 4822 139700427806400 API Response: GET /viewer/api/images/4/data/ - Status: 200
+DEBUG 2025-07-29 12:14:19,359 middleware 4822 139700427806400 Response size: 5813 bytes
+INFO 2025-07-29 12:14:19,359 basehttp 4822 139700427806400 "GET /viewer/api/images/4/data/ HTTP/1.1" 200 5813
