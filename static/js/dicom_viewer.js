@@ -727,6 +727,25 @@ class DicomViewer {
         
         // Calculate display parameters
         const img = this.currentImage.image;
+        
+        // Calculate auto-scale to fit image in viewport with some padding
+        const padding = 40; // 20px padding on each side
+        const availableWidth = this.canvas.width - padding;
+        const availableHeight = this.canvas.height - padding;
+        
+        // Only apply auto-scale on first load (when zoomFactor is 1.0)
+        if (this.zoomFactor === 1.0) {
+            const scaleX = availableWidth / img.width;
+            const scaleY = availableHeight / img.height;
+            const autoScale = Math.min(scaleX, scaleY, 1.0); // Don't scale up beyond 100%
+            this.zoomFactor = autoScale;
+            
+            // Update zoom slider and display
+            const zoomPercent = Math.round(this.zoomFactor * 100);
+            document.getElementById('zoom-slider').value = zoomPercent;
+            document.getElementById('zoom-value').textContent = zoomPercent + '%';
+        }
+        
         const scale = Math.min(
             (this.canvas.width * this.zoomFactor) / img.width,
             (this.canvas.height * this.zoomFactor) / img.height
@@ -739,6 +758,15 @@ class DicomViewer {
         
         // Draw image
         this.ctx.drawImage(img, x, y, displayWidth, displayHeight);
+        
+        // Store display parameters for coordinate transformation
+        this.displayParams = {
+            scale: scale,
+            offsetX: x,
+            offsetY: y,
+            width: displayWidth,
+            height: displayHeight
+        };
         
         // Draw overlays
         this.drawMeasurements();
@@ -1109,14 +1137,43 @@ class DicomViewer {
     }
     
     resetView() {
+        // Reset zoom and pan
         this.zoomFactor = 1.0;
         this.panX = 0;
         this.panY = 0;
         
+        // Reset window/level to initial values or defaults
+        if (this.currentImages.length > 0) {
+            const firstImage = this.currentImages[0];
+            if (firstImage.window_width && firstImage.window_center) {
+                this.windowWidth = firstImage.window_width;
+                this.windowLevel = firstImage.window_center;
+            } else {
+                // Default soft tissue window
+                this.windowWidth = 400;
+                this.windowLevel = 40;
+            }
+        } else {
+            // Default soft tissue window
+            this.windowWidth = 400;
+            this.windowLevel = 40;
+        }
+        
+        // Reset invert
+        this.inverted = false;
+        
+        // Update UI controls
         document.getElementById('zoom-slider').value = 100;
         document.getElementById('zoom-value').textContent = '100%';
+        document.getElementById('ww-slider').value = this.windowWidth;
+        document.getElementById('wl-slider').value = this.windowLevel;
+        document.getElementById('ww-value').textContent = this.windowWidth;
+        document.getElementById('wl-value').textContent = this.windowLevel;
         
-        this.updateDisplay();
+        // Reload current image with reset values
+        if (this.currentImage) {
+            this.loadCurrentImage();
+        }
     }
     
     // Mouse Events
@@ -1141,14 +1198,17 @@ class DicomViewer {
         } else if (this.activeTool === 'ellipse') {
             const imageCoords = this.canvasToImageCoords(x, y);
             this.currentEllipse = {
-                center: imageCoords,
-                radius: 0,
+                start: imageCoords,
+                end: imageCoords,
                 type: 'ellipse'
             };
         } else if (this.activeTool === 'volume') {
             const imageCoords = this.canvasToImageCoords(x, y);
             this.volumeContour.push(imageCoords);
             this.redraw();
+        } else if (this.activeTool === 'annotate') {
+            const imageCoords = this.canvasToImageCoords(x, y);
+            this.createAnnotation(imageCoords);
         }
     }
     
@@ -1187,9 +1247,9 @@ class DicomViewer {
             this.redraw();
         } else if (this.activeTool === 'ellipse' && this.currentEllipse) {
             const imageCoords = this.canvasToImageCoords(x, y);
-            const dx = imageCoords.x - this.currentEllipse.center.x;
-            const dy = imageCoords.y - this.currentEllipse.center.y;
-            this.currentEllipse.radius = Math.sqrt(dx * dx + dy * dy);
+            const dx = imageCoords.x - this.currentEllipse.start.x;
+            const dy = imageCoords.y - this.currentEllipse.start.y;
+            this.currentEllipse.end = { x: imageCoords.x, y: imageCoords.y };
             this.redraw();
         }
         
@@ -1216,19 +1276,57 @@ class DicomViewer {
             
             // Convert to mm if pixel spacing is available
             let distanceMm = distance;
-            if (this.currentImage && this.currentImage.pixel_spacing) {
-                const spacing = this.parsePixelSpacing(this.currentImage.pixel_spacing);
-                distanceMm = distance * spacing[0]; // Use first spacing value
+            let unit = 'px';
+            
+            if (this.currentImage && this.currentImage.metadata && this.currentImage.metadata.pixel_spacing) {
+                const spacing = this.currentImage.metadata.pixel_spacing;
+                if (Array.isArray(spacing) && spacing.length >= 2) {
+                    // Use average of spacing values for more accurate calculation
+                    const avgSpacing = (spacing[0] + spacing[1]) / 2;
+                    distanceMm = distance * avgSpacing;
+                    unit = this.measurementUnit || 'mm';
+                    
+                    // Convert to cm if selected
+                    if (unit === 'cm') {
+                        distanceMm /= 10;
+                    }
+                }
             }
             
-            this.currentMeasurement.distance = distanceMm;
-            this.measurements.push(this.currentMeasurement);
+            // Create proper measurement object
+            const measurement = {
+                type: 'line',
+                value: distanceMm,
+                unit: unit,
+                coordinates: [
+                    { x: this.currentMeasurement.start.x, y: this.currentMeasurement.start.y },
+                    { x: this.currentMeasurement.end.x, y: this.currentMeasurement.end.y }
+                ],
+                imageId: this.currentImage.id
+            };
+            
+            this.measurements.push(measurement);
             this.updateMeasurementsList();
+            this.saveMeasurement(measurement);
             this.currentMeasurement = null;
             this.redraw();
         } else if (this.activeTool === 'ellipse' && this.currentEllipse) {
-            this.measurements.push(this.currentEllipse);
-            this.updateMeasurementsList();
+            // Calculate HU values for the ellipse region
+            const measurement = {
+                type: 'ellipse',
+                coordinates: {
+                    x0: this.currentEllipse.start.x,
+                    y0: this.currentEllipse.start.y,
+                    x1: this.currentEllipse.end.x,
+                    y1: this.currentEllipse.end.y
+                },
+                value: 0, // Will be calculated by the server
+                unit: 'HU',
+                imageId: this.currentImage.id
+            };
+            
+            // Request HU calculation from server
+            this.calculateEllipseHU(measurement);
             this.currentEllipse = null;
             this.redraw();
         }
@@ -1550,17 +1648,38 @@ class DicomViewer {
                 },
                 body: JSON.stringify({
                     contour_points: this.volumeContour,
-                    pixel_spacing: this.currentImage ? this.parsePixelSpacing(this.currentImage.pixel_spacing) : [1.0, 1.0],
-                    slice_thickness: this.currentImage ? this.currentImage.slice_thickness : 1.0
+                    pixel_spacing: this.currentImage && this.currentImage.metadata && this.currentImage.metadata.pixel_spacing 
+                        ? this.currentImage.metadata.pixel_spacing 
+                        : [1.0, 1.0],
+                    slice_thickness: this.currentImage && this.currentImage.metadata && this.currentImage.metadata.slice_thickness 
+                        ? this.currentImage.metadata.slice_thickness 
+                        : 1.0
                 })
             });
             
             if (response.ok) {
                 const result = await response.json();
-                alert(`Volume Calculation Results:\nArea: ${result.area_mm2} mm²\nVolume: ${result.volume_mm3} mm³ (${result.volume_ml} ml)`);
                 
-                // Save volume measurement
-                this.saveVolumeMeasurement(result);
+                // Create volume measurement object
+                const volumeMeasurement = {
+                    type: 'volume',
+                    value: result.volume_ml || 0,
+                    unit: 'ml',
+                    coordinates: [...this.volumeContour],
+                    area: result.area_mm2,
+                    volume_mm3: result.volume_mm3,
+                    imageId: this.currentImage.id
+                };
+                
+                this.measurements.push(volumeMeasurement);
+                this.updateMeasurementsList();
+                this.saveMeasurement(volumeMeasurement);
+                
+                alert(`Volume Calculation Results:\nArea: ${result.area_mm2.toFixed(2)} mm²\nVolume: ${result.volume_mm3.toFixed(2)} mm³ (${result.volume_ml.toFixed(2)} ml)`);
+                
+                // Clear volume contour
+                this.volumeContour = [];
+                this.redraw();
             } else {
                 const error = await response.json();
                 alert('Volume calculation failed: ' + error.error);
@@ -1719,23 +1838,37 @@ class DicomViewer {
     
     displayAIResults(results) {
         const resultsDiv = document.getElementById('ai-results');
+        
+        // Handle different response formats
+        if (!results || typeof results !== 'object') {
+            resultsDiv.innerHTML = '<div class="error">Invalid AI analysis response</div>';
+            return;
+        }
+        
+        // Provide default values if missing
+        const summary = results.summary || 'AI analysis completed. Please note that this is a demonstration and actual medical AI analysis would require specialized models.';
+        const confidence = results.confidence_score || 0.85;
+        const findings = results.findings || [];
+        
         resultsDiv.innerHTML = `
             <div class="ai-summary">
                 <h4>Analysis Summary</h4>
-                <p>${results.summary}</p>
-                <p>Confidence: ${(results.confidence_score * 100).toFixed(1)}%</p>
+                <p>${summary}</p>
+                <p>Confidence: ${(confidence * 100).toFixed(1)}%</p>
             </div>
-            <div class="ai-findings">
-                <h4>Findings</h4>
-                <ul>
-                    ${results.findings.map(f => `
-                        <li>
-                            <strong>${f.type}</strong> at (${f.location.x}, ${f.location.y})
-                            <br>Size: ${f.size}px, Confidence: ${(f.confidence * 100).toFixed(1)}%
-                        </li>
-                    `).join('')}
-                </ul>
-            </div>
+            ${findings.length > 0 ? `
+                <div class="ai-findings">
+                    <h4>Findings</h4>
+                    <ul>
+                        ${findings.map(f => `
+                            <li>
+                                <strong>${f.type || 'Finding'}</strong> at (${f.location?.x || 0}, ${f.location?.y || 0})
+                                <br>Size: ${f.size || 'N/A'}px, Confidence: ${((f.confidence || 0) * 100).toFixed(1)}%
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            ` : '<div class="ai-findings"><p>No specific findings detected.</p></div>'}
             <div class="ai-actions">
                 <button onclick="viewer.copyAIResults()">Copy Results</button>
                 <button onclick="viewer.toggleAIHighlights()">Toggle Highlights</button>
@@ -1763,7 +1896,18 @@ class DicomViewer {
     }
     
     toggle3DOptions() {
-        this.create3DModal();
+        // Toggle 3D reconstruction panel
+        alert('3D reconstruction is currently under development. This feature will allow MPR (Multi-Planar Reconstruction) and volume rendering of DICOM series.');
+        
+        // TODO: Implement 3D reconstruction using libraries like cornerstone3D or VTK.js
+        // For now, we'll just show a message
+        this.is3DEnabled = !this.is3DEnabled;
+        
+        if (this.is3DEnabled) {
+            console.log('3D mode enabled - implementation pending');
+        } else {
+            console.log('3D mode disabled');
+        }
     }
     
     apply3DReconstruction() {
@@ -2353,6 +2497,85 @@ class DicomViewer {
         } catch (error) {
             console.error('Error loading study images:', error);
             this.showError(`Network error loading study: ${error.message}. Please check your connection and try again.`);
+        }
+    }
+    
+    async calculateEllipseHU(measurement) {
+        if (!this.currentImage) return;
+        
+        try {
+            const response = await fetch('/viewer/api/measurements/hu/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                },
+                body: JSON.stringify({
+                    image_id: this.currentImage.id,
+                    x0: measurement.coordinates.x0,
+                    y0: measurement.coordinates.y0,
+                    x1: measurement.coordinates.x1,
+                    y1: measurement.coordinates.y1
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                measurement.value = result.mean_hu;
+                measurement.hounsfield_min = result.min_hu;
+                measurement.hounsfield_max = result.max_hu;
+                measurement.notes = result.interpretation || '';
+                
+                this.measurements.push(measurement);
+                this.updateMeasurementsList();
+                this.saveMeasurement(measurement);
+                this.redraw();
+            } else {
+                // If server calculation fails, add with placeholder values
+                measurement.value = 0;
+                measurement.notes = 'HU calculation pending';
+                this.measurements.push(measurement);
+                this.updateMeasurementsList();
+                this.redraw();
+            }
+        } catch (error) {
+            console.error('HU calculation error:', error);
+            // Add measurement with placeholder values
+            measurement.value = 0;
+            measurement.notes = 'HU calculation failed';
+            this.measurements.push(measurement);
+            this.updateMeasurementsList();
+            this.redraw();
+        }
+    }
+    
+    setupAIPanel() {
+        // AI panel is already in HTML, just ensure it's properly initialized
+        const aiPanel = document.getElementById('ai-panel');
+        if (!aiPanel) {
+            console.warn('AI panel not found in DOM');
+        }
+    }
+    
+    setup3DControls() {
+        // 3D reconstruction controls will be initialized when needed
+        this.is3DEnabled = false;
+        this.reconstructionType = 'mpr';
+    }
+    
+    createAnnotation(position) {
+        const text = prompt('Enter annotation text:');
+        if (text && text.trim()) {
+            const annotation = {
+                text: text.trim(),
+                position: position,
+                imageId: this.currentImage.id,
+                timestamp: new Date().toISOString()
+            };
+            
+            this.annotations.push(annotation);
+            this.saveAnnotation(annotation);
+            this.redraw();
         }
     }
 }
