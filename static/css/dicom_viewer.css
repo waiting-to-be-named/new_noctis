@@ -876,14 +876,26 @@ body {
 }
 
 .measurement-item {
-    padding: 8px;
-    margin-bottom: 5px;
+    padding: 10px;
+    margin-bottom: 6px;
     background: #333;
+    border: 1px solid #555;
     border-radius: 4px;
-    font-size: 12px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    font-size: 13px;
+    display: block;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.measurement-item:hover {
+    background: #444;
+    border-color: #0099ff;
+}
+
+.measurement-item.highlighted {
+    background: #0099ff20;
+    border-color: #0099ff;
+    color: #0099ff;
 }
 
 .measurement-item .delete-btn {

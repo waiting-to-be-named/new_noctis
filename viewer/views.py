@@ -983,41 +983,70 @@ def get_studies(request):
 def get_study_images(request, study_id):
     """Get all images for a study"""
     try:
+        print(f"Fetching study with ID: {study_id}")
         study = DicomStudy.objects.get(id=study_id)
+        print(f"Found study: {study.patient_name} - {study.study_description}")
+        
+        # Check user permissions
+        if hasattr(request.user, 'facility') and study.facility != request.user.facility:
+            if not (request.user.is_superuser or request.user.groups.filter(name='Radiologists').exists()):
+                return Response({'error': 'You do not have permission to view this study'}, status=403)
+        
         images = DicomImage.objects.filter(series__study=study).order_by('series__series_number', 'instance_number')
+        print(f"Found {images.count()} images for study {study_id}")
+        
+        if images.count() == 0:
+            print(f"No images found for study {study_id}")
+            return Response({'error': 'No images found for this study'}, status=404)
         
         images_data = []
         for image in images:
+            # Validate that the image has essential data
+            if not image.file_path or not os.path.exists(image.file_path):
+                print(f"Warning: Image {image.id} has missing or invalid file path: {image.file_path}")
+                continue
+                
             image_data = {
                 'id': image.id,
-                'instance_number': int(image.instance_number) if image.instance_number is not None else None,
-                'series_number': int(image.series.series_number) if image.series and image.series.series_number is not None else None,
-                'series_description': image.series.series_description,
-                'rows': int(image.rows) if image.rows is not None else None,
-                'columns': int(image.columns) if image.columns is not None else None,
-                'pixel_spacing_x': float(image.pixel_spacing_x) if image.pixel_spacing_x is not None else None,
-                'pixel_spacing_y': float(image.pixel_spacing_y) if image.pixel_spacing_y is not None else None,
-                'slice_thickness': float(image.slice_thickness) if image.slice_thickness is not None else None,
-                'window_width': float(image.window_width) if image.window_width is not None else None,
-                'window_center': float(image.window_center) if image.window_center is not None else None,
+                'instance_number': int(image.instance_number) if image.instance_number is not None else 0,
+                'series_number': int(image.series.series_number) if image.series and image.series.series_number is not None else 0,
+                'series_description': image.series.series_description if image.series else '',
+                'rows': int(image.rows) if image.rows is not None else 512,
+                'columns': int(image.columns) if image.columns is not None else 512,
+                'pixel_spacing_x': float(image.pixel_spacing_x) if image.pixel_spacing_x is not None else 1.0,
+                'pixel_spacing_y': float(image.pixel_spacing_y) if image.pixel_spacing_y is not None else 1.0,
+                'slice_thickness': float(image.slice_thickness) if image.slice_thickness is not None else 1.0,
+                'window_width': float(image.window_width) if image.window_width is not None else 400,
+                'window_center': float(image.window_center) if image.window_center is not None else 40,
             }
             images_data.append(image_data)
+        
+        if not images_data:
+            return Response({'error': 'No valid images found for this study - all image files are missing'}, status=404)
+        
+        print(f"Returning {len(images_data)} valid images for study {study_id}")
         
         return Response({
             'study': {
                 'id': study.id,
-                'patient_name': study.patient_name,
-                'patient_id': study.patient_id,
-                'study_date': study.study_date,
-                'modality': study.modality,
-                'study_description': study.study_description,
-                'institution_name': study.institution_name,
-                'accession_number': study.accession_number,
+                'patient_name': study.patient_name or 'Unknown',
+                'patient_id': study.patient_id or 'Unknown',
+                'study_date': study.study_date.isoformat() if study.study_date else None,
+                'modality': study.modality or 'Unknown',
+                'study_description': study.study_description or '',
+                'institution_name': study.institution_name or '',
+                'accession_number': study.accession_number or '',
             },
             'images': images_data
         })
     except DicomStudy.DoesNotExist:
+        print(f"Study with ID {study_id} not found")
         return Response({'error': 'Study not found'}, status=404)
+    except Exception as e:
+        print(f"Error fetching study {study_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return Response({'error': f'Server error: {str(e)}'}, status=500)
 
 
 @api_view(['GET'])
