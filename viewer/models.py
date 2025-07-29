@@ -24,6 +24,7 @@ class Facility(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True, related_name='facility')
     created_at = models.DateTimeField(auto_now_add=True)
     ae_title = models.CharField(max_length=16, unique=True, null=True, blank=True, help_text="DICOM AE Title automatically generated for this facility")
+    dicom_port = models.PositiveIntegerField(default=11112, help_text="Port number on which this facility will receive DICOM images")
     
     class Meta:
         verbose_name_plural = "Facilities"
