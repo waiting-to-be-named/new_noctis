@@ -1029,6 +1029,12 @@ def get_image_data(request, image_id):
         image = DicomImage.objects.get(id=image_id)
         print(f"Found image: {image}, file_path: {image.file_path}")
         
+        # Check if file exists
+        import os
+        if not os.path.exists(image.file_path):
+            print(f"ERROR: File not found at path: {image.file_path}")
+            return Response({'error': 'Image file not found on server'}, status=404)
+        
         # Get query parameters
         window_width = request.GET.get('window_width', image.window_width)
         window_level = request.GET.get('window_level', image.window_center)
@@ -1049,31 +1055,35 @@ def get_image_data(request, image_id):
         print(f"Processing image with WW: {window_width}, WL: {window_level}, inverted: {inverted}")
         
         # Get processed image
-        image_base64 = image.get_processed_image_base64(window_width, window_level, inverted)
+        image_base64 = image.get_processed_image_base64(
+            window_width=window_width,
+            window_level=window_level,
+            inverted=inverted
+        )
         
-        if image_base64:
-            print(f"Successfully processed image {image_id}")
-            return Response({
-                'image_data': image_base64,
-                'metadata': {
-                    'rows': image.rows,
-                    'columns': image.columns,
-                    'pixel_spacing_x': image.pixel_spacing_x,
-                    'pixel_spacing_y': image.pixel_spacing_y,
-                    'slice_thickness': image.slice_thickness,
-                    'window_width': image.window_width,
-                    'window_center': image.window_center,
-                }
-            })
-        else:
-            print(f"Failed to process image {image_id}")
-            return Response({'error': 'Could not process image - file may be missing or corrupted'}, status=500)
-            
+        if not image_base64:
+            print("ERROR: Failed to generate base64 image data")
+            return Response({'error': 'Failed to process image data'}, status=500)
+        
+        print(f"Successfully generated base64 image, length: {len(image_base64)}")
+        
+        return Response({
+            'image_data': image_base64,  # Already includes data:image/png;base64,
+            'metadata': {
+                'rows': image.rows,
+                'columns': image.columns,
+                'pixel_spacing_x': image.pixel_spacing_x,
+                'pixel_spacing_y': image.pixel_spacing_y,
+                'slice_thickness': image.slice_thickness,
+                'window_width': window_width,
+                'window_level': window_level,
+            }
+        })
     except DicomImage.DoesNotExist:
-        print(f"Image not found: {image_id}")
+        print(f"ERROR: Image not found with id: {image_id}")
         return Response({'error': 'Image not found'}, status=404)
     except Exception as e:
-        print(f"Unexpected error processing image {image_id}: {e}")
+        print(f"ERROR in get_image_data: {str(e)}")
         import traceback
         traceback.print_exc()
         return Response({'error': f'Server error: {str(e)}'}, status=500)
