@@ -121,6 +121,7 @@ class DicomImage(models.Model):
     def load_dicom_data(self):
         """Load and return pydicom dataset"""
         if not self.file_path:
+            print(f"No file path for DicomImage {self.id}")
             return None
             
         try:
@@ -128,16 +129,37 @@ class DicomImage(models.Model):
             if hasattr(self.file_path, 'path'):
                 file_path = self.file_path.path
             else:
-                file_path = str(self.file_path)
+                # Check if it's a relative path, make it absolute
+                if not os.path.isabs(str(self.file_path)):
+                    from django.conf import settings
+                    file_path = os.path.join(settings.MEDIA_ROOT, str(self.file_path))
+                else:
+                    file_path = str(self.file_path)
             
             # Check if file exists
             if not os.path.exists(file_path):
                 print(f"DICOM file not found: {file_path}")
-                return None
+                print(f"Current working directory: {os.getcwd()}")
+                print(f"File path from model: {self.file_path}")
+                # Try alternative paths
+                alt_paths = [
+                    os.path.join(os.getcwd(), 'media', str(self.file_path).replace('dicom_files/', '')),
+                    os.path.join(os.getcwd(), str(self.file_path)),
+                    str(self.file_path)
+                ]
+                for alt_path in alt_paths:
+                    if os.path.exists(alt_path):
+                        print(f"Found file at alternative path: {alt_path}")
+                        file_path = alt_path
+                        break
+                else:
+                    print(f"File not found in any of the attempted paths: {alt_paths}")
+                    return None
                 
             return pydicom.dcmread(file_path)
         except Exception as e:
             print(f"Error loading DICOM from {self.file_path}: {e}")
+            print(f"Attempted file path: {file_path if 'file_path' in locals() else 'unknown'}")
             return None
     
     def get_pixel_array(self):

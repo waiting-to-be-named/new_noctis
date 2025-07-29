@@ -26,31 +26,53 @@ from .models import (
 from .serializers import DicomStudySerializer, DicomImageSerializer
 
 
-def ensure_media_directories():
-    """Ensure media directories exist with proper permissions"""
-    media_root = default_storage.location
-    dicom_dir = os.path.join(media_root, 'dicom_files')
-    temp_dir = os.path.join(media_root, 'temp')
-    
-    for directory in [media_root, dicom_dir, temp_dir]:
-        try:
+# Ensure required directories exist
+def ensure_directories():
+    """Ensure that required media directories exist"""
+    try:
+        media_root = default_storage.location
+        dicom_dir = os.path.join(media_root, 'dicom_files')
+        temp_dir = os.path.join(media_root, 'temp')
+        
+        for directory in [media_root, dicom_dir, temp_dir]:
             if not os.path.exists(directory):
-                os.makedirs(directory, mode=0o755, exist_ok=True)
-                print(f"Created directory: {directory}")
-            else:
-                # Ensure directory is writable
-                if not os.access(directory, os.W_OK):
-                    os.chmod(directory, 0o755)
-                    print(f"Updated permissions for directory: {directory}")
-        except Exception as e:
-            print(f"Error creating/checking directory {directory}: {e}")
-            # Try to create in a different location if needed
-            if directory == media_root:
-                # Fallback to current directory if media_root fails
-                fallback_dir = os.path.join(os.getcwd(), 'media')
-                if not os.path.exists(fallback_dir):
-                    os.makedirs(fallback_dir, mode=0o755, exist_ok=True)
-                print(f"Using fallback media directory: {fallback_dir}")
+                try:
+                    os.makedirs(directory, exist_ok=True)
+                    print(f"Created directory: {directory}")
+                except PermissionError:
+                    # Fallback to current directory if media_root fails
+                    if directory == media_root:
+                        fallback_dir = os.path.join(os.getcwd(), 'media')
+                        if not os.path.exists(fallback_dir):
+                            os.makedirs(fallback_dir, exist_ok=True)
+                            print(f"Created fallback media directory: {fallback_dir}")
+                        # Update default storage location
+                        default_storage.location = fallback_dir
+                        media_root = fallback_dir
+                        dicom_dir = os.path.join(media_root, 'dicom_files')
+                        temp_dir = os.path.join(media_root, 'temp')
+                        # Create subdirectories in fallback location
+                        for subdir in [dicom_dir, temp_dir]:
+                            if not os.path.exists(subdir):
+                                os.makedirs(subdir, exist_ok=True)
+                                print(f"Created fallback directory: {subdir}")
+                    else:
+                        print(f"Permission denied creating directory: {directory}")
+                        raise
+                except Exception as e:
+                    print(f"Error creating directory {directory}: {e}")
+                    raise
+    except Exception as e:
+        print(f"Critical error in ensure_directories: {e}")
+        # Create minimal fallback structure
+        fallback_media = os.path.join(os.getcwd(), 'media')
+        fallback_dicom = os.path.join(fallback_media, 'dicom_files')
+        try:
+            os.makedirs(fallback_dicom, exist_ok=True)
+            print(f"Created emergency fallback: {fallback_dicom}")
+        except Exception as fallback_error:
+            print(f"Emergency fallback failed: {fallback_error}")
+            raise
 
 
 class HomeView(TemplateView):
@@ -163,7 +185,7 @@ def upload_dicom_files(request):
     """Handle DICOM file uploads with comprehensive error handling and validation"""
     try:
         # Ensure media directories exist with proper permissions
-        ensure_media_directories()
+        ensure_directories()
         
         if 'files' not in request.FILES:
             return JsonResponse({'error': 'No files provided'}, status=400)
@@ -297,6 +319,21 @@ def upload_dicom_files(request):
                     # Create worklist entry if study was created
                     if created:
                         try:
+                            # Get or create a default facility if none exists
+                            facility = study.facility
+                            if not facility:
+                                facility, _ = Facility.objects.get_or_create(
+                                    name="Default Facility",
+                                    defaults={
+                                        'address': 'Unknown',
+                                        'phone': 'Unknown',
+                                        'email': 'unknown@facility.com'
+                                    }
+                                )
+                                # Update the study with the facility
+                                study.facility = facility
+                                study.save()
+                            
                             WorklistEntry.objects.create(
                                 patient_name=study.patient_name,
                                 patient_id=study.patient_id,
@@ -307,12 +344,15 @@ def upload_dicom_files(request):
                                 modality=study.modality,
                                 scheduled_performing_physician=study.referring_physician or "Unknown",
                                 procedure_description=study.study_description,
-                                facility=study.facility or Facility.objects.first(),
+                                facility=facility,
                                 study=study,
                                 status='completed'
                             )
+                            print(f"Created worklist entry for study {study.id}")
                         except Exception as e:
                             print(f"Error creating worklist entry: {e}")
+                            import traceback
+                            traceback.print_exc()
                 
                 # Create or get series with fallback UID
                 series_uid = str(dicom_data.get('SeriesInstanceUID', ''))
@@ -435,7 +475,7 @@ def upload_dicom_folder(request):
     """Handle DICOM folder uploads with comprehensive error handling and validation"""
     try:
         # Ensure media directories exist with proper permissions
-        ensure_media_directories()
+        ensure_directories()
         
         if 'files' not in request.FILES:
             return JsonResponse({'error': 'No files provided'}, status=400)
@@ -596,6 +636,21 @@ def upload_dicom_folder(request):
                 # Create worklist entry if study was created
                 if created:
                     try:
+                        # Get or create a default facility if none exists
+                        facility = study.facility
+                        if not facility:
+                            facility, _ = Facility.objects.get_or_create(
+                                name="Default Facility",
+                                defaults={
+                                    'address': 'Unknown',
+                                    'phone': 'Unknown',
+                                    'email': 'unknown@facility.com'
+                                }
+                            )
+                            # Update the study with the facility
+                            study.facility = facility
+                            study.save()
+                        
                         WorklistEntry.objects.create(
                             patient_name=study.patient_name,
                             patient_id=study.patient_id,
@@ -606,7 +661,7 @@ def upload_dicom_folder(request):
                             modality=study.modality,
                             scheduled_performing_physician=study.referring_physician or "Unknown",
                             procedure_description=study.study_description,
-                            facility=study.facility or Facility.objects.first(),
+                            facility=facility,
                             study=study,
                             status='completed'
                         )
@@ -781,7 +836,9 @@ def get_study_images(request, study_id):
 def get_image_data(request, image_id):
     """Get processed image data"""
     try:
+        print(f"Attempting to get image data for image_id: {image_id}")
         image = DicomImage.objects.get(id=image_id)
+        print(f"Found image: {image}, file_path: {image.file_path}")
         
         # Get query parameters
         window_width = request.GET.get('window_width', image.window_width)
@@ -794,10 +851,13 @@ def get_image_data(request, image_id):
         if window_level:
             window_level = float(window_level)
         
+        print(f"Processing image with WW: {window_width}, WL: {window_level}, inverted: {inverted}")
+        
         # Get processed image
         image_base64 = image.get_processed_image_base64(window_width, window_level, inverted)
         
         if image_base64:
+            print(f"Successfully processed image {image_id}")
             return Response({
                 'image_data': image_base64,
                 'metadata': {
@@ -811,10 +871,17 @@ def get_image_data(request, image_id):
                 }
             })
         else:
-            return Response({'error': 'Could not process image'}, status=500)
+            print(f"Failed to process image {image_id}")
+            return Response({'error': 'Could not process image - file may be missing or corrupted'}, status=500)
             
     except DicomImage.DoesNotExist:
+        print(f"Image not found: {image_id}")
         return Response({'error': 'Image not found'}, status=404)
+    except Exception as e:
+        print(f"Unexpected error processing image {image_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return Response({'error': f'Server error: {str(e)}'}, status=500)
 
 
 @csrf_exempt
