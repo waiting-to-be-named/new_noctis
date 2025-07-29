@@ -108,3 +108,24 @@ class AnnotationAdmin(admin.ModelAdmin):
             'fields': ('created_by', 'created_at')
         }),
     )
+
+
+@admin.register(Facility)
+class FacilityAdmin(admin.ModelAdmin):
+    list_display = ['name', 'email', 'phone', 'ae_title', 'dicom_port', 'created_at']
+    list_filter = ['created_at']
+    search_fields = ['name', 'email', 'ae_title']
+    readonly_fields = ['created_at', 'ae_title', 'dicom_port']
+    
+    fieldsets = (
+        ('Facility Information', {
+            'fields': ('name', 'address', 'phone', 'email', 'letterhead_logo')
+        }),
+        ('DICOM Configuration', {
+            'fields': ('ae_title', 'dicom_port'),
+            'description': 'DICOM AE Title and port are automatically generated for this facility'
+        }),
+        ('System Information', {
+            'fields': ('user', 'created_at')
+        }),
+    )

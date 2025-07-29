@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Noctis - Radiology Report</title>
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/worklist.css' %}">
@@ -312,13 +313,39 @@
         }
         
         function getCSRFToken() {
-            return document.querySelector('[name=csrfmiddlewaretoken]').value;
+            const token = document.querySelector('[name=csrfmiddlewaretoken]');
+            if (token) {
+                return token.value;
+            }
+            // Fallback to cookie method
+            const cookieValue = document.cookie
+                .split('; ')
+                .find(row => row.startsWith('csrftoken='))
+                ?.split('=')[1];
+            if (cookieValue) {
+                return cookieValue;
+            }
+            // Final fallback to meta tag
+            const metaToken = document.querySelector('meta[name="csrf-token"]');
+            return metaToken ? metaToken.getAttribute('content') : '';
         }
         
         function saveReport(finalize = false) {
             const findings = document.getElementById('findings').value;
             const impression = document.getElementById('impression').value;
             const recommendations = document.getElementById('recommendations').value;
+            
+            // Validate required fields for finalized reports
+            if (finalize && (!findings.trim() || !impression.trim())) {
+                showAlert('Findings and Impression are required for finalized reports', 'error');
+                return;
+            }
+            
+            const csrfToken = getCSRFToken();
+            if (!csrfToken) {
+                showAlert('Security token missing. Please refresh the page and try again.', 'error');
+                return;
+            }
             
             const data = {
                 findings: findings,
@@ -327,15 +354,26 @@
                 finalize: finalize
             };
             
+            // Show loading state
+            const saveButton = document.getElementById(finalize ? 'finalize-report' : 'save-draft');
+            const originalText = saveButton.innerHTML;
+            saveButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            saveButton.disabled = true;
+            
             fetch(window.location.href, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': getCSRFToken()
+                    'X-CSRFToken': csrfToken
                 },
                 body: JSON.stringify(data)
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     showAlert(finalize ? 'Report finalized successfully!' : 'Report saved as draft!');
@@ -350,8 +388,13 @@
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
-                showAlert('Error saving report', 'error');
+                console.error('Error saving report:', error);
+                showAlert('Error saving report. Please check your connection and try again.', 'error');
+            })
+            .finally(() => {
+                // Restore button state
+                saveButton.innerHTML = originalText;
+                saveButton.disabled = false;
             });
         }
         
