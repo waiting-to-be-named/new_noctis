@@ -19,6 +19,11 @@ class Facility(models.Model):
     phone = models.CharField(max_length=20)
     email = models.EmailField()
     letterhead_logo = models.ImageField(upload_to='facility_logos/', null=True, blank=True)
+    
+    # Login credentials for facility
+    username = models.CharField(max_length=150, unique=True, null=True, blank=True)
+    password = models.CharField(max_length=128, null=True, blank=True)  # This will be hashed
+    
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -27,6 +32,34 @@ class Facility(models.Model):
     
     def __str__(self):
         return self.name
+    
+    def set_password(self, raw_password):
+        """Set password for facility login"""
+        from django.contrib.auth.hashers import make_password
+        self.password = make_password(raw_password)
+    
+    def check_password(self, raw_password):
+        """Check password for facility login"""
+        from django.contrib.auth.hashers import check_password
+        return check_password(raw_password, self.password)
+
+
+class FacilityUser(models.Model):
+    """Model to link Django users to facilities for access control"""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='facility_profile')
+    facility = models.ForeignKey(Facility, on_delete=models.CASCADE, related_name='users')
+    role = models.CharField(max_length=50, choices=[
+        ('admin', 'Facility Admin'),
+        ('technician', 'Technician'),
+        ('viewer', 'Viewer Only')
+    ], default='viewer')
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ['user', 'facility']
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.facility.name} ({self.role})"
 
 
 class DicomStudy(models.Model):

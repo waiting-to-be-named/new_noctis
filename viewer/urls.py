@@ -12,8 +12,15 @@ urlpatterns = [
     path('admin/facilities/', views.FacilityListView.as_view(), name='facility_list'),
     path('admin/facilities/new/', views.FacilityCreateView.as_view(), name='facility_create'),
     path('admin/facilities/<int:pk>/edit/', views.FacilityUpdateView.as_view(), name='facility_edit'),
+    path('admin/facilities/<int:pk>/delete/', views.FacilityDeleteView.as_view(), name='facility_delete'),
     path('admin/radiologists/', views.RadiologistListView.as_view(), name='radiologist_list'),
     path('admin/radiologists/new/', views.create_radiologist, name='radiologist_create'),
+    path('admin/radiologists/<int:pk>/edit/', views.RadiologistUpdateView.as_view(), name='radiologist_update'),
+    path('admin/radiologists/<int:pk>/delete/', views.RadiologistDeleteView.as_view(), name='radiologist_delete'),
+    
+    # Study management
+    path('admin/studies/', views.StudyListView.as_view(), name='study_list'),
+    path('admin/studies/<int:pk>/delete/', views.StudyDeleteView.as_view(), name='study_delete'),
     
     # File upload
     path('api/upload/', views.upload_dicom_files, name='upload_dicom'),
@@ -31,6 +38,12 @@ urlpatterns = [
     path('api/images/<int:image_id>/annotations/', views.get_annotations, name='get_annotations'),
     path('api/images/<int:image_id>/clear-measurements/', views.clear_measurements, name='clear_measurements'),
     path('api/measurements/hu/', views.measure_hu, name='measure_hu'),
+    
+    # Delete functionality for admin
+    path('api/admin/measurements/<int:measurement_id>/delete/', views.delete_measurement, name='delete_measurement'),
+    path('api/admin/annotations/<int:annotation_id>/delete/', views.delete_annotation, name='delete_annotation'),
+    path('api/admin/series/<int:series_id>/delete/', views.delete_series, name='delete_series'),
+    path('api/admin/images/<int:image_id>/delete/', views.delete_image, name='delete_image'),
     
     # Volume calculation
     path('api/volume/calculate/', views.calculate_volume, name='calculate_volume'),

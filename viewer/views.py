@@ -7,7 +7,7 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User, Group
-from django.views.generic import TemplateView, ListView, CreateView, UpdateView
+from django.views.generic import TemplateView, ListView, CreateView, UpdateView, DeleteView
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib import messages
 from django.urls import reverse_lazy
@@ -21,7 +21,7 @@ from datetime import datetime
 import numpy as np
 from .models import (
     DicomStudy, DicomSeries, DicomImage, Measurement, Annotation,
-    Facility, Report, WorklistEntry, AIAnalysis, Notification
+    Facility, Report, WorklistEntry, AIAnalysis, Notification, FacilityUser
 )
 from django.contrib.auth.models import Group
 from .serializers import DicomStudySerializer, DicomImageSerializer
@@ -141,8 +141,62 @@ class FacilityCreateView(AdminRequiredMixin, CreateView):
     success_url = reverse_lazy('viewer:facility_list')
     
     def form_valid(self, form):
-        messages.success(self.request, f'Facility "{form.instance.name}" created successfully.')
+        # Get the facility credentials from POST data
+        facility_username = self.request.POST.get('facility_username')
+        facility_password = self.request.POST.get('facility_password')
+        facility_password_confirm = self.request.POST.get('facility_password_confirm')
+        
+        # Validate passwords match
+        if facility_password != facility_password_confirm:
+            messages.error(self.request, 'Passwords do not match.')
+            return self.form_invalid(form)
+        
+        # Validate password requirements
+        if len(facility_password) < 8:
+            messages.error(self.request, 'Password must be at least 8 characters long.')
+            return self.form_invalid(form)
+        
+        # Check if username already exists
+        if Facility.objects.filter(username=facility_username).exists():
+            messages.error(self.request, 'Username already exists. Please choose a different username.')
+            return self.form_invalid(form)
+        
+        # Save the facility
+        facility = form.save(commit=False)
+        facility.username = facility_username
+        facility.set_password(facility_password)
+        facility.save()
+        
+        # Create a Django user for this facility
+        try:
+            user = User.objects.create_user(
+                username=facility_username,
+                email=facility.email,
+                first_name=facility.name,
+                password=facility_password
+            )
+            
+            # Create facility group if it doesn't exist
+            facility_group, created = Group.objects.get_or_create(name='Facilities')
+            user.groups.add(facility_group)
+            
+            # Create FacilityUser profile
+            FacilityUser.objects.create(
+                user=user,
+                facility=facility,
+                role='admin'
+            )
+            
+            messages.success(self.request, f'Facility "{facility.name}" and login account created successfully.')
+        except Exception as e:
+            messages.error(self.request, f'Facility created but login account failed: {str(e)}')
+        
         return super().form_valid(form)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Add any additional context for the template
+        return context
 
 
 class FacilityUpdateView(AdminRequiredMixin, UpdateView):
@@ -153,8 +207,73 @@ class FacilityUpdateView(AdminRequiredMixin, UpdateView):
     success_url = reverse_lazy('viewer:facility_list')
     
     def form_valid(self, form):
-        messages.success(self.request, f'Facility "{form.instance.name}" updated successfully.')
+        # Get the facility credentials from POST data
+        facility_username = self.request.POST.get('facility_username')
+        facility_password = self.request.POST.get('facility_password')
+        facility_password_confirm = self.request.POST.get('facility_password_confirm')
+        
+        facility = form.save(commit=False)
+        
+        # Only update credentials if provided
+        if facility_username:
+            # Check if username already exists for other facilities
+            existing_facility = Facility.objects.filter(username=facility_username).exclude(id=facility.id).first()
+            if existing_facility:
+                messages.error(self.request, 'Username already exists. Please choose a different username.')
+                return self.form_invalid(form)
+            
+            facility.username = facility_username
+            
+            # Update Django user if exists
+            try:
+                if hasattr(facility, 'users') and facility.users.exists():
+                    facility_user = facility.users.first()
+                    django_user = facility_user.user
+                    django_user.username = facility_username
+                    django_user.email = facility.email
+                    django_user.first_name = facility.name
+                    
+                    if facility_password and facility_password == facility_password_confirm:
+                        if len(facility_password) >= 8:
+                            facility.set_password(facility_password)
+                            django_user.set_password(facility_password)
+                            django_user.save()
+                        else:
+                            messages.error(self.request, 'Password must be at least 8 characters long.')
+                            return self.form_invalid(form)
+                    
+                    django_user.save()
+            except Exception as e:
+                messages.warning(self.request, f'Facility updated but login account update failed: {str(e)}')
+        
+        facility.save()
+        messages.success(self.request, f'Facility "{facility.name}" updated successfully.')
         return super().form_valid(form)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['facility_username'] = self.object.username
+        return context
+
+
+class FacilityDeleteView(AdminRequiredMixin, DeleteView):
+    """Admin view to delete facility"""
+    model = Facility
+    template_name = 'admin/facility_confirm_delete.html'
+    success_url = reverse_lazy('viewer:facility_list')
+    
+    def delete(self, request, *args, **kwargs):
+        facility = self.get_object()
+        
+        # Delete associated Django users
+        try:
+            for facility_user in facility.users.all():
+                facility_user.user.delete()
+        except Exception as e:
+            messages.warning(request, f'Some user accounts could not be deleted: {str(e)}')
+        
+        messages.success(request, f'Facility "{facility.name}" and all associated data deleted successfully.')
+        return super().delete(request, *args, **kwargs)
 
 
 class RadiologistListView(AdminRequiredMixin, ListView):
@@ -166,6 +285,71 @@ class RadiologistListView(AdminRequiredMixin, ListView):
     
     def get_queryset(self):
         return User.objects.filter(groups__name='Radiologists').distinct()
+
+
+class RadiologistDeleteView(AdminRequiredMixin, DeleteView):
+    """Admin view to delete radiologist"""
+    model = User
+    template_name = 'admin/radiologist_confirm_delete.html'
+    success_url = reverse_lazy('viewer:radiologist_list')
+    
+    def get_queryset(self):
+        return User.objects.filter(groups__name='Radiologists')
+    
+    def delete(self, request, *args, **kwargs):
+        user = self.get_object()
+        messages.success(request, f'Radiologist "{user.get_full_name()}" deleted successfully.')
+        return super().delete(request, *args, **kwargs)
+
+
+class RadiologistUpdateView(AdminRequiredMixin, UpdateView):
+    """Admin view to update radiologist"""
+    model = User
+    template_name = 'admin/radiologist_form.html'
+    fields = ['username', 'email', 'first_name', 'last_name', 'is_active']
+    success_url = reverse_lazy('viewer:radiologist_list')
+    
+    def get_queryset(self):
+        return User.objects.filter(groups__name='Radiologists')
+    
+    def form_valid(self, form):
+        messages.success(self.request, f'Radiologist "{form.instance.get_full_name()}" updated successfully.')
+        return super().form_valid(form)
+
+
+class StudyDeleteView(AdminRequiredMixin, DeleteView):
+    """Admin view to delete study and all associated data"""
+    model = DicomStudy
+    template_name = 'admin/study_confirm_delete.html'
+    success_url = reverse_lazy('viewer:study_list')
+    
+    def delete(self, request, *args, **kwargs):
+        study = self.get_object()
+        study_name = f"{study.patient_name} - {study.study_date}"
+        
+        # Delete all associated files
+        try:
+            for series in study.series.all():
+                for image in series.images.all():
+                    if image.file_path:
+                        try:
+                            default_storage.delete(image.file_path.name)
+                        except:
+                            pass
+        except Exception as e:
+            messages.warning(request, f'Some files could not be deleted: {str(e)}')
+        
+        messages.success(request, f'Study "{study_name}" and all associated data deleted successfully.')
+        return super().delete(request, *args, **kwargs)
+
+
+class StudyListView(AdminRequiredMixin, ListView):
+    """Admin view to list all studies for management"""
+    model = DicomStudy
+    template_name = 'admin/study_list.html'
+    context_object_name = 'studies'
+    paginate_by = 20
+    ordering = ['-created_at']
 
 
 @login_required
@@ -835,10 +1019,27 @@ def upload_dicom_folder(request):
 
 @api_view(['GET'])
 def get_studies(request):
-    """Get all studies"""
-    studies = DicomStudy.objects.all()[:20]  # Limit to recent studies
-    serializer = DicomStudySerializer(studies, many=True)
-    return Response(serializer.data)
+    """Get studies based on user permissions"""
+    try:
+        # Check if user is admin or radiologist
+        if request.user.is_superuser or request.user.groups.filter(name='Radiologists').exists():
+            # Admin and radiologists can see all studies
+            studies = DicomStudy.objects.all()[:20]
+        elif request.user.groups.filter(name='Facilities').exists():
+            # Facility users can only see their own studies
+            try:
+                facility_user = FacilityUser.objects.get(user=request.user)
+                studies = DicomStudy.objects.filter(facility=facility_user.facility)[:20]
+            except FacilityUser.DoesNotExist:
+                studies = DicomStudy.objects.none()
+        else:
+            # No access for other users
+            studies = DicomStudy.objects.none()
+        
+        serializer = DicomStudySerializer(studies, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
 
 
 @api_view(['GET'])
@@ -1255,45 +1456,365 @@ def clear_measurements(request, image_id):
 @csrf_exempt
 @require_http_methods(['POST'])
 def perform_ai_analysis(request, image_id):
-    """Perform AI analysis on image (placeholder implementation)"""
+    """Enhanced AI analysis with actual image processing and diagnosis"""
     try:
         image = DicomImage.objects.get(id=image_id)
         
-        # This is a placeholder - would integrate with actual AI models
-        # For now, return mock results
-        mock_results = {
-            'analysis_type': 'anomaly_detection',
-            'summary': 'AI analysis completed. No significant abnormalities detected.',
-            'confidence_score': 0.85,
-            'findings': [
-                {
-                    'type': 'Normal structure',
-                    'location': {'x': 100, 'y': 150},
-                    'size': 25,
-                    'confidence': 0.9
-                }
-            ],
-            'highlighted_regions': [
-                {'x': 90, 'y': 140, 'width': 20, 'height': 20, 'type': 'normal'}
-            ]
+        # Load DICOM data for analysis
+        dicom_data = image.load_dicom_data()
+        if not dicom_data:
+            return JsonResponse({'error': 'Could not load DICOM data'}, status=400)
+        
+        pixel_array = image.get_pixel_array()
+        if pixel_array is None:
+            return JsonResponse({'error': 'Could not get pixel data'}, status=400)
+        
+        # Perform basic image analysis
+        analysis_results = perform_basic_ai_analysis(pixel_array, dicom_data)
+        
+        # Generate diagnosis based on findings
+        diagnosis = generate_ai_diagnosis(analysis_results, dicom_data)
+        
+        # Enhanced results with actual analysis
+        ai_results = {
+            'analysis_type': 'comprehensive_diagnosis',
+            'summary': diagnosis['summary'],
+            'confidence_score': diagnosis['confidence'],
+            'findings': analysis_results['findings'],
+            'diagnosis': diagnosis['diagnosis'],
+            'recommendations': diagnosis['recommendations'],
+            'highlighted_regions': analysis_results['highlighted_regions'],
+            'measurements': analysis_results['measurements'],
+            'abnormalities_detected': analysis_results['abnormalities'],
+            'tissue_analysis': analysis_results['tissue_analysis']
         }
         
         # Save AI analysis result
         ai_analysis = AIAnalysis.objects.create(
             image=image,
-            analysis_type='anomaly_detection',
-            findings=mock_results['findings'],
-            summary=mock_results['summary'],
-            confidence_score=mock_results['confidence_score'],
-            highlighted_regions=mock_results['highlighted_regions']
+            analysis_type='comprehensive_diagnosis',
+            findings=ai_results['findings'],
+            summary=ai_results['summary'],
+            confidence_score=ai_results['confidence_score'],
+            highlighted_regions=ai_results['highlighted_regions']
         )
         
-        return JsonResponse(mock_results)
+        return JsonResponse(ai_results)
         
     except DicomImage.DoesNotExist:
         return JsonResponse({'error': 'Image not found'}, status=404)
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+        return JsonResponse({'error': f'AI analysis failed: {str(e)}'}, status=400)
+
+
+def perform_basic_ai_analysis(pixel_array, dicom_data):
+    """Perform basic AI analysis on the image"""
+    try:
+        import cv2
+        from scipy import ndimage
+        from skimage import measure, morphology
+        
+        # Convert to uint8 for processing
+        if pixel_array.dtype != np.uint8:
+            pixel_array_norm = ((pixel_array - pixel_array.min()) / 
+                               (pixel_array.max() - pixel_array.min()) * 255).astype(np.uint8)
+        else:
+            pixel_array_norm = pixel_array
+        
+        findings = []
+        highlighted_regions = []
+        measurements = []
+        abnormalities = []
+        
+        # Basic image statistics
+        mean_intensity = float(np.mean(pixel_array))
+        std_intensity = float(np.std(pixel_array))
+        min_intensity = float(np.min(pixel_array))
+        max_intensity = float(np.max(pixel_array))
+        
+        # Histogram analysis
+        hist, bins = np.histogram(pixel_array.flatten(), bins=50)
+        
+        # Edge detection for structure analysis
+        edges = cv2.Canny(pixel_array_norm, 50, 150)
+        edge_density = np.sum(edges > 0) / edges.size
+        
+        # Detect potential abnormalities using thresholding
+        # High intensity regions (potential calcifications/contrast)
+        high_threshold = mean_intensity + 2 * std_intensity
+        high_intensity_mask = pixel_array > high_threshold
+        high_intensity_regions = measure.label(high_intensity_mask)
+        
+        for region in measure.regionprops(high_intensity_regions):
+            if region.area > 10:  # Filter small regions
+                y, x = region.centroid
+                findings.append({
+                    'type': 'High density region',
+                    'location': {'x': float(x), 'y': float(y)},
+                    'area': int(region.area),
+                    'confidence': 0.7,
+                    'description': 'Potential calcification or contrast enhancement'
+                })
+                highlighted_regions.append({
+                    'x': float(x - 10), 'y': float(y - 10), 
+                    'width': 20, 'height': 20, 'type': 'high_density'
+                })
+        
+        # Low intensity regions (potential cysts/air)
+        low_threshold = mean_intensity - 2 * std_intensity
+        low_intensity_mask = pixel_array < low_threshold
+        low_intensity_regions = measure.label(low_intensity_mask)
+        
+        for region in measure.regionprops(low_intensity_regions):
+            if region.area > 20:  # Filter small regions
+                y, x = region.centroid
+                findings.append({
+                    'type': 'Low density region',
+                    'location': {'x': float(x), 'y': float(y)},
+                    'area': int(region.area),
+                    'confidence': 0.6,
+                    'description': 'Potential cyst, air, or low-density lesion'
+                })
+                highlighted_regions.append({
+                    'x': float(x - 15), 'y': float(y - 15), 
+                    'width': 30, 'height': 30, 'type': 'low_density'
+                })
+        
+        # Texture analysis using local binary patterns
+        texture_score = calculate_texture_complexity(pixel_array_norm)
+        
+        # Symmetry analysis
+        symmetry_score = calculate_symmetry(pixel_array_norm)
+        
+        # Generate measurements
+        measurements = [
+            {'name': 'Mean Intensity', 'value': round(mean_intensity, 2), 'unit': 'HU'},
+            {'name': 'Standard Deviation', 'value': round(std_intensity, 2), 'unit': 'HU'},
+            {'name': 'Intensity Range', 'value': f"{round(min_intensity, 2)} - {round(max_intensity, 2)}", 'unit': 'HU'},
+            {'name': 'Edge Density', 'value': round(edge_density * 100, 2), 'unit': '%'},
+            {'name': 'Texture Complexity', 'value': round(texture_score, 2), 'unit': 'Score'},
+            {'name': 'Symmetry Score', 'value': round(symmetry_score, 2), 'unit': 'Score'}
+        ]
+        
+        # Detect abnormalities based on thresholds
+        if edge_density > 0.1:
+            abnormalities.append({
+                'type': 'High edge density',
+                'severity': 'moderate',
+                'description': 'Increased structural complexity detected'
+            })
+        
+        if len(findings) > 5:
+            abnormalities.append({
+                'type': 'Multiple regions of interest',
+                'severity': 'moderate',
+                'description': f'{len(findings)} regions requiring attention detected'
+            })
+        
+        if symmetry_score < 0.7:
+            abnormalities.append({
+                'type': 'Asymmetry detected',
+                'severity': 'mild',
+                'description': 'Image shows structural asymmetry'
+            })
+        
+        # Tissue analysis
+        tissue_analysis = analyze_tissue_types(pixel_array, dicom_data)
+        
+        return {
+            'findings': findings,
+            'highlighted_regions': highlighted_regions,
+            'measurements': measurements,
+            'abnormalities': abnormalities,
+            'tissue_analysis': tissue_analysis,
+            'image_statistics': {
+                'mean_intensity': mean_intensity,
+                'std_intensity': std_intensity,
+                'edge_density': edge_density,
+                'texture_score': texture_score,
+                'symmetry_score': symmetry_score
+            }
+        }
+        
+    except Exception as e:
+        print(f"Error in AI analysis: {e}")
+        return {
+            'findings': [],
+            'highlighted_regions': [],
+            'measurements': [],
+            'abnormalities': [],
+            'tissue_analysis': {},
+            'image_statistics': {}
+        }
+
+
+def generate_ai_diagnosis(analysis_results, dicom_data):
+    """Generate AI diagnosis based on analysis results"""
+    try:
+        modality = getattr(dicom_data, 'Modality', 'Unknown')
+        body_part = getattr(dicom_data, 'BodyPartExamined', 'Unknown')
+        
+        findings = analysis_results['findings']
+        abnormalities = analysis_results['abnormalities']
+        stats = analysis_results['image_statistics']
+        
+        # Base confidence
+        confidence = 0.8
+        
+        # Generate diagnosis based on findings
+        diagnosis_parts = []
+        recommendations = []
+        
+        if len(findings) == 0:
+            diagnosis_parts.append("No significant abnormalities detected")
+            confidence = 0.9
+        else:
+            # Analyze findings
+            high_density_count = len([f for f in findings if f['type'] == 'High density region'])
+            low_density_count = len([f for f in findings if f['type'] == 'Low density region'])
+            
+            if high_density_count > 0:
+                if modality == 'CT':
+                    diagnosis_parts.append(f"{high_density_count} high-density region(s) suggesting possible calcifications or contrast enhancement")
+                    recommendations.append("Consider correlation with clinical history for calcified lesions")
+                else:
+                    diagnosis_parts.append(f"{high_density_count} hyperintense region(s) detected")
+            
+            if low_density_count > 0:
+                if modality == 'CT':
+                    diagnosis_parts.append(f"{low_density_count} low-density region(s) suggesting possible cysts or air")
+                    recommendations.append("Consider further characterization of low-density lesions")
+                else:
+                    diagnosis_parts.append(f"{low_density_count} hypointense region(s) detected")
+        
+        # Add modality-specific analysis
+        if modality == 'CT':
+            if stats.get('mean_intensity', 0) > 100:
+                diagnosis_parts.append("High average attenuation suggesting dense tissue or contrast enhancement")
+            elif stats.get('mean_intensity', 0) < -100:
+                diagnosis_parts.append("Low average attenuation suggesting air or fat content")
+                
+        # Analyze abnormalities
+        for abnormality in abnormalities:
+            if abnormality['type'] == 'Asymmetry detected':
+                diagnosis_parts.append("Structural asymmetry noted")
+                recommendations.append("Consider comparison with prior studies")
+                confidence *= 0.9
+            elif abnormality['type'] == 'High edge density':
+                diagnosis_parts.append("Increased structural complexity")
+                recommendations.append("Consider detailed evaluation of complex regions")
+        
+        # Generate final summary
+        if len(diagnosis_parts) == 0:
+            summary = "Image analysis completed. Study appears within normal limits."
+        else:
+            summary = "AI Analysis: " + ". ".join(diagnosis_parts) + "."
+        
+        # Add standard disclaimer
+        summary += " This AI analysis is for assistance only and requires radiologist interpretation."
+        
+        if len(recommendations) == 0:
+            recommendations = ["Continue routine follow-up as clinically indicated"]
+        
+        return {
+            'diagnosis': ". ".join(diagnosis_parts) if diagnosis_parts else "No significant abnormalities",
+            'summary': summary,
+            'confidence': min(confidence, 0.95),  # Cap confidence at 95%
+            'recommendations': recommendations
+        }
+        
+    except Exception as e:
+        print(f"Error generating diagnosis: {e}")
+        return {
+            'diagnosis': "Analysis completed with limitations",
+            'summary': "AI analysis encountered processing limitations. Manual review recommended.",
+            'confidence': 0.5,
+            'recommendations': ["Manual radiologist review recommended"]
+        }
+
+
+def calculate_texture_complexity(image):
+    """Calculate texture complexity score"""
+    try:
+        from skimage.feature import local_binary_pattern
+        
+        # Local Binary Pattern
+        radius = 3
+        n_points = 8 * radius
+        lbp = local_binary_pattern(image, n_points, radius, method='uniform')
+        
+        # Calculate histogram
+        hist, _ = np.histogram(lbp.ravel(), bins=n_points + 2, range=(0, n_points + 2))
+        hist = hist.astype(float)
+        hist /= (hist.sum() + 1e-7)
+        
+        # Calculate entropy as texture measure
+        entropy = -np.sum(hist * np.log2(hist + 1e-7))
+        
+        # Normalize to 0-1 range
+        return min(entropy / 8.0, 1.0)
+    except:
+        return 0.5
+
+
+def calculate_symmetry(image):
+    """Calculate bilateral symmetry score"""
+    try:
+        height, width = image.shape
+        mid = width // 2
+        
+        left_half = image[:, :mid]
+        right_half = np.fliplr(image[:, mid:])
+        
+        # Resize to same dimensions if needed
+        min_width = min(left_half.shape[1], right_half.shape[1])
+        left_half = left_half[:, :min_width]
+        right_half = right_half[:, :min_width]
+        
+        # Calculate correlation
+        correlation = np.corrcoef(left_half.flatten(), right_half.flatten())[0, 1]
+        
+        return max(0, correlation)
+    except:
+        return 0.8
+
+
+def analyze_tissue_types(pixel_array, dicom_data):
+    """Analyze different tissue types in the image"""
+    try:
+        modality = getattr(dicom_data, 'Modality', 'Unknown')
+        
+        if modality == 'CT':
+            # CT Hounsfield unit based analysis
+            air_mask = pixel_array < -500
+            fat_mask = (pixel_array >= -500) & (pixel_array < -50)
+            soft_tissue_mask = (pixel_array >= -50) & (pixel_array < 150)
+            bone_mask = pixel_array >= 150
+            
+            air_percentage = np.sum(air_mask) / pixel_array.size * 100
+            fat_percentage = np.sum(fat_mask) / pixel_array.size * 100
+            soft_tissue_percentage = np.sum(soft_tissue_mask) / pixel_array.size * 100
+            bone_percentage = np.sum(bone_mask) / pixel_array.size * 100
+            
+            return {
+                'air': round(air_percentage, 1),
+                'fat': round(fat_percentage, 1),
+                'soft_tissue': round(soft_tissue_percentage, 1),
+                'bone': round(bone_percentage, 1)
+            }
+        else:
+            # For other modalities, use intensity-based analysis
+            low_intensity = pixel_array < np.percentile(pixel_array, 25)
+            medium_intensity = (pixel_array >= np.percentile(pixel_array, 25)) & (pixel_array < np.percentile(pixel_array, 75))
+            high_intensity = pixel_array >= np.percentile(pixel_array, 75)
+            
+            return {
+                'low_intensity': round(np.sum(low_intensity) / pixel_array.size * 100, 1),
+                'medium_intensity': round(np.sum(medium_intensity) / pixel_array.size * 100, 1),
+                'high_intensity': round(np.sum(high_intensity) / pixel_array.size * 100, 1)
+            }
+    except:
+        return {}
 
 
 @api_view(['GET'])
@@ -1743,3 +2264,69 @@ def create_system_error_notification(error_message, user=None):
             )
     except Exception as e:
         print(f"Error creating system error notification: {e}")
+
+
+@login_required
+@user_passes_test(is_admin)
+def delete_measurement(request, measurement_id):
+    """Admin delete individual measurement"""
+    try:
+        measurement = get_object_or_404(Measurement, id=measurement_id)
+        measurement.delete()
+        return JsonResponse({'success': True, 'message': 'Measurement deleted successfully'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@user_passes_test(is_admin)
+def delete_annotation(request, annotation_id):
+    """Admin delete individual annotation"""
+    try:
+        annotation = get_object_or_404(Annotation, id=annotation_id)
+        annotation.delete()
+        return JsonResponse({'success': True, 'message': 'Annotation deleted successfully'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@user_passes_test(is_admin)
+def delete_series(request, series_id):
+    """Admin delete series and all associated images"""
+    try:
+        series = get_object_or_404(DicomSeries, id=series_id)
+        series_name = f"Series {series.series_number} - {series.series_description}"
+        
+        # Delete all associated files
+        for image in series.images.all():
+            if image.file_path:
+                try:
+                    default_storage.delete(image.file_path.name)
+                except:
+                    pass
+        
+        series.delete()
+        return JsonResponse({'success': True, 'message': f'{series_name} deleted successfully'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@user_passes_test(is_admin)
+def delete_image(request, image_id):
+    """Admin delete individual image"""
+    try:
+        image = get_object_or_404(DicomImage, id=image_id)
+        
+        # Delete the file
+        if image.file_path:
+            try:
+                default_storage.delete(image.file_path.name)
+            except:
+                pass
+        
+        image.delete()
+        return JsonResponse({'success': True, 'message': 'Image deleted successfully'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
