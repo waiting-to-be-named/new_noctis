@@ -2448,6 +2448,88 @@ ${this.aiAnalysisResults.recommendations || 'None'}`;
             this.showError(`Network error loading study: ${error.message}. Please check your connection and try again.`);
         }
     }
+    
+    printReport() {
+        if (!this.currentStudy) {
+            this.showError('No study loaded to print');
+            return;
+        }
+        
+        // Create a new window for printing
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Radiology Report - ${this.currentStudy.patient_name}</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 20px; }
+                    .header { text-align: center; margin-bottom: 30px; }
+                    .patient-info { margin-bottom: 20px; }
+                    .study-info { margin-bottom: 20px; }
+                    .report-section { margin-bottom: 20px; }
+                    .report-section h3 { color: #333; border-bottom: 1px solid #ccc; }
+                    .measurements { margin-top: 20px; }
+                    .measurement-item { margin: 5px 0; }
+                    @media print {
+                        body { margin: 0; }
+                        .no-print { display: none; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>Radiology Report</h1>
+                    <p>Generated on ${new Date().toLocaleDateString()}</p>
+                </div>
+                
+                <div class="patient-info">
+                    <h2>Patient Information</h2>
+                    <p><strong>Name:</strong> ${this.currentStudy.patient_name}</p>
+                    <p><strong>ID:</strong> ${this.currentStudy.patient_id}</p>
+                    <p><strong>Study Date:</strong> ${this.currentStudy.study_date}</p>
+                    <p><strong>Modality:</strong> ${this.currentStudy.modality}</p>
+                </div>
+                
+                <div class="study-info">
+                    <h2>Study Information</h2>
+                    <p><strong>Study Description:</strong> ${this.currentStudy.study_description || 'N/A'}</p>
+                    <p><strong>Accession Number:</strong> ${this.currentStudy.accession_number || 'N/A'}</p>
+                    <p><strong>Referring Physician:</strong> ${this.currentStudy.referring_physician || 'N/A'}</p>
+                </div>
+                
+                <div class="report-section">
+                    <h2>Measurements</h2>
+                    <div class="measurements">
+                        ${this.measurements.map(m => `
+                            <div class="measurement-item">
+                                <strong>${m.measurement_type}:</strong> ${m.value} ${m.unit}
+                                ${m.notes ? ` - ${m.notes}` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                
+                <div class="report-section">
+                    <h2>Annotations</h2>
+                    <div class="annotations">
+                        ${this.annotations.map(a => `
+                            <div class="measurement-item">
+                                <strong>Annotation:</strong> ${a.text}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                
+                <div class="no-print">
+                    <button onclick="window.print()">Print Report</button>
+                    <button onclick="window.close()">Close</button>
+                </div>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+    }
 }
 
 // Initialize the viewer when the page loads
@@ -2457,3 +2539,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const initialStudyId = window.initialStudyId || null;
     viewer = new DicomViewer(initialStudyId);
 });
+
+// Global function for print button
+function printReport() {
+    if (viewer) {
+        viewer.printReport();
+    }
+}
