@@ -1,7 +1,7 @@
 // static/js/dicom_viewer.js
 
 class DicomViewer {
-    constructor() {
+    constructor(initialStudyId = null) {
         this.canvas = document.getElementById('dicom-canvas');
         this.ctx = this.canvas.getContext('2d');
         
@@ -62,17 +62,54 @@ class DicomViewer {
         // Notifications
         this.notificationCheckInterval = null;
         
+        // Store initial study ID
+        this.initialStudyId = initialStudyId;
+        
         this.init();
     }
     
-    init() {
+    async init() {
         this.setupCanvas();
         this.setupEventListeners();
-        this.loadBackendStudies();
+        await this.loadBackendStudies();
         this.setupNotifications();
         this.setupMeasurementUnitSelector();
         this.setup3DControls();
         this.setupAIPanel();
+        
+        // Load initial study if provided
+        if (this.initialStudyId) {
+            console.log('Loading initial study:', this.initialStudyId);
+            try {
+                await this.loadStudy(this.initialStudyId);
+            } catch (error) {
+                console.error('Failed to load initial study:', error);
+                this.showError('Failed to load study: ' + error.message);
+                
+                // Show detailed error message on canvas
+                this.ctx.fillStyle = '#000';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                this.ctx.fillStyle = '#ff0000';
+                this.ctx.font = '16px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText('Failed to load study', this.canvas.width / 2, this.canvas.height / 2 - 40);
+                this.ctx.fillText('Study ID: ' + this.initialStudyId, this.canvas.width / 2, this.canvas.height / 2 - 20);
+                this.ctx.fillText('Error: ' + error.message, this.canvas.width / 2, this.canvas.height / 2);
+                this.ctx.fillText('Check browser console for details', this.canvas.width / 2, this.canvas.height / 2 + 20);
+            }
+        } else {
+            console.log('No initial study ID provided');
+            // Show welcome message
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '20px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText('No study selected', this.canvas.width / 2, this.canvas.height / 2 - 20);
+            this.ctx.fillText('Upload DICOM files or select from worklist', this.canvas.width / 2, this.canvas.height / 2 + 20);
+        }
     }
     
     setupCanvas() {
@@ -83,9 +120,24 @@ class DicomViewer {
     
     resizeCanvas() {
         const viewport = document.querySelector('.viewport');
-        this.canvas.width = viewport.clientWidth;
-        this.canvas.height = viewport.clientHeight;
-        this.redraw();
+        if (viewport) {
+            // Use devicePixelRatio for high-DPI displays
+            const devicePixelRatio = window.devicePixelRatio || 1;
+            const displayWidth = viewport.clientWidth;
+            const displayHeight = viewport.clientHeight;
+            
+            this.canvas.width = displayWidth * devicePixelRatio;
+            this.canvas.height = displayHeight * devicePixelRatio;
+            
+            this.canvas.style.width = displayWidth + 'px';
+            this.canvas.style.height = displayHeight + 'px';
+            
+            // Reset the context and scale for high-DPI displays
+            this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+            this.ctx.scale(devicePixelRatio, devicePixelRatio);
+            
+            this.redraw();
+        }
     }
     
     setupEventListeners() {
@@ -143,13 +195,9 @@ class DicomViewer {
             this.showUploadModal();
         });
         
-        // Load from system (worklist)
-        document.getElementById('backend-studies').addEventListener('change', (e) => {
-            if (e.target.value === 'worklist') {
-                window.location.href = '/worklist/';
-            } else if (e.target.value) {
-                this.loadStudy(e.target.value);
-            }
+        // Worklist button
+        document.getElementById('worklist-btn').addEventListener('click', () => {
+            window.location.href = '/worklist/';
         });
         
         // Clear measurements
@@ -557,54 +605,103 @@ class DicomViewer {
             const response = await fetch('/viewer/api/studies/');
             const studies = await response.json();
             
-            const select = document.getElementById('backend-studies');
-            select.innerHTML = `
-                <option value="">Select DICOM from System</option>
-                <option value="worklist">📋 Open Worklist</option>
-                <option disabled>──────────────</option>
-            `;
+            // Store studies for future use (e.g., in a menu or list)
+            this.availableStudies = studies;
             
-            studies.forEach(study => {
-                const option = document.createElement('option');
-                option.value = study.id;
-                option.textContent = `${study.patient_name} - ${study.study_date} (${study.modality})`;
-                select.appendChild(option);
-            });
-            
-            // Update: Event listener is already set up in setupEventListeners()
+            console.log(`Loaded ${studies.length} studies from backend`);
             
         } catch (error) {
             console.error('Error loading studies:', error);
+            this.showError('Failed to load studies from backend');
         }
     }
     
     async loadStudy(studyId) {
         try {
+            console.log(`Loading study ${studyId}...`);
+            
+            // Show loading indicator
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '20px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText('Loading study...', this.canvas.width / 2, this.canvas.height / 2);
+            
+            console.log(`Fetching study data from: /viewer/api/studies/${studyId}/images/`);
             const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
             
+            console.log(`Response status: ${response.status} ${response.statusText}`);
+            
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                const errorText = await response.text();
+                console.error('Error response text:', errorText);
+                let errorMessage;
+                try {
+                    const errorData = JSON.parse(errorText);
+                    errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+                } catch (e) {
+                    errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                    console.error('Failed to parse error response:', e);
+                }
+                throw new Error(errorMessage);
             }
             
             const data = await response.json();
+            console.log('Received study data:', data);
             
             if (!data.images || data.images.length === 0) {
+                console.error('No images found in study data:', data);
                 throw new Error('No images found in this study');
             }
+            
+            console.log(`Found ${data.images.length} images in study`);
             
             this.currentStudy = data.study;
             this.currentSeries = data.series || null;
             this.currentImages = data.images;
             this.currentImageIndex = 0;
             
+            // Clear any existing measurements for new study
+            this.measurements = [];
+            this.annotations = [];
+            this.updateMeasurementsList();
+            
             // Update UI
             this.updatePatientInfo();
             this.updateSliders();
-            this.loadCurrentImage();
+            
+            // Load the first image
+            console.log('Loading first image...');
+            await this.loadCurrentImage();
+            
+            // Load clinical info if available
+            if (window.loadClinicalInfo && typeof window.loadClinicalInfo === 'function') {
+                window.loadClinicalInfo(studyId);
+            }
+            
+            console.log('Study loaded successfully');
             
         } catch (error) {
             console.error('Error loading study:', error);
-            alert('Error loading study: ' + error.message);
+            this.showError('Error loading study: ' + error.message);
+            
+            // Clear canvas
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.fillStyle = '#ff0000';
+            this.ctx.font = '16px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText('Failed to load study', this.canvas.width / 2, this.canvas.height / 2 - 20);
+            this.ctx.fillText(error.message, this.canvas.width / 2, this.canvas.height / 2 + 20);
+            
+            // Reset patient info on error
+            this.updatePatientInfo();
+            
+            // Re-throw the error so it can be caught by the caller
+            throw error;
         }
     }
     
@@ -615,6 +712,8 @@ class DicomViewer {
         }
         
         const imageData = this.currentImages[this.currentImageIndex];
+        console.log(`Loading image ${this.currentImageIndex + 1}/${this.currentImages.length}, ID: ${imageData.id}`);
+        console.log('Image data:', imageData);
         
         try {
             const params = new URLSearchParams({
@@ -623,55 +722,135 @@ class DicomViewer {
                 inverted: this.inverted
             });
             
-            const response = await fetch(`/viewer/api/images/${imageData.id}/data/?${params}`);
+            const imageUrl = `/viewer/api/images/${imageData.id}/data/?${params}`;
+            console.log(`Fetching image data from: ${imageUrl}`);
+            
+            const response = await fetch(imageUrl);
+            console.log(`Image response status: ${response.status} ${response.statusText}`);
             
             if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Image error response:', errorText);
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
             const data = await response.json();
+            console.log('Received image data response:', data);
             
             if (data.image_data) {
+                console.log('Creating image element...');
                 const img = new Image();
                 img.onload = () => {
+                    console.log('Image loaded successfully, dimensions:', img.width, 'x', img.height);
                     this.currentImage = {
                         image: img,
                         metadata: data.metadata,
-                        id: imageData.id
+                        id: imageData.id,
+                        rows: data.metadata.rows,
+                        columns: data.metadata.columns,
+                        pixel_spacing_x: data.metadata.pixel_spacing_x,
+                        pixel_spacing_y: data.metadata.pixel_spacing_y,
+                        pixel_spacing: `${data.metadata.pixel_spacing_x},${data.metadata.pixel_spacing_y}`,
+                        slice_thickness: data.metadata.slice_thickness
                     };
+                    // Ensure canvas is properly sized before drawing
+                    this.resizeCanvas();
                     this.updateDisplay();
                     this.loadMeasurements();
                     this.loadAnnotations();
+                    this.updatePatientInfo();
                 };
-                img.onerror = () => {
-                    console.error('Failed to load image data');
-                    alert('Failed to load image. Please try again.');
+                img.onerror = (error) => {
+                    console.error('Failed to load image data:', error);
+                    console.error('Image source length:', img.src.length);
+                    console.error('Image source preview:', img.src.substring(0, 100));
+                    this.showError('Failed to load image. Please try refreshing or selecting another image.');
                 };
+                console.log('Setting image source...');
                 img.src = data.image_data;
+            } else if (data.error) {
+                console.error('Server returned error:', data.error);
+                throw new Error(data.error);
             } else {
-                throw new Error(data.error || 'No image data received');
+                console.error('No image data in response:', data);
+                throw new Error('No image data received');
             }
             
         } catch (error) {
             console.error('Error loading image:', error);
-            alert('Error loading image: ' + error.message);
+            this.showError('Error loading image: ' + error.message);
         }
     }
     
+    showError(message) {
+        console.error(message);
+        // Create a more user-friendly error display
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-message';
+        errorDiv.innerHTML = `
+            <div class="error-content">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>${message}</span>
+                <button onclick="this.parentElement.parentElement.remove()">×</button>
+            </div>
+        `;
+        errorDiv.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ff4444;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            z-index: 1000;
+            max-width: 400px;
+        `;
+        document.body.appendChild(errorDiv);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (errorDiv.parentElement) {
+                errorDiv.remove();
+            }
+        }, 5000);
+    }
+    
     updatePatientInfo() {
-        if (!this.currentStudy) return;
+        if (!this.currentStudy) {
+            const patientInfo = document.getElementById('patient-info');
+            if (patientInfo) {
+                patientInfo.textContent = 'Patient: - | Study Date: - | Modality: -';
+            }
+            return;
+        }
         
         const patientInfo = document.getElementById('patient-info');
-        patientInfo.textContent = `Patient: ${this.currentStudy.patient_name} | Study Date: ${this.currentStudy.study_date} | Modality: ${this.currentStudy.modality}`;
+        if (patientInfo) {
+            patientInfo.textContent = `Patient: ${this.currentStudy.patient_name} | Study Date: ${this.currentStudy.study_date} | Modality: ${this.currentStudy.modality}`;
+        }
         
-        // Update image info
+        // Update image info in right panel if elements exist
         const currentImageData = this.currentImages[this.currentImageIndex];
         if (currentImageData) {
-            document.getElementById('info-dimensions').textContent = `${currentImageData.columns}x${currentImageData.rows}`;
-            document.getElementById('info-pixel-spacing').textContent = 
-                `${currentImageData.pixel_spacing_x || 'Unknown'}\\${currentImageData.pixel_spacing_y || 'Unknown'}`;
-            document.getElementById('info-series').textContent = currentImageData.series_description || 'Unknown';
-            document.getElementById('info-institution').textContent = this.currentStudy.institution_name || 'Unknown';
+            const infoDimensions = document.getElementById('info-dimensions');
+            const infoPixelSpacing = document.getElementById('info-pixel-spacing');
+            const infoSeries = document.getElementById('info-series');
+            const infoInstitution = document.getElementById('info-institution');
+            
+            if (infoDimensions) {
+                infoDimensions.textContent = `${currentImageData.columns}x${currentImageData.rows}`;
+            }
+            if (infoPixelSpacing) {
+                infoPixelSpacing.textContent = 
+                    `${currentImageData.pixel_spacing_x || 'Unknown'}\\${currentImageData.pixel_spacing_y || 'Unknown'}`;
+            }
+            if (infoSeries) {
+                infoSeries.textContent = currentImageData.series_description || 'Unknown';
+            }
+            if (infoInstitution) {
+                infoInstitution.textContent = this.currentStudy.institution_name || 'Unknown';
+            }
         }
     }
     
@@ -698,45 +877,63 @@ class DicomViewer {
     updateDisplay() {
         if (!this.currentImage) return;
         
-        // Clear canvas
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        // Clear canvas with black background
+        this.ctx.fillStyle = '#000';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
         // Calculate display parameters
         const img = this.currentImage.image;
-        const scale = Math.min(
-            (this.canvas.width * this.zoomFactor) / img.width,
-            (this.canvas.height * this.zoomFactor) / img.height
-        );
+        const scale = this.getScale();
         
         const displayWidth = img.width * scale;
         const displayHeight = img.height * scale;
-        const x = (this.canvas.width - displayWidth) / 2 + this.panX;
-        const y = (this.canvas.height - displayHeight) / 2 + this.panY;
+        // Use display dimensions for positioning
+        const canvasDisplayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const canvasDisplayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        const x = (canvasDisplayWidth - displayWidth) / 2 + this.panX;
+        const y = (canvasDisplayHeight - displayHeight) / 2 + this.panY;
         
         // Draw image
         this.ctx.drawImage(img, x, y, displayWidth, displayHeight);
         
-        // Draw overlays
+        // Draw measurements after the image
         this.drawMeasurements();
+        
+        // Draw annotations
         this.drawAnnotations();
+        
+        // Draw crosshair if enabled
         if (this.crosshair) {
             this.drawCrosshair();
-        }
-        if (this.showAIHighlights) {
-            this.drawAIHighlights();
         }
         
         // Update overlay labels
         this.updateOverlayLabels();
     }
     
+    // New helper to calculate the current pixel scale while preventing unintended up-scaling
+    getScale() {
+        if (!this.currentImage) return 1;
+        const img = this.currentImage.image;
+        // Use the display size (style dimensions) instead of canvas dimensions for scaling
+        const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        const baseScale = Math.min(displayWidth / img.width, displayHeight / img.height);
+        const clampedBase = baseScale > 1 ? 1 : baseScale; // never upscale automatically
+        return this.zoomFactor * clampedBase;
+    }
+    
     drawMeasurements() {
         if (!this.currentImage) return;
         
+        // Save current context state
+        this.ctx.save();
+        
+        // Set measurement drawing styles
         this.ctx.strokeStyle = 'red';
         this.ctx.lineWidth = 2;
         this.ctx.fillStyle = 'red';
-        this.ctx.font = '12px Arial';
+        this.ctx.font = '14px Arial'; // Increased font size for better visibility
         
         this.measurements.forEach(measurement => {
             const coords = measurement.coordinates;
@@ -751,19 +948,30 @@ class DicomViewer {
 
                 this.ctx.save();
                 this.ctx.strokeStyle = 'lime';
+                this.ctx.lineWidth = 2;
                 this.ctx.setLineDash([4, 4]);
                 this.ctx.beginPath();
                 this.ctx.ellipse(centerX, centerY, Math.abs(width) / 2, Math.abs(height) / 2, 0, 0, Math.PI * 2);
                 this.ctx.stroke();
                 this.ctx.restore();
 
-                // Display HU value
+                // Display HU value with improved visibility
                 const text = `${measurement.value.toFixed(1)} HU`;
                 const textMetrics = this.ctx.measureText(text);
-                this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                this.ctx.fillRect(centerX - textMetrics.width/2 - 4, centerY - 8, textMetrics.width + 8, 16);
+                const padding = 6;
+                const boxWidth = textMetrics.width + padding * 2;
+                const boxHeight = 20;
+                
+                // Draw text background
+                this.ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                this.ctx.fillRect(centerX - boxWidth/2, centerY - boxHeight/2, boxWidth, boxHeight);
+                
+                // Draw text
                 this.ctx.fillStyle = 'lime';
-                this.ctx.fillText(text, centerX - textMetrics.width/2, centerY + 4);
+                this.ctx.font = 'bold 14px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText(text, centerX, centerY);
             } else if (measurement.type === 'volume' && coords && coords.length >= 3) {
                 // Draw volume contour
                 this.ctx.strokeStyle = 'blue';
@@ -792,35 +1000,72 @@ class DicomViewer {
                 centroidX /= coords.length;
                 centroidY /= coords.length;
                 
-                // Draw volume text
+                // Draw volume text with improved visibility
                 const text = `${measurement.value.toFixed(2)} ${measurement.unit}`;
                 const textMetrics = this.ctx.measureText(text);
-                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                this.ctx.fillRect(centroidX - textMetrics.width/2 - 4, centroidY - 8, textMetrics.width + 8, 16);
+                const padding = 6;
+                const boxWidth = textMetrics.width + padding * 2;
+                const boxHeight = 20;
+                
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                this.ctx.fillRect(centroidX - boxWidth/2, centroidY - boxHeight/2, boxWidth, boxHeight);
+                
                 this.ctx.fillStyle = 'blue';
-                this.ctx.fillText(text, centroidX - textMetrics.width/2, centroidY + 4);
-            } else if (coords && coords.length >= 2) {
-                // existing line measurement drawing
+                this.ctx.font = 'bold 14px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText(text, centroidX, centroidY);
+            } else if (measurement.type === 'line' && coords && coords.length >= 2) {
+                // Draw distance/line measurement
                 const start = this.imageToCanvasCoords(coords[0].x, coords[0].y);
                 const end = this.imageToCanvasCoords(coords[1].x, coords[1].y);
                 
+                // Draw line
+                this.ctx.strokeStyle = 'red';
+                this.ctx.lineWidth = 2;
                 this.ctx.beginPath();
                 this.ctx.moveTo(start.x, start.y);
                 this.ctx.lineTo(end.x, end.y);
                 this.ctx.stroke();
+                
+                // Draw endpoints
+                this.ctx.fillStyle = 'red';
+                this.ctx.beginPath();
+                this.ctx.arc(start.x, start.y, 4, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.beginPath();
+                this.ctx.arc(end.x, end.y, 4, 0, Math.PI * 2);
+                this.ctx.fill();
                 
                 // Draw measurement text
                 const midX = (start.x + end.x) / 2;
                 const midY = (start.y + end.y) / 2;
                 const text = `${measurement.value.toFixed(1)} ${measurement.unit}`;
                 
-                // Background for text
-                const textMetrics = this.ctx.measureText(text);
-                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                this.ctx.fillRect(midX - textMetrics.width/2 - 4, midY - 8, textMetrics.width + 8, 16);
+                // Calculate text angle to align with line
+                const angle = Math.atan2(end.y - start.y, end.x - start.x);
+                const textAngle = Math.abs(angle) > Math.PI / 2 ? angle + Math.PI : angle;
                 
-                this.ctx.fillStyle = 'red';
-                this.ctx.fillText(text, midX - textMetrics.width/2, midY + 4);
+                // Draw background for text
+                const textMetrics = this.ctx.measureText(text);
+                const padding = 6;
+                const boxWidth = textMetrics.width + padding * 2;
+                const boxHeight = 20;
+                
+                this.ctx.save();
+                this.ctx.translate(midX, midY);
+                this.ctx.rotate(textAngle);
+                
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                this.ctx.fillRect(-boxWidth/2, -boxHeight/2 - 10, boxWidth, boxHeight);
+                
+                this.ctx.fillStyle = 'yellow';
+                this.ctx.font = 'bold 14px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText(text, 0, -10);
+                
+                this.ctx.restore();
             }
         });
         
@@ -831,6 +1076,7 @@ class DicomViewer {
             
             this.ctx.setLineDash([5, 5]);
             this.ctx.strokeStyle = 'yellow';
+            this.ctx.lineWidth = 2;
             this.ctx.beginPath();
             this.ctx.moveTo(start.x, start.y);
             this.ctx.lineTo(end.x, end.y);
@@ -846,54 +1092,15 @@ class DicomViewer {
             const centerY = start.y + height / 2;
             this.ctx.setLineDash([5,5]);
             this.ctx.strokeStyle = 'yellow';
+            this.ctx.lineWidth = 2;
             this.ctx.beginPath();
             this.ctx.ellipse(centerX, centerY, Math.abs(width)/2, Math.abs(height)/2, 0, 0, Math.PI*2);
             this.ctx.stroke();
             this.ctx.setLineDash([]);
         }
         
-        // Draw current volume contour being created
-        if (this.volumeContour && this.volumeContour.length > 0) {
-            this.ctx.strokeStyle = 'orange';
-            this.ctx.fillStyle = 'orange';
-            this.ctx.lineWidth = 2;
-            
-            // Draw lines between points
-            if (this.volumeContour.length > 1) {
-                this.ctx.setLineDash([3, 3]);
-                this.ctx.beginPath();
-                const firstPoint = this.imageToCanvasCoords(this.volumeContour[0].x, this.volumeContour[0].y);
-                this.ctx.moveTo(firstPoint.x, firstPoint.y);
-                
-                for (let i = 1; i < this.volumeContour.length; i++) {
-                    const point = this.imageToCanvasCoords(this.volumeContour[i].x, this.volumeContour[i].y);
-                    this.ctx.lineTo(point.x, point.y);
-                }
-                this.ctx.stroke();
-                this.ctx.setLineDash([]);
-            }
-            
-            // Draw points
-            this.volumeContour.forEach((point, index) => {
-                const canvasPoint = this.imageToCanvasCoords(point.x, point.y);
-                this.ctx.beginPath();
-                this.ctx.arc(canvasPoint.x, canvasPoint.y, 4, 0, Math.PI * 2);
-                this.ctx.fill();
-                
-                // Number the points
-                this.ctx.fillStyle = 'white';
-                this.ctx.font = '10px Arial';
-                this.ctx.fillText(index + 1, canvasPoint.x - 3, canvasPoint.y + 3);
-                this.ctx.fillStyle = 'orange';
-            });
-            
-            // Show instruction text
-            if (this.volumeContour.length >= 3) {
-                this.ctx.fillStyle = 'orange';
-                this.ctx.font = '14px Arial';
-                this.ctx.fillText('Click near first point to close contour', 10, 30);
-            }
-        }
+        // Restore context state
+        this.ctx.restore();
     }
     
     drawAnnotations() {
@@ -1012,18 +1219,21 @@ class DicomViewer {
     
     // Event Handlers
     handleToolClick(tool) {
-        // Remove active class from all tool buttons
-        document.querySelectorAll('.tool-btn').forEach(btn => {
-            btn.classList.remove('active');
-        });
-        
-        // Add active class to clicked button
-        const clickedBtn = document.querySelector(`[data-tool="${tool}"]`);
-        if (clickedBtn) {
-            clickedBtn.classList.add('active');
+        // Don't change active state for dropdown tools
+        if (tool !== 'ai' && tool !== '3d') {
+            // Remove active class from all non-dropdown tool buttons
+            document.querySelectorAll('.tool-btn:not(.dropdown-toggle)').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Add active class to clicked button
+            const clickedBtn = document.querySelector(`[data-tool="${tool}"]`);
+            if (clickedBtn && !clickedBtn.classList.contains('dropdown-toggle')) {
+                clickedBtn.classList.add('active');
+            }
+            
+            this.activeTool = tool;
         }
-        
-        this.activeTool = tool;
         
         // Handle specific tool actions
         switch (tool) {
@@ -1061,10 +1271,10 @@ class DicomViewer {
                 this.startVolumeCalculation();
                 break;
             case 'ai':
-                this.performAIAnalysis();
+                // Dropdown handled by onclick in HTML
                 break;
             case '3d':
-                this.toggle3DOptions();
+                // Dropdown handled by onclick in HTML
                 break;
         }
     }
@@ -1185,21 +1395,12 @@ class DicomViewer {
             this.isDragging = false;
             this.dragStart = null;
         } else if (this.activeTool === 'measure' && this.currentMeasurement) {
-            // Calculate distance
-            const dx = this.currentMeasurement.end.x - this.currentMeasurement.start.x;
-            const dy = this.currentMeasurement.end.y - this.currentMeasurement.start.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            // Convert to mm if pixel spacing is available
-            let distanceMm = distance;
-            if (this.currentImage && this.currentImage.pixel_spacing) {
-                const spacing = this.parsePixelSpacing(this.currentImage.pixel_spacing);
-                distanceMm = distance * spacing[0]; // Use first spacing value
-            }
-            
-            this.currentMeasurement.distance = distanceMm;
-            this.measurements.push(this.currentMeasurement);
-            this.updateMeasurementsList();
+            // Persist the measurement using the dedicated handler
+            const measurementData = {
+                start: this.currentMeasurement.start,
+                end: this.currentMeasurement.end
+            };
+            this.addMeasurement(measurementData);
             this.currentMeasurement = null;
             this.redraw();
         } else if (this.activeTool === 'ellipse' && this.currentEllipse) {
@@ -1248,15 +1449,15 @@ class DicomViewer {
         if (!this.currentImage) return { x: 0, y: 0 };
         
         const img = this.currentImage.image;
-        const scale = Math.min(
-            (this.canvas.width * this.zoomFactor) / img.width,
-            (this.canvas.height * this.zoomFactor) / img.height
-        );
+        const scale = this.getScale();
         
         const displayWidth = img.width * scale;
         const displayHeight = img.height * scale;
-        const offsetX = (this.canvas.width - displayWidth) / 2 + this.panX;
-        const offsetY = (this.canvas.height - displayHeight) / 2 + this.panY;
+        // Use display dimensions for offset calculation
+        const canvasDisplayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const canvasDisplayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        const offsetX = (canvasDisplayWidth - displayWidth) / 2 + this.panX;
+        const offsetY = (canvasDisplayHeight - displayHeight) / 2 + this.panY;
         
         return {
             x: offsetX + (imageX * scale),
@@ -1268,15 +1469,15 @@ class DicomViewer {
         if (!this.currentImage) return { x: 0, y: 0 };
         
         const img = this.currentImage.image;
-        const scale = Math.min(
-            (this.canvas.width * this.zoomFactor) / img.width,
-            (this.canvas.height * this.zoomFactor) / img.height
-        );
+        const scale = this.getScale();
         
         const displayWidth = img.width * scale;
         const displayHeight = img.height * scale;
-        const offsetX = (this.canvas.width - displayWidth) / 2 + this.panX;
-        const offsetY = (this.canvas.height - displayHeight) / 2 + this.panY;
+        // Use display dimensions for offset calculation
+        const canvasDisplayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const canvasDisplayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        const offsetX = (canvasDisplayWidth - displayWidth) / 2 + this.panX;
+        const offsetY = (canvasDisplayHeight - displayHeight) / 2 + this.panY;
         
         return {
             x: (canvasX - offsetX) / scale,
@@ -1405,6 +1606,13 @@ class DicomViewer {
                     if (measurement.hounsfield_min !== undefined) {
                         displayText += ` (${measurement.hounsfield_min.toFixed(1)} - ${measurement.hounsfield_max.toFixed(1)})`;
                     }
+                    // Add enhanced information if available
+                    if (measurement.tissue_type) {
+                        displayText += ` | ${measurement.tissue_type}`;
+                    }
+                    if (measurement.clinical_significance) {
+                        displayText += ` | ${measurement.clinical_significance.split(' - ')[0]}`;
+                    }
                     if (measurement.notes) {
                         displayText += ` - ${measurement.notes}`;
                     }
@@ -1430,7 +1638,14 @@ class DicomViewer {
                     displayText = `${measurement.value.toFixed(1)} ${measurement.unit}`;
             }
             
-            item.innerHTML = `<strong>${typeText} ${index + 1}:</strong> ${displayText}`;
+            item.innerHTML = `
+                <div style="flex: 1">
+                    <strong>${typeText} ${index + 1}:</strong> ${displayText}
+                </div>
+                <button class="delete-btn" onclick="event.stopPropagation(); viewer.deleteMeasurement(${index})">
+                    <i class="fas fa-trash"></i>
+                </button>
+            `;
             
             // Add click handler to highlight measurement
             item.addEventListener('click', () => {
@@ -1450,20 +1665,32 @@ class DicomViewer {
         
         try {
             const response = await fetch(`/viewer/api/images/${this.currentImage.id}/clear-measurements/`, {
-                method: 'DELETE',
+                method: 'POST',
                 headers: {
-                    'X-CSRFToken': this.getCSRFToken()
+                    'X-CSRFToken': getCookie('csrftoken')
                 }
             });
             
             if (response.ok) {
                 this.measurements = [];
-                this.annotations = [];
                 this.updateMeasurementsList();
                 this.updateDisplay();
             }
         } catch (error) {
             console.error('Error clearing measurements:', error);
+        }
+    }
+    
+    deleteMeasurement(index) {
+        if (index >= 0 && index < this.measurements.length) {
+            // Remove the measurement at the specified index
+            this.measurements.splice(index, 1);
+            
+            // Update the display
+            this.updateMeasurementsList();
+            this.updateDisplay();
+            
+            // TODO: Also delete from backend if measurements are persisted
         }
     }
     
@@ -1661,7 +1888,7 @@ class DicomViewer {
         this.updateOverlayLabels();
     }
 
-    performAIAnalysis() {
+    performAIAnalysis(analysisType = 'general') {
         if (!this.currentImage) {
             alert('Please load an image first');
             return;
@@ -1673,12 +1900,13 @@ class DicomViewer {
         const resultsDiv = document.getElementById('ai-results');
         resultsDiv.innerHTML = '<div class="loading">Performing AI analysis...</div>';
         
-                    fetch(`/viewer/api/images/${this.currentImage.id}/ai-analysis/`, {
+        fetch(`/viewer/api/images/${this.currentImage.id}/ai-analysis/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': this.getCSRFToken()
-            }
+            },
+            body: JSON.stringify({ analysis_type: analysisType })
         })
         .then(response => response.json())
         .then(data => {
@@ -1695,26 +1923,48 @@ class DicomViewer {
     
     displayAIResults(results) {
         const resultsDiv = document.getElementById('ai-results');
+        
+        // Generate findings HTML
+        let findingsHTML = '';
+        if (results.findings && results.findings.length > 0) {
+            findingsHTML = results.findings.map(f => `
+                <div class="ai-finding">
+                    <div class="finding-header">
+                        <strong>${f.type}</strong>
+                        <span class="confidence">${(f.confidence * 100).toFixed(1)}% confidence</span>
+                    </div>
+                    <div class="finding-details">
+                        ${f.description || `Location: (${f.location.x}, ${f.location.y}), Size: ${f.size}px`}
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            findingsHTML = '<p class="no-findings">No abnormal findings detected.</p>';
+        }
+        
         resultsDiv.innerHTML = `
             <div class="ai-summary">
                 <h4>Analysis Summary</h4>
                 <p>${results.summary}</p>
-                <p>Confidence: ${(results.confidence_score * 100).toFixed(1)}%</p>
+                <div class="confidence-bar">
+                    <div class="confidence-fill" style="width: ${results.confidence_score * 100}%"></div>
+                    <span class="confidence-text">Confidence: ${(results.confidence_score * 100).toFixed(1)}%</span>
+                </div>
             </div>
             <div class="ai-findings">
-                <h4>Findings</h4>
-                <ul>
-                    ${results.findings.map(f => `
-                        <li>
-                            <strong>${f.type}</strong> at (${f.location.x}, ${f.location.y})
-                            <br>Size: ${f.size}px, Confidence: ${(f.confidence * 100).toFixed(1)}%
-                        </li>
-                    `).join('')}
-                </ul>
+                <h4>Detailed Findings</h4>
+                ${findingsHTML}
             </div>
+            ${results.recommendations ? `
+                <div class="ai-recommendations">
+                    <h4>Recommendations</h4>
+                    <p>${results.recommendations}</p>
+                </div>
+            ` : ''}
             <div class="ai-actions">
                 <button onclick="viewer.copyAIResults()">Copy Results</button>
                 <button onclick="viewer.toggleAIHighlights()">Toggle Highlights</button>
+                <button onclick="viewer.saveAIReport()">Save Report</button>
             </div>
         `;
     }
@@ -1738,12 +1988,79 @@ class DicomViewer {
         this.redraw();
     }
     
+    saveAIReport() {
+        if (!this.aiAnalysisResults) return;
+        
+        const report = `AI Analysis Report
+        
+Study: ${this.currentStudy ? this.currentStudy.patient_name : 'Unknown'}
+Date: ${new Date().toLocaleString()}
+Analysis Type: ${this.aiAnalysisResults.analysis_type}
+
+Summary:
+${this.aiAnalysisResults.summary}
+
+Confidence: ${(this.aiAnalysisResults.confidence_score * 100).toFixed(1)}%
+
+Findings:
+${this.aiAnalysisResults.findings.map(f => 
+    `- ${f.type}: ${f.description || `Location (${f.location.x}, ${f.location.y})`} - Confidence: ${(f.confidence * 100).toFixed(1)}%`
+).join('\n')}
+
+Recommendations:
+${this.aiAnalysisResults.recommendations || 'None'}`;
+        
+        // Create and download text file
+        const blob = new Blob([report], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `AI_Report_${this.currentStudy ? this.currentStudy.patient_id : 'Unknown'}_${new Date().toISOString().split('T')[0]}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }
+    
     toggle3DOptions() {
         this.create3DModal();
     }
     
-    apply3DReconstruction() {
-        const reconstructionType = document.getElementById('3d-reconstruction-type').value;
+    show3DResult(data, type) {
+        // Create a result modal
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.display = 'block';
+        
+        const title = {
+            'mpr': 'Multi-Planar Reconstruction',
+            'volume': 'Volume Rendering',
+            'bone': '3D Bone Reconstruction',
+            'vessel': 'Vessel Analysis',
+            'surface': 'Surface Rendering'
+        }[type] || type;
+        
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>${title}</h3>
+                    <button class="modal-close" onclick="this.closest('.modal').remove()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="reconstruction-result">
+                        <p>3D reconstruction completed successfully!</p>
+                        <p>Type: ${type}</p>
+                        <p>Series: ${this.currentSeries ? this.currentSeries.description : 'Unknown'}</p>
+                        ${data.preview_image ? `<img src="${data.preview_image}" alt="3D Preview" style="max-width: 100%; margin-top: 20px;">` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+    }
+    
+    apply3DReconstruction(type = 'mpr') {
         const seriesId = this.currentSeries ? this.currentSeries.id : null;
         
         if (!seriesId) {
@@ -1751,31 +2068,34 @@ class DicomViewer {
             return;
         }
         
-        const modal = document.getElementById('3d-modal');
-        const progressDiv = modal.querySelector('.3d-progress');
-        const progressText = modal.querySelector('.3d-progress-text');
+        // Show a simple progress indicator
+        const progressOverlay = document.createElement('div');
+        progressOverlay.className = 'reconstruction-progress';
+        progressOverlay.innerHTML = `
+            <div class="progress-content">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Generating ${type.toUpperCase()} reconstruction...</p>
+            </div>
+        `;
+        document.body.appendChild(progressOverlay);
         
-        progressDiv.style.display = 'block';
-        progressText.textContent = 'Generating 3D reconstruction...';
+        // Use default parameters for quick reconstruction
+        const windowCenter = 40;
+        const windowWidth = 400;
+        const thresholdMin = -1000;
+        const thresholdMax = 1000;
         
-        // Get reconstruction parameters
-        const windowCenter = document.getElementById('3d-window-center').value;
-        const windowWidth = document.getElementById('3d-window-width').value;
-        const thresholdMin = document.getElementById('3d-threshold-min').value;
-        const thresholdMax = document.getElementById('3d-threshold-max').value;
-        
-        const url = `/viewer/api/series/${seriesId}/3d-reconstruction/?type=${reconstructionType}&window_center=${windowCenter}&window_width=${windowWidth}&threshold_min=${thresholdMin}&threshold_max=${thresholdMax}`;
+        const url = `/viewer/api/series/${seriesId}/3d-reconstruction/?type=${type}&window_center=${windowCenter}&window_width=${windowWidth}&threshold_min=${thresholdMin}&threshold_max=${thresholdMax}`;
         
         fetch(url)
             .then(response => response.json())
             .then(data => {
-                progressText.textContent = '3D reconstruction complete!';
-                setTimeout(() => {
-                    this.display3DReconstruction(data, modal);
-                }, 1000);
+                progressOverlay.remove();
+                this.show3DResult(data, type);
             })
             .catch(error => {
-                progressText.textContent = '3D reconstruction failed: ' + error.message;
+                progressOverlay.remove();
+                alert('3D reconstruction failed: ' + error.message);
                 console.error('3D reconstruction error:', error);
             });
     }
@@ -2186,13 +2506,42 @@ class DicomViewer {
                     unit: 'HU',
                     hounsfield_min: data.hounsfield_min,
                     hounsfield_max: data.hounsfield_max,
-                    hounsfield_std: data.hounsfield_std
+                    hounsfield_std: data.hounsfield_std,
+                    median_hu: data.median_hu,
+                    ci_lower: data.ci_lower,
+                    ci_upper: data.ci_upper,
+                    coefficient_of_variation: data.coefficient_of_variation,
+                    roi_area_mm2: data.roi_area_mm2,
+                    tissue_type: data.tissue_type,
+                    clinical_significance: data.clinical_significance,
+                    anatomical_context: data.anatomical_context,
+                    reference_range: data.reference_range
                 });
                 this.updateDisplay();
                 
-                // Show HU values in alert
+                // Show enhanced HU values in detailed alert
                 if (data.hounsfield_mean !== undefined) {
-                    alert(`Hounsfield Unit Measurements:\n\nMean: ${data.hounsfield_mean.toFixed(1)} HU\nMin: ${data.hounsfield_min.toFixed(1)} HU\nMax: ${data.hounsfield_max.toFixed(1)} HU\nStd Dev: ${data.hounsfield_std.toFixed(1)} HU`);
+                    const message = `Hounsfield Unit Analysis (Enhanced):
+
+📊 STATISTICAL DATA:
+Mean: ${data.hounsfield_mean.toFixed(1)} HU
+Median: ${data.median_hu.toFixed(1)} HU
+Range: ${data.hounsfield_min.toFixed(1)} - ${data.hounsfield_max.toFixed(1)} HU
+Std Dev: ${data.hounsfield_std.toFixed(1)} HU
+95% CI: ${data.ci_lower.toFixed(1)} - ${data.ci_upper.toFixed(1)} HU
+CV: ${data.coefficient_of_variation.toFixed(1)}%
+
+🔬 CLINICAL INTERPRETATION:
+Tissue Type: ${data.tissue_type}
+Anatomical Context: ${data.anatomical_context}
+Clinical Significance: ${data.clinical_significance}
+Reference Range: ${data.reference_range}
+
+📐 MEASUREMENT DETAILS:
+ROI Area: ${data.roi_area_mm2.toFixed(1)} mm²
+Pixel Count: ${data.pixel_count}`;
+                    
+                    alert(message);
                 }
             }
         })
@@ -2331,10 +2680,65 @@ class DicomViewer {
             this.showError(`Network error loading study: ${error.message}. Please check your connection and try again.`);
         }
     }
+
+    render() {
+        // Clear canvas with black background
+        this.ctx.fillStyle = '#000';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        if (this.currentImage) {
+            // Save context state
+            this.ctx.save();
+            
+            // Apply transformations
+            this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
+            this.ctx.scale(this.zoomFactor, this.zoomFactor);
+            this.ctx.translate(-this.canvas.width / 2, -this.canvas.height / 2);
+            this.ctx.translate(this.panX, this.panY);
+            
+            // Calculate centered position
+            const x = (this.canvas.width - this.currentImage.width) / 2;
+            const y = (this.canvas.height - this.currentImage.height) / 2;
+            
+            // Draw the image
+            this.ctx.drawImage(this.currentImage, x, y);
+            
+            // Restore context for UI elements
+            this.ctx.restore();
+            
+            // Draw measurements (should be drawn after image but before other UI elements)
+            this.drawMeasurements();
+            
+            // Draw annotations
+            this.drawAnnotations();
+            
+            // Draw crosshair if enabled
+            if (this.crosshair) {
+                this.drawCrosshair();
+            }
+            
+            // Draw AI highlights if enabled
+            if (this.showAIHighlights && this.aiAnalysisResults) {
+                this.drawAIHighlights();
+            }
+            
+            // Update measurement list in UI
+            this.updateMeasurementsList();
+        } else {
+            // No image loaded - show message
+            this.ctx.fillStyle = '#666';
+            this.ctx.font = '20px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText('No image loaded', this.canvas.width / 2, this.canvas.height / 2);
+        }
+    }
 }
 
 // Initialize the viewer when the page loads
 let viewer;
 document.addEventListener('DOMContentLoaded', () => {
-    viewer = new DicomViewer();
+    // Get initial study ID from global variable (if set by template)
+    const initialStudyId = window.initialStudyId || null;
+    viewer = new DicomViewer(initialStudyId);
 });
