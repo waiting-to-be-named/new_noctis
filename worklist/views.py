@@ -113,7 +113,7 @@ def view_study_from_worklist(request, entry_id):
     
     if entry.study:
         # Redirect to viewer with study ID
-        return redirect('viewer:viewer', study_id=entry.study.id)
+        return redirect('viewer:viewer_with_study', study_id=entry.study.id)
     else:
         return JsonResponse({'error': 'No images available for this entry'}, status=404)
 
@@ -203,20 +203,25 @@ def create_report(request, study_id):
         })
     
     else:
-        # GET request - return existing report if any
-        try:
-            report = Report.objects.filter(study=study).latest('created_at')
-            return JsonResponse({
-                'findings': report.findings,
-                'impression': report.impression,
-                'recommendations': report.recommendations,
-                'status': report.status,
-                'radiologist': report.radiologist.get_full_name() or report.radiologist.username,
-                'created_at': report.created_at.isoformat(),
-                'finalized_at': report.finalized_at.isoformat() if report.finalized_at else None
-            })
-        except Report.DoesNotExist:
-            return JsonResponse({})
+        # GET request - render report page or return JSON data
+        if request.headers.get('Accept') == 'application/json':
+            # Return JSON data for AJAX requests
+            try:
+                report = Report.objects.filter(study=study).latest('created_at')
+                return JsonResponse({
+                    'findings': report.findings,
+                    'impression': report.impression,
+                    'recommendations': report.recommendations,
+                    'status': report.status,
+                    'radiologist': report.radiologist.get_full_name() or report.radiologist.username,
+                    'created_at': report.created_at.isoformat(),
+                    'finalized_at': report.finalized_at.isoformat() if report.finalized_at else None
+                })
+            except Report.DoesNotExist:
+                return JsonResponse({})
+        else:
+            # Render the report page
+            return render(request, 'worklist/report.html', {'study': study})
 
 
 @login_required

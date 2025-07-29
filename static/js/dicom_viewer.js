@@ -324,7 +324,7 @@ class DicomViewer {
         progressText.textContent = `Uploading ${validFiles.length} files...`;
         
         try {
-            const response = await fetch('/api/upload/', {
+            const response = await fetch('/viewer/api/upload/', {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -465,7 +465,7 @@ class DicomViewer {
         progressText.textContent = `Uploading ${dicomFiles.length} DICOM files...`;
         
         try {
-            const response = await fetch('/api/upload-folder/', {
+            const response = await fetch('/viewer/api/upload-folder/', {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -554,7 +554,7 @@ class DicomViewer {
     
     async loadBackendStudies() {
         try {
-            const response = await fetch('/api/studies/');
+            const response = await fetch('/viewer/api/studies/');
             const studies = await response.json();
             
             const select = document.getElementById('backend-studies');
@@ -580,7 +580,7 @@ class DicomViewer {
     
     async loadStudy(studyId) {
         try {
-            const response = await fetch(`/api/studies/${studyId}/images/`);
+            const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
             
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -623,7 +623,7 @@ class DicomViewer {
                 inverted: this.inverted
             });
             
-            const response = await fetch(`/api/images/${imageData.id}/data/?${params}`);
+            const response = await fetch(`/viewer/api/images/${imageData.id}/data/?${params}`);
             
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -1319,7 +1319,7 @@ class DicomViewer {
         };
         
         try {
-            const response = await fetch('/api/measurements/save/', {
+            const response = await fetch('/viewer/api/measurements/save/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1347,7 +1347,7 @@ class DicomViewer {
         };
         
         try {
-            const response = await fetch('/api/annotations/save/', {
+            const response = await fetch('/viewer/api/annotations/save/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1369,7 +1369,7 @@ class DicomViewer {
         if (!this.currentImage) return;
         
         try {
-            const response = await fetch(`/api/images/${this.currentImage.id}/measurements/`);
+            const response = await fetch(`/viewer/api/images/${this.currentImage.id}/measurements/`);
             this.measurements = await response.json();
             this.updateMeasurementsList();
         } catch (error) {
@@ -1381,7 +1381,7 @@ class DicomViewer {
         if (!this.currentImage) return;
         
         try {
-            const response = await fetch(`/api/images/${this.currentImage.id}/annotations/`);
+            const response = await fetch(`/viewer/api/images/${this.currentImage.id}/annotations/`);
             this.annotations = await response.json();
         } catch (error) {
             console.error('Error loading annotations:', error);
@@ -1449,7 +1449,7 @@ class DicomViewer {
         if (!this.currentImage) return;
         
         try {
-            const response = await fetch(`/api/images/${this.currentImage.id}/clear-measurements/`, {
+            const response = await fetch(`/viewer/api/images/${this.currentImage.id}/clear-measurements/`, {
                 method: 'DELETE',
                 headers: {
                     'X-CSRFToken': this.getCSRFToken()
@@ -1477,7 +1477,7 @@ class DicomViewer {
             y1: ellipseData.end.y
         };
         try {
-            const response = await fetch('/api/measurements/hu/', {
+            const response = await fetch('/viewer/api/measurements/hu/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1673,7 +1673,7 @@ class DicomViewer {
         const resultsDiv = document.getElementById('ai-results');
         resultsDiv.innerHTML = '<div class="loading">Performing AI analysis...</div>';
         
-        fetch(`/api/images/${this.currentImage.id}/ai-analysis/`, {
+        fetch(`/viewer/api/images/${this.currentImage.id}/ai-analysis/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -2132,7 +2132,7 @@ class DicomViewer {
             unit: measurement.unit || this.measurementUnit
         };
         
-        fetch('/api/measurements/save/', {
+        fetch('/viewer/api/measurements/save/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -2167,7 +2167,7 @@ class DicomViewer {
             unit: 'HU'
         };
         
-        fetch('/api/measurements/save/', {
+        fetch('/viewer/api/measurements/save/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -2211,7 +2211,7 @@ class DicomViewer {
             color: color
         };
         
-        fetch('/api/annotations/save/', {
+        fetch('/viewer/api/annotations/save/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -2285,7 +2285,7 @@ class DicomViewer {
     async loadStudyImages(studyId) {
         console.log('Loading study images for study:', studyId);
         try {
-            const response = await fetch(`/api/studies/${studyId}/images/`);
+            const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
             
             if (!response.ok) {
                 let errorMessage;
