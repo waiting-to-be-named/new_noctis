@@ -590,6 +590,8 @@ class DicomViewer {
     async loadStudy(studyId) {
         try {
             console.log(`Loading study ${studyId}...`);
+            this.showNotification('Loading Study', 'Loading study data...', 'info', 2000);
+            
             const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
             
             if (!response.ok) {
@@ -617,12 +619,13 @@ class DicomViewer {
             await this.loadCurrentImage();
             
             // Study loaded successfully - no need to update selector as it's removed
+            this.showNotification('Study Loaded', `Successfully loaded study with ${data.images.length} images`, 'success', 3000);
             
             console.log('Study loaded successfully');
             
         } catch (error) {
             console.error('Error loading study:', error);
-            this.showError('Error loading study: ' + error.message);
+            this.showNotification('Error', 'Error loading study: ' + error.message, 'error');
             // Reset patient info on error
             this.updatePatientInfo();
         }
@@ -631,11 +634,15 @@ class DicomViewer {
     async loadCurrentImage() {
         if (!this.currentImages.length) {
             console.log('No images available');
+            this.showNotification('No Images', 'No images available in this study', 'warning');
             return;
         }
         
         const imageData = this.currentImages[this.currentImageIndex];
         console.log(`Loading image ${this.currentImageIndex + 1}/${this.currentImages.length}, ID: ${imageData.id}`);
+        
+        // Show loading notification
+        this.showNotification('Loading Image', `Loading image ${this.currentImageIndex + 1} of ${this.currentImages.length}...`, 'info', 2000);
         
         try {
             const params = new URLSearchParams({
@@ -644,18 +651,25 @@ class DicomViewer {
                 inverted: this.inverted
             });
             
+            console.log(`Fetching image data from: /viewer/api/images/${imageData.id}/data/?${params}`);
             const response = await fetch(`/viewer/api/images/${imageData.id}/data/?${params}`);
             
             if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`HTTP ${response.status}: ${response.statusText}`);
+                console.error('Response text:', errorText);
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
             const data = await response.json();
+            console.log('Received image data response:', data);
             
             if (data.image_data) {
+                console.log('Creating image from base64 data...');
                 const img = new Image();
+                
                 img.onload = () => {
-                    console.log('Image loaded successfully');
+                    console.log('Image loaded successfully, dimensions:', img.width, 'x', img.height);
                     this.currentImage = {
                         image: img,
                         metadata: data.metadata,
@@ -667,26 +681,33 @@ class DicomViewer {
                         pixel_spacing: `${data.metadata.pixel_spacing_x},${data.metadata.pixel_spacing_y}`,
                         slice_thickness: data.metadata.slice_thickness
                     };
+                    
                     // Ensure canvas is properly sized before drawing
                     this.resizeCanvas();
                     this.updateDisplay();
                     this.loadMeasurements();
                     this.loadAnnotations();
                     this.updatePatientInfo();
+                    
+                    console.log('Image display updated successfully');
+                    this.showNotification('Image Loaded', `Successfully loaded image ${this.currentImageIndex + 1}`, 'success', 2000);
                 };
+                
                 img.onerror = (error) => {
                     console.error('Failed to load image data:', error);
-                    console.error('Image source:', img.src);
-                    this.showError('Failed to load image. Please try refreshing or selecting another image.');
+                    console.error('Image source length:', img.src ? img.src.length : 'undefined');
+                    this.showNotification('Image Error', 'Failed to load image. Please try refreshing or selecting another image.', 'error');
                 };
+                
                 img.src = data.image_data;
             } else {
+                console.error('No image data in response:', data);
                 throw new Error(data.error || 'No image data received');
             }
             
         } catch (error) {
             console.error('Error loading image:', error);
-            this.showError('Error loading image: ' + error.message);
+            this.showNotification('Error', 'Error loading image: ' + error.message, 'error');
         }
     }
     
@@ -722,6 +743,41 @@ class DicomViewer {
                 errorDiv.remove();
             }
         }, 5000);
+    }
+    
+    showNotification(title, message, type = 'info', duration = 5000) {
+        const notificationContainer = document.getElementById('notification-container');
+        if (!notificationContainer) {
+            console.warn('Notification container not found');
+            return;
+        }
+        
+        const notification = document.createElement('div');
+        notification.className = 'notification';
+        
+        const bgColor = type === 'error' ? 'linear-gradient(135deg, #f44336, #d32f2f)' :
+                       type === 'success' ? 'linear-gradient(135deg, #4CAF50, #45a049)' :
+                       type === 'warning' ? 'linear-gradient(135deg, #ff9800, #f57c00)' :
+                       'linear-gradient(135deg, #2196F3, #1976D2)';
+        
+        notification.style.background = bgColor;
+        
+        notification.innerHTML = `
+            <div class="notification-header">
+                <span>${title}</span>
+                <button class="close-notif" onclick="this.parentElement.parentElement.remove()">×</button>
+            </div>
+            <div>${message}</div>
+        `;
+        
+        notificationContainer.appendChild(notification);
+        
+        // Auto-remove after specified duration
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, duration);
     }
     
     updatePatientInfo() {
@@ -2458,6 +2514,8 @@ ${this.aiAnalysisResults.recommendations || 'None'}`;
     
     async loadStudyImages(studyId) {
         console.log('Loading study images for study:', studyId);
+        this.showNotification('Loading Study', 'Loading study images...', 'info', 2000);
+        
         try {
             const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
             
@@ -2475,7 +2533,7 @@ ${this.aiAnalysisResults.recommendations || 'None'}`;
                     }
                 }
                 console.error('Failed to load study images:', errorMessage);
-                this.showError(`Failed to load study: ${errorMessage}`);
+                this.showNotification('Error', `Failed to load study: ${errorMessage}`, 'error');
                 return;
             }
 
@@ -2483,7 +2541,7 @@ ${this.aiAnalysisResults.recommendations || 'None'}`;
             console.log('Loaded study data:', data);
             
             if (!data.images || data.images.length === 0) {
-                this.showError('No images found in this study. The study may be corrupted or the files may have been moved.');
+                this.showNotification('No Images', 'No images found in this study. The study may be corrupted or the files may have been moved.', 'warning');
                 return;
             }
 
@@ -2492,17 +2550,19 @@ ${this.aiAnalysisResults.recommendations || 'None'}`;
             this.currentImageIndex = 0;
             
             // Update the UI with study information
-            this.updateStudyInfo(data.study);
+            this.updatePatientInfo();
+            this.updateSliders();
             
             // Load the first image
             if (this.currentImages.length > 0) {
-                await this.loadImage(0);
-                this.updateImageControls();
+                await this.loadCurrentImage();
             }
+            
+            this.showNotification('Study Loaded', `Successfully loaded study with ${data.images.length} images`, 'success', 3000);
             
         } catch (error) {
             console.error('Error loading study images:', error);
-            this.showError(`Network error loading study: ${error.message}. Please check your connection and try again.`);
+            this.showNotification('Network Error', `Network error loading study: ${error.message}. Please check your connection and try again.`, 'error');
         }
     }
 }

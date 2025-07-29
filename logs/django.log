@@ -38,3 +38,7 @@ TypeError: MiddlewareMixin.__init__() missing 1 required positional argument: 'g
 ERROR 2025-07-29 07:14:06,724 basehttp 2899 140179142604480 "HEAD / HTTP/1.1" 500 0
 INFO 2025-07-29 08:07:14,594 autoreload 2323 139880513061120 Watching for file changes with StatReloader
 INFO 2025-07-29 08:07:22,611 basehttp 2323 139880169469632 "GET /admin/ HTTP/1.1" 302 0
+INFO 2025-07-29 10:04:59,317 autoreload 2668 140163164172544 Watching for file changes with StatReloader
+INFO 2025-07-29 10:05:25,087 autoreload 3076 140629682827520 Watching for file changes with StatReloader
+INFO 2025-07-29 10:05:31,259 basehttp 3076 140629408110272 "GET / HTTP/1.1" 200 9008
+INFO 2025-07-29 10:05:42,665 basehttp 3076 140629408110272 "GET /viewer/ HTTP/1.1" 200 16428
