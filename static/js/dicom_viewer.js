@@ -661,7 +661,13 @@ class DicomViewer {
                     this.currentImage = {
                         image: img,
                         metadata: data.metadata,
-                        id: imageData.id
+                        id: imageData.id,
+                        rows: data.metadata.rows,
+                        columns: data.metadata.columns,
+                        pixel_spacing_x: data.metadata.pixel_spacing_x,
+                        pixel_spacing_y: data.metadata.pixel_spacing_y,
+                        pixel_spacing: `${data.metadata.pixel_spacing_x},${data.metadata.pixel_spacing_y}`,
+                        slice_thickness: data.metadata.slice_thickness
                     };
                     this.updateDisplay();
                     this.loadMeasurements();
@@ -727,10 +733,7 @@ class DicomViewer {
         
         // Calculate display parameters
         const img = this.currentImage.image;
-        const scale = Math.min(
-            (this.canvas.width * this.zoomFactor) / img.width,
-            (this.canvas.height * this.zoomFactor) / img.height
-        );
+        const scale = this.getScale();
         
         const displayWidth = img.width * scale;
         const displayHeight = img.height * scale;
@@ -752,6 +755,15 @@ class DicomViewer {
         
         // Update overlay labels
         this.updateOverlayLabels();
+    }
+    
+    // New helper to calculate the current pixel scale while preventing unintended up-scaling
+    getScale() {
+        if (!this.currentImage) return 1;
+        const img = this.currentImage.image;
+        const baseScale = Math.min(this.canvas.width / img.width, this.canvas.height / img.height);
+        const clampedBase = baseScale > 1 ? 1 : baseScale; // never upscale automatically
+        return this.zoomFactor * clampedBase;
     }
     
     drawMeasurements() {
@@ -823,8 +835,8 @@ class DicomViewer {
                 this.ctx.fillRect(centroidX - textMetrics.width/2 - 4, centroidY - 8, textMetrics.width + 8, 16);
                 this.ctx.fillStyle = 'blue';
                 this.ctx.fillText(text, centroidX - textMetrics.width/2, centroidY + 4);
-            } else if (coords && coords.length >= 2) {
-                // existing line measurement drawing
+            } else if (measurement.type === 'line' && coords && coords.length >= 2) {
+                // Draw distance/line measurement
                 const start = this.imageToCanvasCoords(coords[0].x, coords[0].y);
                 const end = this.imageToCanvasCoords(coords[1].x, coords[1].y);
                 
@@ -1209,21 +1221,12 @@ class DicomViewer {
             this.isDragging = false;
             this.dragStart = null;
         } else if (this.activeTool === 'measure' && this.currentMeasurement) {
-            // Calculate distance
-            const dx = this.currentMeasurement.end.x - this.currentMeasurement.start.x;
-            const dy = this.currentMeasurement.end.y - this.currentMeasurement.start.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            // Convert to mm if pixel spacing is available
-            let distanceMm = distance;
-            if (this.currentImage && this.currentImage.pixel_spacing) {
-                const spacing = this.parsePixelSpacing(this.currentImage.pixel_spacing);
-                distanceMm = distance * spacing[0]; // Use first spacing value
-            }
-            
-            this.currentMeasurement.distance = distanceMm;
-            this.measurements.push(this.currentMeasurement);
-            this.updateMeasurementsList();
+            // Persist the measurement using the dedicated handler
+            const measurementData = {
+                start: this.currentMeasurement.start,
+                end: this.currentMeasurement.end
+            };
+            this.addMeasurement(measurementData);
             this.currentMeasurement = null;
             this.redraw();
         } else if (this.activeTool === 'ellipse' && this.currentEllipse) {
@@ -1272,10 +1275,7 @@ class DicomViewer {
         if (!this.currentImage) return { x: 0, y: 0 };
         
         const img = this.currentImage.image;
-        const scale = Math.min(
-            (this.canvas.width * this.zoomFactor) / img.width,
-            (this.canvas.height * this.zoomFactor) / img.height
-        );
+        const scale = this.getScale();
         
         const displayWidth = img.width * scale;
         const displayHeight = img.height * scale;
@@ -1292,10 +1292,7 @@ class DicomViewer {
         if (!this.currentImage) return { x: 0, y: 0 };
         
         const img = this.currentImage.image;
-        const scale = Math.min(
-            (this.canvas.width * this.zoomFactor) / img.width,
-            (this.canvas.height * this.zoomFactor) / img.height
-        );
+        const scale = this.getScale();
         
         const displayWidth = img.width * scale;
         const displayHeight = img.height * scale;
