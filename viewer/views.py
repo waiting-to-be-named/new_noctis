@@ -21,7 +21,7 @@ from datetime import datetime
 import numpy as np
 from .models import (
     DicomStudy, DicomSeries, DicomImage, Measurement, Annotation,
-    Facility, Report, WorklistEntry, AIAnalysis, Notification
+    Facility, Report, WorklistEntry, AIAnalysis, Notification, FacilityStaff
 )
 from django.contrib.auth.models import Group
 from .serializers import DicomStudySerializer, DicomImageSerializer
@@ -141,8 +141,41 @@ class FacilityCreateView(AdminRequiredMixin, CreateView):
     success_url = reverse_lazy('viewer:facility_list')
     
     def form_valid(self, form):
+        response = super().form_valid(form)
+
+        # ------------------------------------------------------------------
+        # OPTIONAL: create a login account for the facility right away.
+        # The admin UI posts extra fields ``staff_username`` & ``staff_password``.
+        # If they are provided we will create a basic Django user and link it to
+        # the newly-created facility through the FacilityStaff helper model.
+        # ------------------------------------------------------------------
+        staff_username = self.request.POST.get('staff_username')
+        staff_password = self.request.POST.get('staff_password')
+        staff_email = self.request.POST.get('staff_email')
+
+        if staff_username and staff_password:
+            if User.objects.filter(username=staff_username).exists():
+                messages.warning(
+                    self.request,
+                    f'User "{staff_username}" already exists – skipped automatic account creation.'
+                )
+            else:
+                user = User.objects.create_user(
+                    username=staff_username,
+                    password=staff_password,
+                    email=staff_email or form.instance.email  # fall back to facility email
+                )
+
+                # link with FacilityStaff
+                FacilityStaff.objects.create(user=user, facility=form.instance)
+
+                messages.success(
+                    self.request,
+                    f'Login account "{staff_username}" created for facility.'
+                )
+
         messages.success(self.request, f'Facility "{form.instance.name}" created successfully.')
-        return super().form_valid(form)
+        return response
 
 
 class FacilityUpdateView(AdminRequiredMixin, UpdateView):
@@ -1743,3 +1776,25 @@ def create_system_error_notification(error_message, user=None):
             )
     except Exception as e:
         print(f"Error creating system error notification: {e}")
+
+
+def facility_delete(request, pk):
+    """Admin-only: delete a facility and any linked staff accounts."""
+    if not (request.user.is_authenticated and request.user.is_superuser):
+        return redirect('login')
+
+    facility = get_object_or_404(Facility, pk=pk)
+
+    # Collect related FacilityStaff accounts so we can remove them also
+    staff_members = FacilityStaff.objects.filter(facility=facility)
+    for staff in staff_members:
+        # delete the linked user first (to avoid orphans)
+        user = staff.user
+        staff.delete()
+        user.delete()
+
+    facility_name = facility.name
+    facility.delete()
+
+    messages.success(request, f'Facility "{facility_name}" and related user accounts deleted.')
+    return redirect('viewer:facility_list')
