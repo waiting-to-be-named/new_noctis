@@ -379,6 +379,8 @@ class Notification(models.Model):
         ('report_ready', 'Report Ready'),
         ('ai_complete', 'AI Analysis Complete'),
         ('system', 'System Message'),
+        ('system_error', 'System Error'),  # Add system error type
+        ('new_chat', 'New Chat Message'),  # Add chat notification type
     ]
     
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
@@ -394,3 +396,26 @@ class Notification(models.Model):
     
     def __str__(self):
         return f"{self.notification_type}: {self.title}"
+
+
+class Chat(models.Model):
+    """Model for chat messages between radiologists and facility staff"""
+    CHAT_TYPES = [
+        ('user_message', 'User Message'),
+        ('system_upload', 'System Upload Notification'),
+        ('system_error', 'System Error'),
+    ]
+    
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages', null=True, blank=True)
+    facility = models.ForeignKey(Facility, on_delete=models.CASCADE, related_name='chat_messages')
+    message_type = models.CharField(max_length=20, choices=CHAT_TYPES, default='user_message')
+    message = models.TextField()
+    study = models.ForeignKey(DicomStudy, on_delete=models.CASCADE, null=True, blank=True, related_name='chat_messages')
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.get_message_type_display()}: {self.message[:50]}"

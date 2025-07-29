@@ -22,5 +22,10 @@ urlpatterns = [
     
     # Notifications
     path('notifications/', views.get_notifications, name='get_notifications'),
-    path('notifications/<int:notification_id>/read/', views.mark_notification_read, name='mark_notification_read'),
+    path('notification/<int:notification_id>/read/', views.mark_notification_read, name='mark_notification_read'),
+    
+    # Chat
+    path('chat/messages/', views.get_chat_messages, name='get_chat_messages'),
+    path('chat/send/', views.send_chat_message, name='send_chat_message'),
+    path('chat/clear/', views.clear_old_chat_messages, name='clear_old_chat_messages'),
 ]
