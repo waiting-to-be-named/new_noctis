@@ -20,6 +20,7 @@ class Facility(models.Model):
     email = models.EmailField()
     letterhead_logo = models.ImageField(upload_to='facility_logos/', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    staff = models.ManyToManyField(User, related_name='facilities', blank=True)
     
     class Meta:
         verbose_name_plural = "Facilities"

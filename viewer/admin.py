@@ -13,6 +13,31 @@ admin.site.site_title = "Noctis Admin"
 admin.site.index_title = "Noctis Medical Imaging Platform"
 
 
+@admin.register(Facility)
+class FacilityAdmin(admin.ModelAdmin):
+    list_display = ['name', 'email', 'phone', 'get_staff_count', 'created_at']
+    search_fields = ['name', 'email', 'address']
+    filter_horizontal = ['staff']
+    readonly_fields = ['created_at']
+    
+    def get_staff_count(self, obj):
+        return obj.staff.count()
+    get_staff_count.short_description = 'Staff Members'
+    
+    fieldsets = (
+        ('Facility Information', {
+            'fields': ('name', 'address', 'phone', 'email', 'letterhead_logo')
+        }),
+        ('Staff Members', {
+            'fields': ('staff',),
+            'description': 'Select users who work at this facility'
+        }),
+        ('System Information', {
+            'fields': ('created_at',)
+        }),
+    )
+
+
 @admin.register(DicomStudy)
 class DicomStudyAdmin(admin.ModelAdmin):
     list_display = ['patient_name', 'study_date', 'modality', 'series_count', 'total_images', 'created_at']

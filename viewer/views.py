@@ -333,7 +333,7 @@ def upload_dicom_files(request):
                             'modality': modality,
                             'institution_name': institution_name,
                             'uploaded_by': request.user if request.user.is_authenticated else None,
-                            'facility': request.user.facility_staff.facility if hasattr(request.user, 'facility_staff') else None,
+                            'facility': request.user.facilities.first() if request.user.facilities.exists() else None,
                             'accession_number': accession_number,
                             'referring_physician': referring_physician,
                         }
@@ -654,7 +654,7 @@ def upload_dicom_folder(request):
                         'modality': modality,
                         'institution_name': institution_name,
                         'uploaded_by': request.user if request.user.is_authenticated else None,
-                        'facility': request.user.facility_staff.facility if hasattr(request.user, 'facility_staff') else None,
+                        'facility': request.user.facilities.first() if request.user.facilities.exists() else None,
                         'accession_number': accession_number,
                         'referring_physician': referring_physician,
                     }
