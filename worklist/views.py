@@ -34,8 +34,9 @@ class WorklistView(LoginRequiredMixin, ListView):
         print(f"Total worklist entries in database: {total_count}")
         
         # Filter by facility if user is facility staff
-        if hasattr(self.request.user, 'facility_staff'):
-            queryset = queryset.filter(facility=self.request.user.facility_staff.facility)
+        user_facilities = self.request.user.facilities.all()
+        if user_facilities.exists():
+            queryset = queryset.filter(facility__in=user_facilities)
             print(f"Filtered by facility, count: {queryset.count()}")
         else:
             print(f"No facility filtering, showing all entries: {queryset.count()}")
@@ -132,8 +133,7 @@ class FacilityWorklistView(LoginRequiredMixin, ListView):
         # Check permissions
         if not (self.request.user.is_superuser or 
                 self.request.user.groups.filter(name='Radiologists').exists() or
-                (hasattr(self.request.user, 'facility_staff') and 
-                 self.request.user.facility_staff.facility == facility)):
+                                (self.request.user.facilities.filter(id=facility.id).exists())):
             return WorklistEntry.objects.none()
         
         return WorklistEntry.objects.filter(facility=facility)
@@ -250,8 +250,7 @@ def print_report(request, report_id):
     # Check permissions
     if not (request.user.is_superuser or 
             request.user.groups.filter(name='Radiologists').exists() or
-            (hasattr(request.user, 'facility_staff') and 
-             request.user.facility_staff.facility == study.facility)):
+                            (study.facility and request.user.facilities.filter(id=study.facility.id).exists())):
         return HttpResponse('Permission denied', status=403)
     
     # Create PDF
@@ -513,8 +512,6 @@ def api_chat_send(request):
         if facility_id:
             try:
                 facility = Facility.objects.get(id=facility_id)
-                # Find facility staff to send message to
-                # For now, we'll send to all facility users
             except Facility.DoesNotExist:
                 return JsonResponse({'success': False, 'error': 'Facility not found'})
         
@@ -527,13 +524,25 @@ def api_chat_send(request):
             message=message_text
         )
         
-        # Create notification for recipient
-        if recipient:
+        # Create notifications for facility staff
+        if facility:
+            facility_staff = facility.staff.all()
+            for staff_member in facility_staff:
+                if staff_member != request.user:  # Don't notify the sender
+                    Notification.objects.create(
+                        recipient=staff_member,
+                        notification_type='chat',
+                        title='New Chat Message',
+                        message=f'{request.user.get_full_name() or request.user.username}: {message_text[:50]}{"..." if len(message_text) > 50 else ""}'
+                    )
+        
+        # Create notification for individual recipient
+        elif recipient and recipient != request.user:
             Notification.objects.create(
                 recipient=recipient,
                 notification_type='chat',
                 title='New Chat Message',
-                message=f'{request.user.get_full_name() or request.user.username}: {message_text[:50]}...'
+                message=f'{request.user.get_full_name() or request.user.username}: {message_text[:50]}{"..." if len(message_text) > 50 else ""}'
             )
         
         return JsonResponse({'success': True})
