@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from django.http import JsonResponse
 from django.middleware.csrf import CsrfViewMiddleware
 from django.utils.deprecation import MiddlewareMixin
@@ -7,6 +8,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.http import HttpResponseForbidden
 import traceback
+from django.middleware.csrf import get_token
+from django.views.decorators.csrf import csrf_exempt
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +19,7 @@ class APIErrorMiddleware(MiddlewareMixin):
     Middleware to handle API errors and ensure JSON responses for API endpoints.
     Provides detailed error logging and consistent error response format.
     """
-    
+
     def process_exception(self, request, exception):
         """Handle exceptions for API endpoints and return JSON responses."""
         # Check if this is an API request
@@ -61,6 +64,12 @@ class CSRFMiddleware(MiddlewareMixin):
     Provides better handling for file uploads and API requests.
     """
     
+    def __init__(self, get_response):
+        self.get_response = get_response
+        # Create the CSRF middleware instance with proper get_response
+        self.csrf_middleware = CsrfViewMiddleware(get_response)
+        super().__init__(get_response)
+    
     def process_view(self, request, callback, callback_args, callback_kwargs):
         # Skip CSRF check for specific API endpoints that handle file uploads
         if hasattr(callback, '__name__') and any(name in callback.__name__ for name in ['upload', 'save']):
@@ -70,9 +79,8 @@ class CSRFMiddleware(MiddlewareMixin):
         if hasattr(callback, 'csrf_exempt') and callback.csrf_exempt:
             return None
             
-        # Use Django's built-in CSRF middleware
-        csrf_middleware = CsrfViewMiddleware()
-        response = csrf_middleware.process_view(request, callback, callback_args, callback_kwargs)
+        # Use the properly initialized CSRF middleware
+        response = self.csrf_middleware.process_view(request, callback, callback_args, callback_kwargs)
         
         # If CSRF validation failed and this is an API request, return JSON error
         if response and (request.path.startswith('/api/') or request.path.startswith('/viewer/api/')):
@@ -183,7 +191,3 @@ class PerformanceMiddleware(MiddlewareMixin):
             elif request.path.startswith('/api/') or request.path.startswith('/viewer/api/'):
                 logger.debug(f"Request duration: {request.method} {request.path} took {duration:.3f}s")
         return response
-
-
-# Import time module for performance middleware
-import time
