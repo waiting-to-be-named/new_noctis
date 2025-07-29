@@ -26,6 +26,7 @@ from .models import (
 from django.contrib.auth.models import Group
 from .serializers import DicomStudySerializer, DicomImageSerializer
 import io
+from scipy import stats
 
 
 # Ensure required directories exist
@@ -1194,7 +1195,7 @@ def save_measurement(request):
 @csrf_exempt
 @require_http_methods(['POST'])
 def measure_hu(request):
-    """Measure Hounsfield Units with proper radiological reference data"""
+    """Measure Hounsfield Units with proper radiological reference data following global standards"""
     try:
         data = json.loads(request.body)
         image = DicomImage.objects.get(id=data['image_id'])
@@ -1230,24 +1231,44 @@ def measure_hu(request):
         if len(roi_pixels) == 0:
             return JsonResponse({'error': 'No pixels in ROI'}, status=400)
         
-        # Convert to Hounsfield Units
-        # Check if we have rescale slope and intercept
+        # Convert to Hounsfield Units using standard DICOM rescaling
         rescale_slope = getattr(dicom_data, 'RescaleSlope', 1)
         rescale_intercept = getattr(dicom_data, 'RescaleIntercept', 0)
         
         # Apply rescaling to get HU values
         hu_values = roi_pixels * rescale_slope + rescale_intercept
         
-        # Calculate statistics
+        # Calculate comprehensive statistics
         mean_hu = float(np.mean(hu_values))
         min_hu = float(np.min(hu_values))
         max_hu = float(np.max(hu_values))
         std_hu = float(np.std(hu_values))
+        median_hu = float(np.median(hu_values))
         
-        # Radiological interpretation based on HU values
-        interpretation = get_hu_interpretation(mean_hu)
+        # Calculate confidence intervals (95% CI)
+        confidence_interval = stats.t.interval(0.95, len(hu_values)-1, 
+                                            loc=mean_hu, scale=std_hu/np.sqrt(len(hu_values)))
+        ci_lower = float(confidence_interval[0])
+        ci_upper = float(confidence_interval[1])
         
-        # Save measurement
+        # Calculate coefficient of variation
+        cv = (std_hu / mean_hu) * 100 if mean_hu != 0 else 0
+        
+        # Get anatomical region from DICOM data if available
+        body_part = getattr(dicom_data, 'BodyPartExamined', '').upper()
+        study_description = getattr(dicom_data, 'StudyDescription', '').upper()
+        
+        # Enhanced radiological interpretation with anatomical context
+        interpretation_data = get_enhanced_hu_interpretation(
+            mean_hu, body_part, study_description, ci_lower, ci_upper
+        )
+        
+        # Calculate ROI area in mm² if pixel spacing available
+        pixel_spacing_x = getattr(dicom_data, 'PixelSpacing', [1, 1])[0] if hasattr(dicom_data, 'PixelSpacing') else 1
+        pixel_spacing_y = getattr(dicom_data, 'PixelSpacing', [1, 1])[1] if hasattr(dicom_data, 'PixelSpacing') else 1
+        roi_area_mm2 = len(roi_pixels) * pixel_spacing_x * pixel_spacing_y
+        
+        # Save measurement with enhanced data
         measurement = Measurement.objects.create(
             image=image,
             measurement_type='ellipse',
@@ -1258,7 +1279,7 @@ def measure_hu(request):
             hounsfield_min=min_hu,
             hounsfield_max=max_hu,
             hounsfield_std=std_hu,
-            notes=f"Interpretation: {interpretation}",
+            notes=interpretation_data['detailed_notes'],
             created_by=request.user if request.user.is_authenticated else None
         )
         
@@ -1267,8 +1288,17 @@ def measure_hu(request):
             'min_hu': min_hu,
             'max_hu': max_hu,
             'std_hu': std_hu,
+            'median_hu': median_hu,
+            'ci_lower': ci_lower,
+            'ci_upper': ci_upper,
+            'coefficient_of_variation': cv,
             'pixel_count': len(roi_pixels),
-            'interpretation': interpretation,
+            'roi_area_mm2': roi_area_mm2,
+            'interpretation': interpretation_data['primary_interpretation'],
+            'tissue_type': interpretation_data['tissue_type'],
+            'clinical_significance': interpretation_data['clinical_significance'],
+            'anatomical_context': interpretation_data['anatomical_context'],
+            'reference_range': interpretation_data['reference_range'],
             'measurement_id': measurement.id
         })
         
@@ -1276,39 +1306,151 @@ def measure_hu(request):
         return JsonResponse({'error': str(e)}, status=400)
 
 
-def get_hu_interpretation(hu_value):
+def get_enhanced_hu_interpretation(hu_value, body_part='', study_description='', ci_lower=None, ci_upper=None):
     """
-    Provide radiological interpretation based on Hounsfield Unit values
-    Based on standard radiological reference values
+    Provide comprehensive radiological interpretation based on Hounsfield Unit values
+    Following global radiological standards and anatomical context
     """
+    
+    # Standard HU reference ranges based on global radiological standards
+    HU_RANGES = {
+        'air_gas': (-1000, -900),
+        'lung_tissue': (-900, -500),
+        'fat_tissue': (-500, -100),
+        'fat_soft_interface': (-100, -50),
+        'soft_tissue_low': (-50, 0),
+        'water_csf': (0, 20),
+        'muscle': (20, 40),
+        'liver_spleen': (40, 80),
+        'kidney': (80, 120),
+        'soft_tissue_dense': (120, 200),
+        'calcification_contrast': (200, 400),
+        'bone_cancellous': (400, 1000),
+        'bone_cortical': (1000, 2000),
+        'metal_dense': (2000, 3000)
+    }
+    
+    # Anatomical region-specific reference values
+    ANATOMICAL_REFERENCE = {
+        'HEAD': {
+            'brain_white_matter': (20, 30),
+            'brain_gray_matter': (35, 45),
+            'csf': (0, 15),
+            'bone_skull': (400, 1000),
+            'air_sinuses': (-1000, -900)
+        },
+        'CHEST': {
+            'lung_air': (-1000, -900),
+            'lung_tissue': (-900, -500),
+            'heart_muscle': (30, 50),
+            'blood': (30, 45),
+            'bone_rib': (400, 1000)
+        },
+        'ABDOMEN': {
+            'liver': (40, 60),
+            'spleen': (40, 60),
+            'kidney': (30, 50),
+            'fat': (-100, -50),
+            'muscle': (20, 40),
+            'bone_vertebra': (400, 1000)
+        },
+        'PELVIS': {
+            'bladder': (0, 20),
+            'prostate': (30, 50),
+            'uterus': (30, 50),
+            'bone_pelvis': (400, 1000)
+        }
+    }
+    
+    # Determine primary tissue type
+    tissue_type = 'Unknown'
+    for tissue, (min_val, max_val) in HU_RANGES.items():
+        if min_val <= hu_value < max_val:
+            tissue_type = tissue.replace('_', ' ').title()
+            break
+    
+    # Anatomical context analysis
+    anatomical_context = 'General'
+    clinical_significance = 'Normal tissue density'
+    
+    if body_part in ANATOMICAL_REFERENCE:
+        anatomical_context = body_part
+        region_refs = ANATOMICAL_REFERENCE[body_part]
+        
+        for tissue, (min_val, max_val) in region_refs.items():
+            if min_val <= hu_value <= max_val:
+                tissue_type = tissue.replace('_', ' ').title()
+                anatomical_context = f"{body_part} - {tissue_type}"
+                break
+    
+    # Clinical significance based on HU value and anatomical context
     if hu_value < -900:
-        return "Air/Gas"
+        clinical_significance = "Air/gas - Normal in lungs, abnormal elsewhere"
     elif -900 <= hu_value < -500:
-        return "Lung tissue"
+        clinical_significance = "Lung tissue - Normal pulmonary parenchyma"
     elif -500 <= hu_value < -100:
-        return "Fat tissue"
-    elif -100 <= hu_value < -50:
-        return "Fat/Soft tissue interface"
-    elif -50 <= hu_value < 0:
-        return "Soft tissue (low density)"
+        clinical_significance = "Fat tissue - Normal adipose tissue"
+    elif -100 <= hu_value < 0:
+        clinical_significance = "Soft tissue interface - Normal tissue boundaries"
     elif 0 <= hu_value < 20:
-        return "Water/CSF"
+        clinical_significance = "Water/CSF - Normal fluid density"
     elif 20 <= hu_value < 40:
-        return "Soft tissue (muscle)"
+        clinical_significance = "Muscle tissue - Normal muscle density"
     elif 40 <= hu_value < 80:
-        return "Soft tissue (liver, spleen)"
+        clinical_significance = "Solid organs - Normal liver/spleen density"
     elif 80 <= hu_value < 120:
-        return "Soft tissue (kidney)"
+        clinical_significance = "Kidney tissue - Normal renal parenchyma"
     elif 120 <= hu_value < 200:
-        return "Soft tissue (dense)"
+        clinical_significance = "Dense soft tissue - May indicate pathology"
     elif 200 <= hu_value < 400:
-        return "Calcification/Contrast"
+        clinical_significance = "Calcification/Contrast - Pathological or enhanced"
     elif 400 <= hu_value < 1000:
-        return "Bone (cancellous)"
+        clinical_significance = "Bone (cancellous) - Normal trabecular bone"
     elif 1000 <= hu_value < 2000:
-        return "Bone (cortical)"
+        clinical_significance = "Bone (cortical) - Normal dense bone"
     else:
-        return "Metal/Dense material"
+        clinical_significance = "Metal/Dense material - Foreign body or artifact"
+    
+    # Reference range for the detected tissue type
+    reference_range = "Standard HU range for detected tissue type"
+    for tissue, (min_val, max_val) in HU_RANGES.items():
+        if tissue.replace('_', ' ').title() == tissue_type:
+            reference_range = f"{min_val} to {max_val} HU"
+            break
+    
+    # Confidence interval analysis
+    confidence_analysis = ""
+    if ci_lower is not None and ci_upper is not None:
+        ci_width = ci_upper - ci_lower
+        if ci_width < 10:
+            confidence_analysis = "High precision measurement"
+        elif ci_width < 30:
+            confidence_analysis = "Moderate precision measurement"
+        else:
+            confidence_analysis = "Low precision measurement - consider larger ROI"
+    
+    # Detailed notes combining all information
+    detailed_notes = f"""
+    Tissue Type: {tissue_type}
+    Anatomical Context: {anatomical_context}
+    Clinical Significance: {clinical_significance}
+    Reference Range: {reference_range}
+    {confidence_analysis}
+    Mean HU: {hu_value:.1f}"""
+    
+    if ci_lower is not None and ci_upper is not None:
+        detailed_notes += f" (95% CI: {ci_lower:.1f} - {ci_upper:.1f})"
+    
+    detailed_notes += "\n    "
+    
+    return {
+        'primary_interpretation': f"{tissue_type} ({hu_value:.1f} HU)",
+        'tissue_type': tissue_type,
+        'clinical_significance': clinical_significance,
+        'anatomical_context': anatomical_context,
+        'reference_range': reference_range,
+        'detailed_notes': detailed_notes.strip()
+    }
 
 
 @csrf_exempt
