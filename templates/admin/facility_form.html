@@ -314,6 +314,49 @@
                     <div class="helptext">Upload an image file (PNG, JPG, GIF) for the facility letterhead. Recommended size: 200x100px</div>
                 </div>
                 
+                <!-- Facility Login Credentials Section -->
+                <div class="form-group" style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #333;">
+                    <h3 style="color: #00ff00; margin-bottom: 20px;">
+                        <i class="fas fa-key"></i> Facility Login Credentials
+                    </h3>
+                    <p style="color: #ccc; margin-bottom: 20px; font-size: 14px;">
+                        Create login credentials so this facility can access the system and view only their own studies.
+                    </p>
+                </div>
+                
+                <div class="form-group">
+                    <label for="facility_username" class="required">Facility Username</label>
+                    <input type="text" 
+                           name="facility_username" 
+                           id="facility_username"
+                           class="form-control" 
+                           placeholder="Enter unique username for facility login"
+                           value="{{ facility_username|default:'' }}"
+                           required>
+                    <div class="helptext">This username will be used by the facility to log in and access their studies</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="facility_password" class="required">Facility Password</label>
+                    <input type="password" 
+                           name="facility_password" 
+                           id="facility_password"
+                           class="form-control" 
+                           placeholder="Enter secure password"
+                           required>
+                    <div class="helptext">Minimum 8 characters, include letters and numbers for security</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="facility_password_confirm" class="required">Confirm Password</label>
+                    <input type="password" 
+                           name="facility_password_confirm" 
+                           id="facility_password_confirm"
+                           class="form-control" 
+                           placeholder="Confirm password"
+                           required>
+                </div>
+                
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-save"></i> 
@@ -340,6 +383,86 @@
                 label.style.borderColor = '#666';
                 label.style.background = '#333';
             }
+        });
+        
+        // Password validation
+        function validatePasswords() {
+            const password = document.getElementById('facility_password').value;
+            const confirmPassword = document.getElementById('facility_password_confirm').value;
+            const submitBtn = document.querySelector('button[type="submit"]');
+            
+            // Check password requirements
+            const minLength = password.length >= 8;
+            const hasLetter = /[a-zA-Z]/.test(password);
+            const hasNumber = /\d/.test(password);
+            const passwordsMatch = password === confirmPassword;
+            
+            // Update confirm password field styling
+            const confirmField = document.getElementById('facility_password_confirm');
+            if (confirmPassword && !passwordsMatch) {
+                confirmField.style.borderColor = '#ff4444';
+                confirmField.style.boxShadow = '0 0 10px rgba(255, 68, 68, 0.3)';
+            } else if (confirmPassword && passwordsMatch) {
+                confirmField.style.borderColor = '#00ff00';
+                confirmField.style.boxShadow = '0 0 10px rgba(0, 255, 0, 0.3)';
+            } else {
+                confirmField.style.borderColor = 'transparent';
+                confirmField.style.boxShadow = 'none';
+            }
+            
+            // Update password field styling
+            const passwordField = document.getElementById('facility_password');
+            if (password && (!minLength || !hasLetter || !hasNumber)) {
+                passwordField.style.borderColor = '#ff4444';
+                passwordField.style.boxShadow = '0 0 10px rgba(255, 68, 68, 0.3)';
+            } else if (password && minLength && hasLetter && hasNumber) {
+                passwordField.style.borderColor = '#00ff00';
+                passwordField.style.boxShadow = '0 0 10px rgba(0, 255, 0, 0.3)';
+            } else {
+                passwordField.style.borderColor = 'transparent';
+                passwordField.style.boxShadow = 'none';
+            }
+            
+            // Enable/disable submit button
+            const isValid = minLength && hasLetter && hasNumber && passwordsMatch;
+            submitBtn.disabled = !isValid;
+            if (!isValid) {
+                submitBtn.style.opacity = '0.5';
+                submitBtn.style.cursor = 'not-allowed';
+            } else {
+                submitBtn.style.opacity = '1';
+                submitBtn.style.cursor = 'pointer';
+            }
+        }
+        
+        // Add event listeners for password validation
+        document.getElementById('facility_password').addEventListener('input', validatePasswords);
+        document.getElementById('facility_password_confirm').addEventListener('input', validatePasswords);
+        
+        // Form submission validation
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const password = document.getElementById('facility_password').value;
+            const confirmPassword = document.getElementById('facility_password_confirm').value;
+            
+            if (password !== confirmPassword) {
+                e.preventDefault();
+                alert('Passwords do not match!');
+                return false;
+            }
+            
+            if (password.length < 8) {
+                e.preventDefault();
+                alert('Password must be at least 8 characters long!');
+                return false;
+            }
+            
+            if (!/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
+                e.preventDefault();
+                alert('Password must contain both letters and numbers!');
+                return false;
+            }
+            
+            return true;
         });
     </script>
 </body>

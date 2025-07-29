@@ -69,20 +69,162 @@
             <!-- Top Bar -->
             <div class="top-bar">
                 <div class="top-controls">
-                    <button id="worklist-btn" class="secondary-btn" title="Back to Worklist">
-                        <i class="fas fa-list"></i>
-                        Worklist
-                    </button>
-                    <button id="load-dicom-btn" class="primary-btn">
-                        <i class="fas fa-upload"></i>
-                        Load DICOM Files
-                    </button>
-                    <select id="backend-studies" class="form-select">
-                        <option value="">Select DICOM from System</option>
-                    </select>
-                    <div class="patient-info" id="patient-info">
-                        Patient: - | Study Date: - | Modality: -
+                    <div class="top-left-controls">
+                        <button id="worklist-btn" class="secondary-btn" title="Back to Worklist">
+                            <i class="fas fa-list"></i>
+                            Worklist
+                        </button>
+                        <button id="load-dicom-btn" class="primary-btn">
+                            <i class="fas fa-upload"></i>
+                            Load DICOM Files
+                        </button>
+                        <select id="backend-studies" class="form-select">
+                            <option value="">Select DICOM from System</option>
+                        </select>
                     </div>
+                    
+                    <div class="top-center-controls">
+                        <div class="patient-info" id="patient-info">
+                            Patient: - | Study Date: - | Modality: -
+                        </div>
+                    </div>
+                    
+                    <div class="top-right-controls">
+                        <!-- Professional 3D Dropdown -->
+                        <div class="dropdown-container">
+                            <button class="professional-btn dropdown-toggle" id="3d-dropdown">
+                                <i class="fas fa-cube"></i>
+                                <span>3D Tools</span>
+                                <i class="fas fa-chevron-down dropdown-arrow"></i>
+                            </button>
+                            <div class="dropdown-menu" id="3d-menu">
+                                <div class="dropdown-header">
+                                    <i class="fas fa-cube"></i>
+                                    3D Reconstruction Tools
+                                </div>
+                                <button class="dropdown-item" data-3d-type="mpr">
+                                    <i class="fas fa-layer-group"></i>
+                                    <div class="item-content">
+                                        <span class="item-title">Multi-Planar Reconstruction</span>
+                                        <span class="item-desc">View axial, sagittal & coronal planes</span>
+                                    </div>
+                                </button>
+                                <button class="dropdown-item" data-3d-type="3d_bone">
+                                    <i class="fas fa-bone"></i>
+                                    <div class="item-content">
+                                        <span class="item-title">3D Bone Reconstruction</span>
+                                        <span class="item-desc">Volume rendering of bone structures</span>
+                                    </div>
+                                </button>
+                                <button class="dropdown-item" data-3d-type="angiogram">
+                                    <i class="fas fa-heartbeat"></i>
+                                    <div class="item-content">
+                                        <span class="item-title">Angiogram</span>
+                                        <span class="item-desc">Maximum intensity projection</span>
+                                    </div>
+                                </button>
+                                <button class="dropdown-item" data-3d-type="virtual_surgery">
+                                    <i class="fas fa-user-md"></i>
+                                    <div class="item-content">
+                                        <span class="item-title">Virtual Surgery</span>
+                                        <span class="item-desc">Surgical planning tools</span>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Professional AI Analysis Dropdown -->
+                        <div class="dropdown-container">
+                            <button class="professional-btn dropdown-toggle" id="ai-dropdown">
+                                <i class="fas fa-robot"></i>
+                                <span>AI Analysis</span>
+                                <i class="fas fa-chevron-down dropdown-arrow"></i>
+                            </button>
+                            <div class="dropdown-menu" id="ai-menu">
+                                <div class="dropdown-header">
+                                    <i class="fas fa-robot"></i>
+                                    AI Analysis Tools
+                                </div>
+                                <button class="dropdown-item" data-ai-type="comprehensive">
+                                    <i class="fas fa-brain"></i>
+                                    <div class="item-content">
+                                        <span class="item-title">Comprehensive Analysis</span>
+                                        <span class="item-desc">Full AI diagnosis with recommendations</span>
+                                    </div>
+                                </button>
+                                <button class="dropdown-item" data-ai-type="abnormality">
+                                    <i class="fas fa-search-plus"></i>
+                                    <div class="item-content">
+                                        <span class="item-title">Abnormality Detection</span>
+                                        <span class="item-desc">Detect potential abnormalities</span>
+                                    </div>
+                                </button>
+                                <button class="dropdown-item" data-ai-type="texture">
+                                    <i class="fas fa-microscope"></i>
+                                    <div class="item-content">
+                                        <span class="item-title">Texture Analysis</span>
+                                        <span class="item-desc">Advanced texture and pattern analysis</span>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- User Account Dropdown -->
+                        <div class="dropdown-container">
+                            <button class="professional-btn dropdown-toggle user-btn" id="user-dropdown">
+                                <i class="fas fa-user"></i>
+                                <span id="username">{{ user.get_full_name|default:user.username }}</span>
+                                <i class="fas fa-chevron-down dropdown-arrow"></i>
+                            </button>
+                            <div class="dropdown-menu" id="user-menu">
+                                <div class="dropdown-header">
+                                    <i class="fas fa-user"></i>
+                                    Account Options
+                                </div>
+                                <div class="dropdown-item user-info-item">
+                                    <i class="fas fa-info-circle"></i>
+                                    <div class="item-content">
+                                        <span class="item-title">{{ user.get_full_name|default:user.username }}</span>
+                                        <span class="item-desc">
+                                            {% if user.is_superuser %}
+                                                System Administrator
+                                            {% elif user.groups.all %}
+                                                {{ user.groups.first.name }}
+                                            {% else %}
+                                                User
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="dropdown-divider"></div>
+                                <button class="dropdown-item" onclick="window.location.href='/home/'">
+                                    <i class="fas fa-home"></i>
+                                    <div class="item-content">
+                                        <span class="item-title">Dashboard</span>
+                                        <span class="item-desc">Return to main dashboard</span>
+                                    </div>
+                                </button>
+                                {% if user.is_superuser %}
+                                <button class="dropdown-item" onclick="window.location.href='/admin/'">
+                                    <i class="fas fa-cog"></i>
+                                    <div class="item-content">
+                                        <span class="item-title">Admin Panel</span>
+                                        <span class="item-desc">System administration</span>
+                                    </div>
+                                </button>
+                                {% endif %}
+                                <div class="dropdown-divider"></div>
+                                <button class="dropdown-item logout-item" onclick="logout()">
+                                    <i class="fas fa-sign-out-alt"></i>
+                                    <div class="item-content">
+                                        <span class="item-title">Logout</span>
+                                        <span class="item-desc">Sign out of the system</span>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="clinical-info-section" id="clinical-info-section" style="display: none;">
                         <div class="clinical-info-header">
                             <h4><i class="fas fa-file-medical"></i> Clinical Information</h4>
@@ -258,6 +400,151 @@
             }, 100);
         {% endif %}
         
+        // Professional dropdown functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize dropdowns
+            initializeDropdowns();
+            
+            // Initialize 3D tools
+            initialize3DTools();
+            
+            // Initialize AI tools
+            initializeAITools();
+            
+            if (window.initialStudyId) {
+                loadClinicalInfo(window.initialStudyId);
+            }
+        });
+        
+        function initializeDropdowns() {
+            const dropdowns = document.querySelectorAll('.dropdown-container');
+            
+            dropdowns.forEach(dropdown => {
+                const toggle = dropdown.querySelector('.dropdown-toggle');
+                const menu = dropdown.querySelector('.dropdown-menu');
+                
+                // Toggle dropdown
+                toggle.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    
+                    // Close other dropdowns
+                    dropdowns.forEach(otherDropdown => {
+                        if (otherDropdown !== dropdown) {
+                            otherDropdown.querySelector('.dropdown-menu').classList.remove('show');
+                            otherDropdown.querySelector('.dropdown-toggle').classList.remove('active');
+                        }
+                    });
+                    
+                    // Toggle current dropdown
+                    menu.classList.toggle('show');
+                    toggle.classList.toggle('active');
+                });
+                
+                // Close dropdown when clicking outside
+                document.addEventListener('click', function() {
+                    menu.classList.remove('show');
+                    toggle.classList.remove('active');
+                });
+                
+                // Prevent dropdown from closing when clicking inside
+                menu.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                });
+            });
+        }
+        
+        function initialize3DTools() {
+            const threeDItems = document.querySelectorAll('[data-3d-type]');
+            
+            threeDItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    const type = this.getAttribute('data-3d-type');
+                    perform3DReconstruction(type);
+                    
+                    // Close dropdown
+                    document.getElementById('3d-menu').classList.remove('show');
+                    document.getElementById('3d-dropdown').classList.remove('active');
+                });
+            });
+        }
+        
+        function initializeAITools() {
+            const aiItems = document.querySelectorAll('[data-ai-type]');
+            
+            aiItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    const type = this.getAttribute('data-ai-type');
+                    performAIAnalysis(type);
+                    
+                    // Close dropdown
+                    document.getElementById('ai-menu').classList.remove('show');
+                    document.getElementById('ai-dropdown').classList.remove('active');
+                });
+            });
+        }
+        
+        function perform3DReconstruction(type) {
+            // This will be implemented in the main DICOM viewer JS
+            if (window.dicomViewer && window.dicomViewer.perform3DReconstruction) {
+                window.dicomViewer.perform3DReconstruction(type);
+            } else {
+                console.log('3D Reconstruction:', type);
+                showNotification(`Starting ${type} reconstruction...`, 'info');
+            }
+        }
+        
+        function performAIAnalysis(type) {
+            // This will be implemented in the main DICOM viewer JS
+            if (window.dicomViewer && window.dicomViewer.performAIAnalysis) {
+                window.dicomViewer.performAIAnalysis(type);
+            } else {
+                console.log('AI Analysis:', type);
+                showNotification(`Starting ${type} analysis...`, 'info');
+            }
+        }
+        
+        function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                // Create a form for POST logout
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/logout/';
+                
+                // Add CSRF token
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
+                if (csrfToken) {
+                    const csrfInput = document.createElement('input');
+                    csrfInput.type = 'hidden';
+                    csrfInput.name = 'csrfmiddlewaretoken';
+                    csrfInput.value = csrfToken.value;
+                    form.appendChild(csrfInput);
+                }
+                
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
+        
+        function showNotification(message, type = 'info') {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `notification notification-${type}`;
+            notification.innerHTML = `
+                <i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i>
+                <span>${message}</span>
+            `;
+            
+            // Add to page
+            document.body.appendChild(notification);
+            
+            // Auto remove after 3 seconds
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 3000);
+        }
+        
         // Clinical Information functionality
         function toggleClinicalInfo() {
             const content = document.getElementById('clinical-info-content');
@@ -296,14 +583,278 @@
                     document.getElementById('clinical-info-section').style.display = 'none';
                 });
         }
-        
-        // Load clinical info for initial study if present
-        document.addEventListener('DOMContentLoaded', function() {
-            if (window.initialStudyId) {
-                loadClinicalInfo(window.initialStudyId);
-            }
-        });
     </script>
+    
+    <style>
+        /* Professional top bar styling */
+        .top-bar {
+            background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+            border-bottom: 2px solid #00ff00;
+            padding: 15px 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .top-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        
+        .top-left-controls,
+        .top-center-controls,
+        .top-right-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .top-center-controls {
+            flex: 1;
+            justify-content: center;
+        }
+        
+        /* Professional button styling */
+        .professional-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(0, 255, 0, 0.3);
+            color: #e0e0e0;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            min-width: 140px;
+            justify-content: space-between;
+        }
+        
+        .professional-btn:hover {
+            background: rgba(0, 255, 0, 0.1);
+            border-color: #00ff00;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 255, 0, 0.3);
+        }
+        
+        .professional-btn.active {
+            background: rgba(0, 255, 0, 0.2);
+            border-color: #00ff00;
+            color: #00ff00;
+        }
+        
+        .dropdown-arrow {
+            transition: transform 0.3s ease;
+        }
+        
+        .professional-btn.active .dropdown-arrow {
+            transform: rotate(180deg);
+        }
+        
+        /* Dropdown container */
+        .dropdown-container {
+            position: relative;
+        }
+        
+        /* Dropdown menu */
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: #1a1a1a;
+            border: 2px solid #00ff00;
+            border-radius: 12px;
+            min-width: 300px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        
+        .dropdown-menu.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        
+        .dropdown-header {
+            background: linear-gradient(45deg, #00ff00, #00cc00);
+            color: #000;
+            padding: 15px 20px;
+            font-weight: bold;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px 20px;
+            border: none;
+            background: none;
+            color: #e0e0e0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            text-align: left;
+        }
+        
+        .dropdown-item:hover {
+            background: rgba(0, 255, 0, 0.1);
+            color: #00ff00;
+        }
+        
+        .dropdown-item i {
+            font-size: 18px;
+            width: 24px;
+            text-align: center;
+        }
+        
+        .item-content {
+            flex: 1;
+        }
+        
+        .item-title {
+            display: block;
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+        
+        .item-desc {
+            display: block;
+            font-size: 12px;
+            color: #999;
+            line-height: 1.3;
+        }
+        
+        .dropdown-divider {
+            height: 1px;
+            background: #333;
+            margin: 10px 0;
+        }
+        
+        .user-info-item {
+            cursor: default !important;
+        }
+        
+        .user-info-item:hover {
+            background: none !important;
+            color: #e0e0e0 !important;
+        }
+        
+        .logout-item:hover {
+            background: rgba(255, 68, 68, 0.1) !important;
+            color: #ff4444 !important;
+        }
+        
+        /* User button specific styling */
+        .user-btn {
+            background: rgba(0, 153, 255, 0.1);
+            border-color: rgba(0, 153, 255, 0.3);
+        }
+        
+        .user-btn:hover {
+            background: rgba(0, 153, 255, 0.2);
+            border-color: #0099ff;
+            box-shadow: 0 4px 15px rgba(0, 153, 255, 0.3);
+        }
+        
+        .user-btn.active {
+            background: rgba(0, 153, 255, 0.3);
+            border-color: #0099ff;
+            color: #0099ff;
+        }
+        
+        /* Notification styling */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #1a1a1a;
+            border: 2px solid #00ff00;
+            border-radius: 8px;
+            padding: 15px 20px;
+            color: #e0e0e0;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideIn 0.3s ease;
+        }
+        
+        .notification-error {
+            border-color: #ff4444;
+            color: #ff4444;
+        }
+        
+        .notification-success {
+            border-color: #00ff00;
+            color: #00ff00;
+        }
+        
+        .notification-info {
+            border-color: #0099ff;
+            color: #0099ff;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 1200px) {
+            .top-controls {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .top-left-controls,
+            .top-center-controls,
+            .top-right-controls {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .dropdown-menu {
+                right: auto;
+                left: 50%;
+                transform: translateX(-50%) translateY(-10px);
+            }
+            
+            .dropdown-menu.show {
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+        
+        /* Patient info enhanced styling */
+        .patient-info {
+            background: rgba(0, 255, 0, 0.1);
+            border: 1px solid rgba(0, 255, 0, 0.3);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: 500;
+            color: #00ff00;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+            white-space: nowrap;
+        }
+    </style>
     <script src="{% static 'js/dicom_viewer.js' %}"></script>
 </body>
 </html>

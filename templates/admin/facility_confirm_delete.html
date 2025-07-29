@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete Facility - DICOM System</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background-color: #2a2a2a;
+            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            max-width: 600px;
+            width: 100%;
+            margin: 20px;
+            background: #1a1a1a;
+            border-radius: 12px;
+            border: 2px solid #ff4444;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+        
+        .header {
+            background: linear-gradient(45deg, #ff4444, #cc0000);
+            color: #fff;
+            padding: 25px 30px;
+            text-align: center;
+        }
+        
+        .header i {
+            font-size: 48px;
+            margin-bottom: 15px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .facility-info {
+            background: rgba(255, 68, 68, 0.1);
+            border: 1px solid #ff4444;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .facility-info h3 {
+            color: #ff4444;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 68, 68, 0.2);
+        }
+        
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        
+        .info-label {
+            font-weight: 600;
+            color: #ccc;
+        }
+        
+        .info-value {
+            color: #fff;
+        }
+        
+        .warning-box {
+            background: rgba(255, 153, 0, 0.1);
+            border: 2px solid #ff9900;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .warning-box h4 {
+            color: #ff9900;
+            margin-bottom: 15px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .warning-list {
+            list-style: none;
+            color: #ccc;
+        }
+        
+        .warning-list li {
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .warning-list li i {
+            color: #ff9900;
+            width: 16px;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            min-width: 140px;
+            justify-content: center;
+        }
+        
+        .btn-delete {
+            background: linear-gradient(45deg, #ff4444, #cc0000);
+            color: #fff;
+        }
+        
+        .btn-delete:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255, 68, 68, 0.4);
+        }
+        
+        .btn-cancel {
+            background: #666;
+            color: #fff;
+        }
+        
+        .btn-cancel:hover {
+            background: #777;
+            transform: translateY(-1px);
+        }
+        
+        .breadcrumbs {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #ccc;
+            font-size: 14px;
+        }
+        
+        .breadcrumbs a {
+            color: #00ff00;
+            text-decoration: none;
+        }
+        
+        .breadcrumbs a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="breadcrumbs">
+        <a href="/">Home</a> / <a href="/home/">Dashboard</a> / <a href="{% url 'viewer:facility_list' %}">Facilities</a> / Delete
+    </div>
+    
+    <div class="container">
+        <div class="header">
+            <i class="fas fa-exclamation-triangle"></i>
+            <h1>Delete Facility</h1>
+            <p>This action cannot be undone</p>
+        </div>
+        
+        <div class="content">
+            <div class="facility-info">
+                <h3><i class="fas fa-hospital"></i> Facility Details</h3>
+                <div class="info-row">
+                    <span class="info-label">Name:</span>
+                    <span class="info-value">{{ object.name }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Address:</span>
+                    <span class="info-value">{{ object.address }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Phone:</span>
+                    <span class="info-value">{{ object.phone }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Email:</span>
+                    <span class="info-value">{{ object.email }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Created:</span>
+                    <span class="info-value">{{ object.created_at|date:"F d, Y" }}</span>
+                </div>
+            </div>
+            
+            <div class="warning-box">
+                <h4><i class="fas fa-exclamation-circle"></i> Warning: This will permanently delete</h4>
+                <ul class="warning-list">
+                    <li><i class="fas fa-trash"></i> The facility record and all associated data</li>
+                    <li><i class="fas fa-user-times"></i> All user accounts linked to this facility</li>
+                    <li><i class="fas fa-images"></i> All DICOM studies uploaded by this facility</li>
+                    <li><i class="fas fa-file-medical"></i> All reports and annotations</li>
+                    <li><i class="fas fa-chart-line"></i> All measurements and analysis data</li>
+                </ul>
+            </div>
+            
+            <form method="post">
+                {% csrf_token %}
+                <div class="actions">
+                    <button type="submit" class="btn btn-delete">
+                        <i class="fas fa-trash"></i> Yes, Delete Facility
+                    </button>
+                    <a href="{% url 'viewer:facility_list' %}" class="btn btn-cancel">
+                        <i class="fas fa-times"></i> Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
