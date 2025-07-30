@@ -268,13 +268,18 @@ class DicomViewer {
             });
         }
         
-        // Worklist button - only add event listener if it doesn't already exist
+        // Worklist button - ensure it works properly
         const worklistBtn = document.getElementById('worklist-btn');
-        if (worklistBtn && !worklistBtn.hasAttribute('data-listener-added')) {
-            worklistBtn.setAttribute('data-listener-added', 'true');
-            worklistBtn.addEventListener('click', () => {
+        if (worklistBtn) {
+            // Remove any existing listeners to prevent duplicates
+            worklistBtn.removeEventListener('click', worklistBtn._worklistHandler);
+            
+            // Create new handler
+            worklistBtn._worklistHandler = () => {
                 window.location.href = '/worklist/';
-            });
+            };
+            
+            worklistBtn.addEventListener('click', worklistBtn._worklistHandler);
         }
         
         // Clear measurements - only add event listener if it doesn't already exist
@@ -2845,43 +2850,56 @@ Pixel Count: ${data.pixel_count}`;
             // Determine the actual image element (handles both wrapped object and direct Image)
             const imgElement = this.currentImage.image || this.currentImage;
             
-            // Save context state
-            this.ctx.save();
-            
-            // Apply transformations
-            this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
-            this.ctx.scale(this.zoomFactor, this.zoomFactor);
-            this.ctx.translate(-this.canvas.width / 2, -this.canvas.height / 2);
-            this.ctx.translate(this.panX, this.panY);
-            
-            // Calculate centered position
-            const x = (this.canvas.width - imgElement.width) / 2;
-            const y = (this.canvas.height - imgElement.height) / 2;
-            
-            // Draw the image
-            this.ctx.drawImage(imgElement, x, y);
-            
-            // Restore context for UI elements
-            this.ctx.restore();
-            
-            // Draw measurements (should be drawn after image but before other UI elements)
-            this.drawMeasurements();
-            
-            // Draw annotations
-            this.drawAnnotations();
-            
-            // Draw crosshair if enabled
-            if (this.crosshair) {
-                this.drawCrosshair();
+            // Check if image is loaded
+            if (imgElement.complete && imgElement.naturalWidth > 0) {
+                // Save context state
+                this.ctx.save();
+                
+                // Apply transformations
+                this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
+                this.ctx.scale(this.zoomFactor, this.zoomFactor);
+                this.ctx.translate(-this.canvas.width / 2, -this.canvas.height / 2);
+                this.ctx.translate(this.panX, this.panY);
+                
+                // Calculate centered position
+                const x = (this.canvas.width - imgElement.width) / 2;
+                const y = (this.canvas.height - imgElement.height) / 2;
+                
+                // Draw the image
+                this.ctx.drawImage(imgElement, x, y);
+                
+                // Restore context for UI elements
+                this.ctx.restore();
+                
+                // Draw measurements (should be drawn after image but before other UI elements)
+                this.drawMeasurements();
+                
+                // Draw annotations
+                this.drawAnnotations();
+                
+                // Draw crosshair if enabled
+                if (this.crosshair) {
+                    this.drawCrosshair();
+                }
+                
+                // Draw AI highlights if enabled
+                if (this.showAIHighlights && this.aiAnalysisResults) {
+                    this.drawAIHighlights();
+                }
+                
+                // Update measurement list in UI
+                this.updateMeasurementsList();
+            } else {
+                // Image not loaded yet - show loading message
+                this.ctx.fillStyle = '#666';
+                this.ctx.font = '20px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText('Loading image...', this.canvas.width / 2, this.canvas.height / 2);
+                
+                // Retry rendering after a short delay
+                setTimeout(() => this.render(), 100);
             }
-            
-            // Draw AI highlights if enabled
-            if (this.showAIHighlights && this.aiAnalysisResults) {
-                this.drawAIHighlights();
-            }
-            
-            // Update measurement list in UI
-            this.updateMeasurementsList();
         } else {
             // No image loaded - show message
             this.ctx.fillStyle = '#666';
