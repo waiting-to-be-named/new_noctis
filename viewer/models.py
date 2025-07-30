@@ -301,30 +301,256 @@ class DicomImage(models.Model):
     def get_processed_image_base64(self, window_width=None, window_level=None, inverted=False):
         """Get processed image as base64 string"""
         try:
+            # Get pixel data
             pixel_array = self.get_pixel_array()
             if pixel_array is None:
-                print(f"Could not get pixel array for image {self.id}")
                 return None
             
+            # Apply windowing
             processed_array = self.apply_windowing(pixel_array, window_width, window_level, inverted)
-            if processed_array is None:
-                print(f"Could not apply windowing for image {self.id}")
-                return None
             
             # Convert to PIL Image
-            pil_image = Image.fromarray(processed_array, mode='L')
+            if processed_array.dtype != np.uint8:
+                processed_array = np.clip(processed_array, 0, 255).astype(np.uint8)
+            
+            image = Image.fromarray(processed_array, mode='L')
             
             # Convert to base64
             buffer = io.BytesIO()
-            pil_image.save(buffer, format='PNG')
-            image_base64 = base64.b64encode(buffer.getvalue()).decode()
+            image.save(buffer, format='PNG')
+            buffer.seek(0)
+            image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
             
             return f"data:image/png;base64,{image_base64}"
+            
         except Exception as e:
             print(f"Error processing image {self.id}: {e}")
-            import traceback
-            traceback.print_exc()
             return None
+    
+    def get_enhanced_processed_image_base64(self, window_width=None, window_level=None, inverted=False, 
+                                          resolution_factor=1.0, density_enhancement=False, contrast_boost=1.0):
+        """Get enhanced processed image with improved resolution and density differentiation"""
+        try:
+            # Get pixel data
+            pixel_array = self.get_pixel_array()
+            if pixel_array is None:
+                return None
+            
+            # Apply enhanced windowing with density differentiation
+            processed_array = self.apply_enhanced_windowing(
+                pixel_array, window_width, window_level, inverted, 
+                density_enhancement, contrast_boost
+            )
+            
+            # Apply resolution enhancement if requested
+            if resolution_factor != 1.0:
+                processed_array = self.apply_resolution_enhancement(processed_array, resolution_factor)
+            
+            # Apply density differentiation if requested
+            if density_enhancement:
+                processed_array = self.apply_density_differentiation(processed_array)
+            
+            # Convert to PIL Image
+            if processed_array.dtype != np.uint8:
+                processed_array = np.clip(processed_array, 0, 255).astype(np.uint8)
+            
+            image = Image.fromarray(processed_array, mode='L')
+            
+            # Convert to base64
+            buffer = io.BytesIO()
+            image.save(buffer, format='PNG', optimize=True)
+            buffer.seek(0)
+            image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            
+            return f"data:image/png;base64,{image_base64}"
+            
+        except Exception as e:
+            print(f"Error processing enhanced image {self.id}: {e}")
+            return None
+    
+    def apply_enhanced_windowing(self, pixel_array, window_width=None, window_level=None, inverted=False,
+                                density_enhancement=False, contrast_boost=1.0):
+        """Apply enhanced windowing with density differentiation"""
+        try:
+            # Use default values if not provided
+            if window_width is None:
+                window_width = self.window_width or 400
+            if window_level is None:
+                window_level = self.window_center or 40
+            
+            # Convert to float for better precision
+            pixel_array = pixel_array.astype(np.float32)
+            
+            # Apply contrast boost
+            if contrast_boost != 1.0:
+                pixel_array = pixel_array * contrast_boost
+            
+            # Apply windowing with enhanced precision
+            window_min = window_level - window_width / 2
+            window_max = window_level + window_width / 2
+            
+            # Clip values to window range
+            pixel_array = np.clip(pixel_array, window_min, window_max)
+            
+            # Normalize to 0-255 range with enhanced precision
+            pixel_array = ((pixel_array - window_min) / (window_max - window_min)) * 255
+            
+            # Apply density enhancement if requested
+            if density_enhancement:
+                pixel_array = self.apply_density_enhancement(pixel_array)
+            
+            # Apply inversion if requested
+            if inverted:
+                pixel_array = 255 - pixel_array
+            
+            return pixel_array
+            
+        except Exception as e:
+            print(f"Error in enhanced windowing: {e}")
+            return pixel_array
+    
+    def apply_density_enhancement(self, pixel_array):
+        """Apply density enhancement for better tissue differentiation"""
+        try:
+            # Apply histogram equalization for better contrast
+            from skimage import exposure
+            
+            # Convert to uint8 for histogram equalization
+            pixel_array_uint8 = np.clip(pixel_array, 0, 255).astype(np.uint8)
+            
+            # Apply adaptive histogram equalization
+            enhanced = exposure.equalize_adapthist(pixel_array_uint8, clip_limit=0.03)
+            
+            # Convert back to 0-255 range
+            enhanced = (enhanced * 255).astype(np.float32)
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in density enhancement: {e}")
+            return pixel_array
+    
+    def apply_density_differentiation(self, pixel_array):
+        """Apply density differentiation for better tissue visualization"""
+        try:
+            # Apply multi-scale processing for better density differentiation
+            from scipy import ndimage
+            
+            # Create multiple scales for processing
+            scales = [1.0, 2.0, 4.0]
+            processed_scales = []
+            
+            for scale in scales:
+                if scale == 1.0:
+                    processed_scales.append(pixel_array)
+                else:
+                    # Apply Gaussian blur at different scales
+                    sigma = scale
+                    blurred = ndimage.gaussian_filter(pixel_array, sigma=sigma)
+                    processed_scales.append(blurred)
+            
+            # Combine scales for enhanced density differentiation
+            enhanced = np.zeros_like(pixel_array)
+            weights = [0.5, 0.3, 0.2]  # Weights for different scales
+            
+            for i, scale_data in enumerate(processed_scales):
+                enhanced += weights[i] * scale_data
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in density differentiation: {e}")
+            return pixel_array
+    
+    def apply_resolution_enhancement(self, pixel_array, resolution_factor):
+        """Apply resolution enhancement"""
+        try:
+            if resolution_factor == 1.0:
+                return pixel_array
+            
+            # Use scipy for high-quality interpolation
+            from scipy import ndimage
+            
+            # Calculate new dimensions
+            new_height = int(pixel_array.shape[0] * resolution_factor)
+            new_width = int(pixel_array.shape[1] * resolution_factor)
+            
+            # Apply high-quality interpolation
+            enhanced = ndimage.zoom(pixel_array, resolution_factor, order=3)
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in resolution enhancement: {e}")
+            return pixel_array
+    
+    def get_multi_scale_processed_image(self, window_width=None, window_level=None, inverted=False):
+        """Get multi-scale processed image for better detail visualization"""
+        try:
+            # Get pixel data
+            pixel_array = self.get_pixel_array()
+            if pixel_array is None:
+                return None
+            
+            # Apply multi-scale processing
+            processed_array = self.apply_multi_scale_processing(
+                pixel_array, window_width, window_level, inverted
+            )
+            
+            # Convert to PIL Image
+            if processed_array.dtype != np.uint8:
+                processed_array = np.clip(processed_array, 0, 255).astype(np.uint8)
+            
+            image = Image.fromarray(processed_array, mode='L')
+            
+            # Convert to base64
+            buffer = io.BytesIO()
+            image.save(buffer, format='PNG', optimize=True)
+            buffer.seek(0)
+            image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            
+            return f"data:image/png;base64,{image_base64}"
+            
+        except Exception as e:
+            print(f"Error in multi-scale processing: {e}")
+            return None
+    
+    def apply_multi_scale_processing(self, pixel_array, window_width=None, window_level=None, inverted=False):
+        """Apply multi-scale processing for enhanced detail visualization"""
+        try:
+            from scipy import ndimage
+            
+            # Apply basic windowing first
+            processed_array = self.apply_enhanced_windowing(
+                pixel_array, window_width, window_level, inverted
+            )
+            
+            # Create multi-scale representation
+            scales = [1.0, 0.5, 0.25]
+            scale_images = []
+            
+            for scale in scales:
+                if scale == 1.0:
+                    scale_images.append(processed_array)
+                else:
+                    # Downsample
+                    downsampled = ndimage.zoom(processed_array, scale, order=1)
+                    # Upsample back to original size
+                    upsampled = ndimage.zoom(downsampled, 1/scale, order=1)
+                    scale_images.append(upsampled)
+            
+            # Combine scales with different weights
+            enhanced = np.zeros_like(processed_array)
+            weights = [0.6, 0.3, 0.1]  # Emphasize fine details
+            
+            for i, scale_img in enumerate(scale_images):
+                enhanced += weights[i] * scale_img
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in multi-scale processing: {e}")
+            return processed_array
     
     def save_dicom_metadata(self):
         """Extract and save metadata from DICOM file"""
