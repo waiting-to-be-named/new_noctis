@@ -20,6 +20,9 @@ urlpatterns = [
     # File upload
     path('api/upload/', views.upload_dicom_files, name='upload_dicom'),
     path('api/upload-folder/', views.upload_dicom_folder, name='upload_dicom_folder'),
+    path('api/bulk-upload/', views.bulk_upload_dicom_folder, name='bulk_upload_dicom_folder'),
+    path('api/upload-progress/<str:upload_id>/', views.get_upload_progress, name='get_upload_progress'),
+    path('api/upload-result/<str:upload_id>/', views.get_upload_result, name='get_upload_result'),
     
     # Study and image data
     path('api/studies/', views.get_studies, name='get_studies'),
