@@ -170,7 +170,7 @@ class DicomViewer {
             });
         });
         
-        // Dropdown functionality
+        // Dropdown functionality with improved positioning
         document.querySelectorAll('.dropdown-toggle').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -186,6 +186,11 @@ class DicomViewer {
                 // Toggle current dropdown
                 const dropdownTool = btn.closest('.dropdown-tool');
                 dropdownTool.classList.toggle('active');
+                
+                // Position dropdown properly
+                if (dropdownTool.classList.contains('active')) {
+                    this.positionDropdown(dropdownTool);
+                }
             });
         });
         
@@ -275,6 +280,47 @@ class DicomViewer {
         
         // Upload modal events
         this.setupUploadModal();
+    }
+    
+    positionDropdown(dropdownTool) {
+        const dropdownMenu = dropdownTool.querySelector('.dropdown-menu');
+        if (!dropdownMenu) return;
+        
+        const viewport = document.querySelector('.viewport');
+        const viewportRect = viewport.getBoundingClientRect();
+        const dropdownRect = dropdownMenu.getBoundingClientRect();
+        const toolRect = dropdownTool.getBoundingClientRect();
+        
+        // Reset any previous positioning
+        dropdownMenu.style.top = '';
+        dropdownMenu.style.bottom = '';
+        dropdownMenu.style.left = '';
+        dropdownMenu.style.right = '';
+        
+        // Check if dropdown would go below viewport
+        const spaceBelow = viewportRect.bottom - toolRect.bottom;
+        const spaceAbove = toolRect.top - viewportRect.top;
+        const dropdownHeight = dropdownRect.height;
+        
+        if (spaceBelow < dropdownHeight && spaceAbove > dropdownHeight) {
+            // Position above the tool
+            dropdownMenu.style.bottom = '100%';
+            dropdownMenu.style.top = 'auto';
+        } else if (spaceBelow < dropdownHeight) {
+            // Position at the bottom of viewport
+            dropdownMenu.style.top = (viewportRect.height - dropdownHeight - 10) + 'px';
+        }
+        
+        // Check if dropdown would go outside viewport horizontally
+        const spaceRight = viewportRect.right - toolRect.left;
+        const spaceLeft = toolRect.right - viewportRect.left;
+        const dropdownWidth = dropdownRect.width;
+        
+        if (spaceRight < dropdownWidth) {
+            // Position to the left of the tool
+            dropdownMenu.style.left = 'auto';
+            dropdownMenu.style.right = '70px';
+        }
     }
     
     // Add loading state method
@@ -783,11 +829,16 @@ class DicomViewer {
         const imageData = this.currentImages[this.currentImageIndex];
         console.log(`Loading image ${this.currentImageIndex + 1}/${this.currentImages.length}, ID: ${imageData.id}`);
         
+        // Show loading state
+        this.showLoadingState();
+        
         try {
             const params = new URLSearchParams({
                 window_width: this.windowWidth,
                 window_level: this.windowLevel,
-                inverted: this.inverted
+                inverted: this.inverted,
+                high_quality: 'true', // Request high quality image
+                preserve_aspect: 'true' // Preserve aspect ratio
             });
             
             const response = await fetch(`/viewer/api/images/${imageData.id}/data/?${params}`);
@@ -815,18 +866,27 @@ class DicomViewer {
                         width: img.width,
                         height: img.height
                     };
+                    
                     // Ensure canvas is properly sized before drawing
                     this.resizeCanvas();
                     this.updateDisplay();
                     this.loadMeasurements();
                     this.loadAnnotations();
                     this.updatePatientInfo();
+                    
+                    // Update overlay labels
+                    this.updateOverlayLabels();
+                    
+                    console.log('Image display updated successfully');
                 };
                 img.onerror = (error) => {
                     console.error('Failed to load image data:', error);
                     console.error('Image source:', img.src);
                     this.showError('Failed to load image. Please try refreshing or selecting another image.');
                 };
+                
+                // Set crossOrigin to handle CORS issues
+                img.crossOrigin = 'anonymous';
                 img.src = data.image_data;
             } else {
                 throw new Error(data.error || 'No image data received');
@@ -945,20 +1005,41 @@ class DicomViewer {
         
         const displayWidth = img.width * scale;
         const displayHeight = img.height * scale;
+        
         // Use display dimensions for positioning
         const canvasDisplayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
         const canvasDisplayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
         const x = (canvasDisplayWidth - displayWidth) / 2 + this.panX;
         const y = (canvasDisplayHeight - displayHeight) / 2 + this.panY;
         
-        // Draw image
+        // Save context state
+        this.ctx.save();
+        
+        // Set image rendering properties for better quality
+        this.ctx.imageSmoothingEnabled = false; // Disable smoothing for medical images
+        this.ctx.imageSmoothingQuality = 'high';
+        
+        // Apply inversion if needed
+        if (this.inverted) {
+            this.ctx.globalCompositeOperation = 'difference';
+        }
+        
+        // Draw image with proper scaling
         this.ctx.drawImage(img, x, y, displayWidth, displayHeight);
+        
+        // Restore context state
+        this.ctx.restore();
         
         // Draw measurements after the image
         this.drawMeasurements();
         
         // Draw annotations
         this.drawAnnotations();
+        
+        // Draw AI highlights if enabled
+        if (this.showAIHighlights && this.aiAnalysisResults) {
+            this.drawAIHighlights();
+        }
         
         // Draw crosshair if enabled
         if (this.crosshair) {

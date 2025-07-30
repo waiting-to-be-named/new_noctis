@@ -21,6 +21,28 @@ body {
     height: 100vh;
     width: 100vw;
     position: relative;
+    overflow: hidden;
+}
+
+/* Ensure proper viewport sizing */
+.viewport {
+    flex: 1;
+    position: relative;
+    background: #000;
+    overflow: hidden;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dicom-canvas {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
 }
 
 .toolbar {
@@ -95,6 +117,13 @@ body {
     
     .tool-btn span {
         font-size: 9px;
+    }
+    
+    /* Adjust dropdown positioning for smaller screens */
+    .dropdown-menu {
+        left: 60px;
+        min-width: 200px;
+        max-width: 250px;
     }
 }
 
@@ -229,10 +258,37 @@ body {
     border: 2px solid #00ff00;
     border-radius: 8px;
     min-width: 250px;
+    max-width: 300px;
+    max-height: 400px;
+    overflow-y: auto;
     display: none;
     z-index: 1000;
     box-shadow: 0 4px 20px rgba(0, 255, 0, 0.2);
     pointer-events: none;
+    /* Ensure dropdown stays within viewport */
+    transform: translateY(0);
+}
+
+/* Ensure dropdowns don't go below viewport */
+.dropdown-tool {
+    position: relative;
+    width: 60px;
+}
+
+.dropdown-tool:hover .dropdown-menu,
+.dropdown-menu:hover,
+.dropdown-tool.active .dropdown-menu {
+    display: block;
+    pointer-events: auto;
+    /* Check if dropdown would go below viewport and adjust */
+    transform: translateY(0);
+}
+
+/* Adjust dropdown position if it would go below viewport */
+.dropdown-tool:hover .dropdown-menu {
+    top: auto;
+    bottom: 0;
+    transform: translateY(-100%);
 }
 
 .dropdown-tool:hover .dropdown-menu,
@@ -324,6 +380,20 @@ body {
     width: 100%;
     height: 100%;
     cursor: crosshair;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+    /* Ensure proper scaling and quality */
+    object-fit: contain;
+    max-width: 100%;
+    max-height: 100%;
+    /* Improve image quality */
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -o-crisp-edges;
+    image-rendering: -webkit-crisp-edges;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+    -ms-interpolation-mode: nearest-neighbor;
 }
 
 /* Overlay Labels */
