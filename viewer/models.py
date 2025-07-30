@@ -244,7 +244,7 @@ class DicomImage(models.Model):
             return None
     
     def apply_windowing(self, pixel_array, window_width=None, window_level=None, inverted=False):
-        """Apply window/level to pixel array"""
+        """Apply window/level to pixel array with improved brightness handling"""
         if pixel_array is None:
             return None
         
@@ -255,6 +255,22 @@ class DicomImage(models.Model):
             
             # Convert to float for calculations
             image_data = pixel_array.astype(np.float32)
+            
+            # Get image statistics for better default values
+            min_pixel = np.min(image_data)
+            max_pixel = np.max(image_data)
+            pixel_range = max_pixel - min_pixel
+            
+            # If no window/level provided, use image statistics for better defaults
+            if window_width is None and window_level is None:
+                if pixel_range > 0:
+                    # Use 95% of the pixel range for better contrast
+                    wl = min_pixel + pixel_range * 0.5
+                    ww = pixel_range * 0.95
+                else:
+                    # Fallback to reasonable defaults
+                    wl = 40
+                    ww = 400
             
             # Apply window/level
             min_val = wl - ww / 2

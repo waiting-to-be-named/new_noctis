@@ -232,11 +232,14 @@ body {
     display: none;
     z-index: 1000;
     box-shadow: 0 4px 20px rgba(0, 255, 0, 0.2);
+    pointer-events: none;
 }
 
 .dropdown-tool:hover .dropdown-menu,
-.dropdown-menu:hover {
+.dropdown-menu:hover,
+.dropdown-tool.active .dropdown-menu {
     display: block;
+    pointer-events: auto;
 }
 
 .dropdown-menu h4 {

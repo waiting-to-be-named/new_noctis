@@ -311,7 +311,7 @@ def upload_dicom_files(request):
         
         for file in files:
             try:
-                # More comprehensive file validation
+                # More permissive file validation
                 file_name = file.name.lower()
                 file_size = file.size
                 
@@ -320,16 +320,18 @@ def upload_dicom_files(request):
                     errors.append(f"File {file.name} is too large (max 100MB)")
                     continue
                 
-                # Accept any file that might be DICOM (more permissive)
+                # More permissive DICOM file detection
                 is_dicom_candidate = (
                     file_name.endswith(('.dcm', '.dicom')) or
                     file_name.endswith(('.dcm.gz', '.dicom.gz')) or
                     file_name.endswith(('.dcm.bz2', '.dicom.bz2')) or
-                    '.' not in file.name or  # Files without extension
                     file_name.endswith('.img') or  # Common DICOM format
                     file_name.endswith('.ima') or  # Common DICOM format
                     file_name.endswith('.raw') or  # Raw data
-                    file_size > 1024  # Files larger than 1KB (likely not text)
+                    file_name.endswith('.dat') or  # Data files
+                    file_name.endswith('.bin') or  # Binary files
+                    '.' not in file.name or  # Files without extension
+                    file_size > 512  # Files larger than 512 bytes (likely not text)
                 )
                 
                 if not is_dicom_candidate:
@@ -540,6 +542,30 @@ def upload_dicom_files(request):
                     except:
                         pass
                 
+                # Improved window/level defaults for better visibility
+                window_center = 40
+                window_width = 400
+                
+                if hasattr(dicom_data, 'WindowCenter'):
+                    try:
+                        wc = dicom_data.WindowCenter
+                        if isinstance(wc, (list, tuple)):
+                            window_center = float(wc[0])
+                        else:
+                            window_center = float(wc)
+                    except:
+                        window_center = 40
+                
+                if hasattr(dicom_data, 'WindowWidth'):
+                    try:
+                        ww = dicom_data.WindowWidth
+                        if isinstance(ww, (list, tuple)):
+                            window_width = float(ww[0])
+                        else:
+                            window_width = float(ww)
+                    except:
+                        window_width = 400
+                
                 image, created = DicomImage.objects.get_or_create(
                     series=series,
                     sop_instance_uid=image_instance_uid,
@@ -555,8 +581,8 @@ def upload_dicom_files(request):
                         'pixel_spacing_x': pixel_spacing_x,
                         'pixel_spacing_y': pixel_spacing_y,
                         'slice_thickness': float(getattr(dicom_data, 'SliceThickness', 0)),
-                        'window_center': float(getattr(dicom_data, 'WindowCenter', 40)),
-                        'window_width': float(getattr(dicom_data, 'WindowWidth', 400)),
+                        'window_center': window_center,
+                        'window_width': window_width,
                     }
                 )
                 
@@ -1015,16 +1041,18 @@ class BulkUploadManager:
                     batch_results['failed'].append(f"File {file.name} is too large (max 100MB)")
                     continue
                 
-                # Check if file is DICOM candidate
+                # More permissive DICOM file detection
                 is_dicom_candidate = (
                     file_name.endswith(('.dcm', '.dicom')) or
                     file_name.endswith(('.dcm.gz', '.dicom.gz')) or
                     file_name.endswith(('.dcm.bz2', '.dicom.bz2')) or
-                    '.' not in file.name or
-                    file_name.endswith('.img') or
-                    file_name.endswith('.ima') or
-                    file_name.endswith('.raw') or
-                    file_size > 1024
+                    file_name.endswith('.img') or  # Common DICOM format
+                    file_name.endswith('.ima') or  # Common DICOM format
+                    file_name.endswith('.raw') or  # Raw data
+                    file_name.endswith('.dat') or  # Data files
+                    file_name.endswith('.bin') or  # Binary files
+                    '.' not in file.name or  # Files without extension
+                    file_size > 512  # Files larger than 512 bytes (likely not text)
                 )
                 
                 if not is_dicom_candidate:

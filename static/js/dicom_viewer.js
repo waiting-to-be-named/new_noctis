@@ -170,6 +170,34 @@ class DicomViewer {
             });
         });
         
+        // Dropdown functionality
+        document.querySelectorAll('.dropdown-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Close all other dropdowns
+                document.querySelectorAll('.dropdown-tool').forEach(dropdown => {
+                    if (dropdown !== btn.closest('.dropdown-tool')) {
+                        dropdown.classList.remove('active');
+                    }
+                });
+                
+                // Toggle current dropdown
+                const dropdownTool = btn.closest('.dropdown-tool');
+                dropdownTool.classList.toggle('active');
+            });
+        });
+        
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.dropdown-tool')) {
+                document.querySelectorAll('.dropdown-tool').forEach(dropdown => {
+                    dropdown.classList.remove('active');
+                });
+            }
+        });
+        
         // Worklist button
         const worklistBtn = document.getElementById('worklist-btn');
         if (worklistBtn) {
