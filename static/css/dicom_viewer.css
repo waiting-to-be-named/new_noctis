@@ -89,16 +89,7 @@ body {
     text-overflow: ellipsis;
 }
 
-/* Enhanced viewport layout */
-.viewer-content {
-    flex: 1;
-    display: flex;
-    min-height: 0;
-    position: relative;
-    background: #000;
-    isolation: isolate; /* Create new stacking context */
-}
-
+/* Enhanced viewport layout - FIXED */
 .viewport {
     flex: 1;
     position: relative;
@@ -112,13 +103,12 @@ body {
     background: radial-gradient(circle at center, #111 0%, #000 100%);
 }
 
+/* Fixed canvas positioning and sizing */
 #dicom-canvas {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    max-width: calc(100% - 20px);
-    max-height: calc(100% - 20px);
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
     border: 1px solid rgba(0, 255, 0, 0.1);
     box-shadow: 0 0 20px rgba(0, 255, 0, 0.1);
     background: #000;
@@ -301,7 +291,7 @@ body {
     opacity: 0.7;
 }
 
-/* Improved dropdown positioning and z-index management */
+/* Fixed dropdown positioning and z-index management */
 .dropdown-menu {
     position: absolute;
     left: 80px;
@@ -312,12 +302,15 @@ body {
     min-width: 250px;
     max-width: 350px;
     display: none;
-    z-index: 10000; /* Increased z-index to ensure visibility */
+    z-index: 15000; /* Increased z-index to ensure visibility above all elements */
     box-shadow: 0 4px 20px rgba(0, 255, 0, 0.2);
     pointer-events: none;
     /* Prevent dropdown from going outside viewport */
     max-height: calc(100vh - 100px);
     overflow-y: auto;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease-out, visibility 0.2s ease-out;
 }
 
 /* Dynamic positioning based on viewport space */
@@ -350,6 +343,8 @@ body {
 .dropdown-tool.active .dropdown-menu {
     display: block;
     pointer-events: auto;
+    opacity: 1;
+    visibility: visible;
     /* Add animation for smooth appearance */
     animation: dropdownFadeIn 0.2s ease-out;
 }
