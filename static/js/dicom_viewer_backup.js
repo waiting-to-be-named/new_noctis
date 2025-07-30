@@ -69,14 +69,6 @@ class DicomViewer {
     }
     
     async init() {
-        // Check if already initialized to prevent duplicate initialization
-        if (this.initialized) {
-            console.log('DicomViewer already initialized, skipping...');
-            return;
-        }
-        
-        console.log('Initializing DicomViewer with initialStudyId:', this.initialStudyId);
-        
         this.setupCanvas();
         this.setupEventListeners();
         await this.loadBackendStudies();
@@ -85,52 +77,11 @@ class DicomViewer {
         this.setup3DControls();
         this.setupAIPanel();
         
-        // Load initial study if provided with improved error handling
+        // Load initial study if provided
         if (this.initialStudyId) {
             console.log('Loading initial study:', this.initialStudyId);
-            try {
-                // Show loading state
-                this.showLoadingState();
-                
-                await this.loadStudy(this.initialStudyId);
-                
-                // Force UI updates after loading
-                setTimeout(() => {
-                    this.redraw();
-                    this.updatePatientInfo();
-                    this.updateSliders();
-                    
-                    // Ensure patient info is visible
-                    const patientInfo = document.getElementById('patient-info');
-                    if (patientInfo && this.currentStudy) {
-                        patientInfo.textContent = `Patient: ${this.currentStudy.patient_name} | Study Date: ${this.currentStudy.study_date} | Modality: ${this.currentStudy.modality}`;
-                        patientInfo.style.display = 'block';
-                    }
-                    
-                    // Update image controls if available
-                    if (this.currentImages && this.currentImages.length > 0) {
-                        const sliceSlider = document.getElementById('slice-slider');
-                        if (sliceSlider) {
-                            sliceSlider.max = this.currentImages.length - 1;
-                            sliceSlider.value = 0;
-                        }
-                        
-                        const sliceValue = document.getElementById('slice-value');
-                        if (sliceValue) {
-                            sliceValue.textContent = '1';
-                        }
-                    }
-                    
-                    console.log('Initial study loaded successfully');
-                }, 200);
-                
-            } catch (error) {
-                console.error('Failed to load initial study:', error);
-                this.showError('Failed to load initial study: ' + error.message);
-            }
+            await this.loadStudy(this.initialStudyId);
         }
-        
-        this.initialized = true;
     }
     
     setupCanvas() {
@@ -211,32 +162,20 @@ class DicomViewer {
             });
         });
         
-        // Load DICOM button - only add event listener if it doesn't already exist
-        const loadDicomBtn = document.getElementById('load-dicom-btn');
-        if (loadDicomBtn && !loadDicomBtn.hasAttribute('data-listener-added')) {
-            loadDicomBtn.setAttribute('data-listener-added', 'true');
-            loadDicomBtn.addEventListener('click', () => {
-                this.showUploadModal();
-            });
-        }
+        // Load DICOM button
+        document.getElementById('load-dicom-btn').addEventListener('click', () => {
+            this.showUploadModal();
+        });
         
-        // Worklist button - only add event listener if it doesn't already exist
-        const worklistBtn = document.getElementById('worklist-btn');
-        if (worklistBtn && !worklistBtn.hasAttribute('data-listener-added')) {
-            worklistBtn.setAttribute('data-listener-added', 'true');
-            worklistBtn.addEventListener('click', () => {
-                window.location.href = '/worklist/';
-            });
-        }
+        // Worklist button
+        document.getElementById('worklist-btn').addEventListener('click', () => {
+            window.location.href = '/worklist/';
+        });
         
-        // Clear measurements - only add event listener if it doesn't already exist
-        const clearMeasurementsBtn = document.getElementById('clear-measurements');
-        if (clearMeasurementsBtn && !clearMeasurementsBtn.hasAttribute('data-listener-added')) {
-            clearMeasurementsBtn.setAttribute('data-listener-added', 'true');
-            clearMeasurementsBtn.addEventListener('click', () => {
-                this.clearMeasurements();
-            });
-        }
+        // Clear measurements
+        document.getElementById('clear-measurements').addEventListener('click', () => {
+            this.clearMeasurements();
+        });
         
         // Canvas mouse events
         this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
@@ -247,19 +186,6 @@ class DicomViewer {
         
         // Upload modal events
         this.setupUploadModal();
-    }
-    
-    // Add loading state method
-    showLoadingState() {
-        if (this.ctx) {
-            this.ctx.fillStyle = '#000';
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-            this.ctx.fillStyle = '#fff';
-            this.ctx.font = '20px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            this.ctx.fillText('Loading study from worklist...', this.canvas.width / 2, this.canvas.height / 2);
-        }
     }
     
     setupUploadModal() {
@@ -707,7 +633,7 @@ class DicomViewer {
             this.annotations = [];
             this.updateMeasurementsList();
             
-            // Update UI immediately
+            // Update UI
             this.updatePatientInfo();
             this.updateSliders();
             
@@ -718,12 +644,6 @@ class DicomViewer {
             if (window.loadClinicalInfo && typeof window.loadClinicalInfo === 'function') {
                 window.loadClinicalInfo(studyId);
             }
-            
-            // Force a redraw to ensure the image is displayed
-            setTimeout(() => {
-                this.redraw();
-                this.updatePatientInfo();
-            }, 100);
             
             console.log('Study loaded successfully');
             
@@ -845,20 +765,18 @@ class DicomViewer {
     }
     
     updatePatientInfo() {
-        const patientInfo = document.getElementById('patient-info');
-        if (!patientInfo) {
-            console.warn('Patient info element not found');
-            return;
-        }
-        
         if (!this.currentStudy) {
-            patientInfo.textContent = 'Patient: - | Study Date: - | Modality: -';
-            patientInfo.style.display = 'block';
+            const patientInfo = document.getElementById('patient-info');
+            if (patientInfo) {
+                patientInfo.textContent = 'Patient: - | Study Date: - | Modality: -';
+            }
             return;
         }
         
-        patientInfo.textContent = `Patient: ${this.currentStudy.patient_name} | Study Date: ${this.currentStudy.study_date} | Modality: ${this.currentStudy.modality}`;
-        patientInfo.style.display = 'block';
+        const patientInfo = document.getElementById('patient-info');
+        if (patientInfo) {
+            patientInfo.textContent = `Patient: ${this.currentStudy.patient_name} | Study Date: ${this.currentStudy.study_date} | Modality: ${this.currentStudy.modality}`;
+        }
         
         // Update image info in right panel if elements exist
         const currentImageData = this.currentImages[this.currentImageIndex];
