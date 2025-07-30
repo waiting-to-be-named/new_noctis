@@ -2833,3 +2833,97 @@ def generate_general_analysis(image, modality, body_part):
         ],
         'recommendations': 'Clinical correlation and comparison with prior imaging recommended.'
     }
+
+
+@api_view(['GET'])
+def get_study_series(request, study_id):
+    """Get all series for a study with detailed information"""
+    try:
+        study = DicomStudy.objects.get(id=study_id)
+        series_list = study.series.all().order_by('series_number')
+        
+        series_data = []
+        for series in series_list:
+            # Get first image for series preview
+            first_image = series.images.first()
+            preview_data = None
+            if first_image:
+                try:
+                    # Get a small preview image
+                    preview_data = first_image.get_processed_image_base64(
+                        window_width=400, 
+                        window_level=40, 
+                        inverted=False
+                    )
+                except:
+                    preview_data = None
+            
+            series_info = {
+                'id': series.id,
+                'series_number': series.series_number,
+                'series_description': series.series_description,
+                'modality': series.modality,
+                'body_part_examined': series.body_part_examined,
+                'image_count': series.images.count(),
+                'preview_image': preview_data,
+                'created_at': series.created_at.isoformat() if series.created_at else None,
+            }
+            series_data.append(series_info)
+        
+        return Response({
+            'study': {
+                'id': study.id,
+                'patient_name': study.patient_name,
+                'patient_id': study.patient_id,
+                'study_date': study.study_date,
+                'modality': study.modality,
+                'study_description': study.study_description,
+                'institution_name': study.institution_name,
+                'accession_number': study.accession_number,
+                'series_count': len(series_data),
+            },
+            'series': series_data
+        })
+    except DicomStudy.DoesNotExist:
+        return Response({'error': 'Study not found'}, status=404)
+    except Exception as e:
+        return Response({'error': f'Server error: {str(e)}'}, status=500)
+
+
+@api_view(['GET'])
+def get_series_images(request, series_id):
+    """Get all images for a specific series"""
+    try:
+        series = DicomSeries.objects.get(id=series_id)
+        images = series.images.all().order_by('instance_number')
+        
+        images_data = []
+        for image in images:
+            image_data = {
+                'id': image.id,
+                'instance_number': int(image.instance_number) if image.instance_number is not None else None,
+                'rows': int(image.rows) if image.rows is not None else None,
+                'columns': int(image.columns) if image.columns is not None else None,
+                'pixel_spacing_x': float(image.pixel_spacing_x) if image.pixel_spacing_x is not None else None,
+                'pixel_spacing_y': float(image.pixel_spacing_y) if image.pixel_spacing_y is not None else None,
+                'slice_thickness': float(image.slice_thickness) if image.slice_thickness is not None else None,
+                'window_width': float(image.window_width) if image.window_width is not None else None,
+                'window_center': float(image.window_center) if image.window_center is not None else None,
+            }
+            images_data.append(image_data)
+        
+        return Response({
+            'series': {
+                'id': series.id,
+                'series_number': series.series_number,
+                'series_description': series.series_description,
+                'modality': series.modality,
+                'body_part_examined': series.body_part_examined,
+                'image_count': len(images_data),
+            },
+            'images': images_data
+        })
+    except DicomSeries.DoesNotExist:
+        return Response({'error': 'Series not found'}, status=404)
+    except Exception as e:
+        return Response({'error': f'Server error: {str(e)}'}, status=500)
