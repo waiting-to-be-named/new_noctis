@@ -341,8 +341,9 @@ body {
 
 /* Ensure dropdown stays in viewport horizontally */
 .toolbar .dropdown-tool:nth-last-child(-n+2) .dropdown-menu {
-    left: -180px; /* Move to left side for bottom tools */
+    left: -200px; /* Move to left side for bottom tools */
     right: auto;
+    min-width: 280px; /* Ensure text is visible */
 }
 
 .dropdown-tool:hover .dropdown-menu,
@@ -1407,6 +1408,8 @@ body {
     left: auto;
     right: 100%;
     margin-right: 5px;
+    min-width: 250px;
+    max-width: 300px;
 }
 
 .dropdown-tool.bottom-aligned.left-aligned .dropdown-menu {
