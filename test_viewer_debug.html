@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viewer Debug Test</title>
+</head>
+<body>
+    <h1>Viewer Debug Test</h1>
+    
+    <div>
+        <h2>Test Study Loading</h2>
+        <p>This page tests the viewer study loading functionality.</p>
+        
+        <div>
+            <label for="study-id">Study ID:</label>
+            <input type="number" id="study-id" placeholder="Enter study ID">
+            <button onclick="testLoadStudy()">Load Study</button>
+        </div>
+        
+        <div id="results">
+            <h3>Results:</h3>
+            <div id="api-result"></div>
+            <div id="viewer-result"></div>
+        </div>
+    </div>
+    
+    <script>
+        async function testLoadStudy() {
+            const studyId = document.getElementById('study-id').value;
+            if (!studyId) {
+                alert('Please enter a study ID');
+                return;
+            }
+            
+            const apiResult = document.getElementById('api-result');
+            const viewerResult = document.getElementById('viewer-result');
+            
+            apiResult.innerHTML = '<p>Testing API call...</p>';
+            viewerResult.innerHTML = '<p>Testing viewer...</p>';
+            
+            try {
+                // Test the API endpoint
+                const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    apiResult.innerHTML = `
+                        <p style="color: green;">✅ API call successful</p>
+                        <p>Study: ${data.study.patient_name}</p>
+                        <p>Images: ${data.images.length}</p>
+                        <p>Study ID: ${data.study.id}</p>
+                    `;
+                    
+                    // Test viewer loading
+                    if (window.loadStudyFromWorklist) {
+                        try {
+                            window.loadStudyFromWorklist(studyId);
+                            viewerResult.innerHTML = '<p style="color: green;">✅ Viewer study loading triggered</p>';
+                        } catch (error) {
+                            viewerResult.innerHTML = `<p style="color: red;">❌ Viewer error: ${error.message}</p>`;
+                        }
+                    } else {
+                        viewerResult.innerHTML = '<p style="color: orange;">⚠️ Viewer function not available</p>';
+                    }
+                } else {
+                    apiResult.innerHTML = `<p style="color: red;">❌ API error: ${data.error || response.statusText}</p>`;
+                    viewerResult.innerHTML = '<p style="color: red;">❌ Skipping viewer test due to API error</p>';
+                }
+            } catch (error) {
+                apiResult.innerHTML = `<p style="color: red;">❌ Network error: ${error.message}</p>`;
+                viewerResult.innerHTML = '<p style="color: red;">❌ Skipping viewer test due to network error</p>';
+            }
+        }
+        
+        // Test if we can access the viewer
+        if (window.viewer) {
+            console.log('Viewer is available');
+        } else {
+            console.log('Viewer not available');
+        }
+    </script>
+</body>
+</html>
