@@ -121,6 +121,8 @@ FILE_UPLOAD_HANDLERS = [
 # Maximum file upload size (100MB)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024
+DATA_UPLOAD_MAX_NUMBER_FIELDS = None  # Allow unlimited number of POST fields
+DATA_UPLOAD_MAX_NUMBER_FILES = None  # Allow unlimited number of uploaded files
 
 # Ensure media directories are created
 import os
