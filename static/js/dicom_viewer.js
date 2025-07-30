@@ -146,8 +146,8 @@ class DicomViewer {
     resizeCanvas() {
         const viewport = document.querySelector('.viewport');
         if (viewport) {
-            // Use high devicePixelRatio for crisp medical images
-            const devicePixelRatio = Math.max(window.devicePixelRatio || 1, 2);
+            // Use device pixel ratio for crisp medical images
+            const devicePixelRatio = window.devicePixelRatio || 1;
             const displayWidth = viewport.clientWidth;
             const displayHeight = viewport.clientHeight;
             
@@ -167,6 +167,8 @@ class DicomViewer {
             this.ctx.imageSmoothingEnabled = false;
             this.ctx.imageSmoothingQuality = 'high';
             
+            console.log(`Canvas resized: ${displayWidth}x${displayHeight} (display) / ${this.canvas.width}x${this.canvas.height} (actual)`);
+            
             // Force redraw if image is loaded
             if (this.currentImage) {
                 this.redraw();
@@ -183,39 +185,45 @@ class DicomViewer {
             });
         });
         
-        // Enhanced dropdown functionality with dynamic positioning
+        // Enhanced dropdown functionality with improved event handling
         document.querySelectorAll('.dropdown-toggle').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 
-                // Close all other dropdowns
+                const dropdownTool = btn.closest('.dropdown-tool');
+                const isActive = dropdownTool.classList.contains('active');
+                
+                // Close all dropdowns first
                 document.querySelectorAll('.dropdown-tool').forEach(dropdown => {
-                    if (dropdown !== btn.closest('.dropdown-tool')) {
-                        dropdown.classList.remove('active');
-                    }
+                    dropdown.classList.remove('active');
                 });
                 
-                // Toggle current dropdown
-                const dropdownTool = btn.closest('.dropdown-tool');
-                const dropdownMenu = dropdownTool.querySelector('.dropdown-menu');
-                
-                if (!dropdownTool.classList.contains('active')) {
-                    // About to show - calculate optimal position
+                // If this dropdown wasn't active, show it
+                if (!isActive) {
+                    const dropdownMenu = dropdownTool.querySelector('.dropdown-menu');
+                    // Calculate optimal position before showing
                     this.positionDropdown(dropdownTool, dropdownMenu);
+                    dropdownTool.classList.add('active');
                 }
-                
-                dropdownTool.classList.toggle('active');
             });
         });
         
-        // Close dropdowns when clicking outside
+        // Close dropdowns when clicking outside with improved detection
         document.addEventListener('click', (e) => {
-            if (!e.target.closest('.dropdown-tool')) {
+            // Check if click is outside any dropdown
+            if (!e.target.closest('.dropdown-tool') && !e.target.closest('.dropdown-menu')) {
                 document.querySelectorAll('.dropdown-tool').forEach(dropdown => {
                     dropdown.classList.remove('active');
                 });
             }
+        });
+        
+        // Prevent dropdown menus from closing when clicking inside them
+        document.querySelectorAll('.dropdown-menu').forEach(menu => {
+            menu.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
         });
         
         // Worklist button
@@ -292,16 +300,22 @@ class DicomViewer {
         this.setupUploadModal();
     }
     
-    // Add loading state method
+    // Add loading state method with improved display
     showLoadingState() {
         if (this.ctx) {
+            // Get canvas display dimensions
+            const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+            const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+            
             this.ctx.fillStyle = '#000';
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-            this.ctx.fillStyle = '#fff';
+            this.ctx.fillRect(0, 0, displayWidth, displayHeight);
+            this.ctx.fillStyle = '#00ff00';
             this.ctx.font = '20px Arial';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
-            this.ctx.fillText('Loading study from worklist...', this.canvas.width / 2, this.canvas.height / 2);
+            this.ctx.fillText('Loading study from worklist...', displayWidth / 2, displayHeight / 2);
+            
+            console.log('Loading state displayed');
         }
     }
     
@@ -996,47 +1010,57 @@ class DicomViewer {
     }
     
     updateDisplay() {
+        // Get canvas display dimensions
+        const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        
         if (!this.currentImage) {
             // Show "No image loaded" state
             this.ctx.fillStyle = '#000';
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.fillRect(0, 0, displayWidth, displayHeight);
             this.ctx.fillStyle = '#666';
             this.ctx.font = '16px Arial';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
-            const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
-            const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
             this.ctx.fillText('No image loaded', displayWidth / 2, displayHeight / 2);
             return;
         }
         
         // Clear canvas with black background
         this.ctx.fillStyle = '#000';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.fillRect(0, 0, displayWidth, displayHeight);
         
         // Ensure image smoothing is disabled for medical images
         this.ctx.imageSmoothingEnabled = false;
-        this.ctx.imageSmoothingQuality = 'high';
         
         // Calculate display parameters with improved scaling
         const img = this.currentImage.image;
+        if (!img || !img.complete) {
+            console.warn('Image not loaded or complete');
+            return;
+        }
+        
         const scale = this.getScale();
         
-        const displayWidth = img.width * scale;
-        const displayHeight = img.height * scale;
-        
-        // Use display dimensions for accurate positioning
-        const canvasDisplayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
-        const canvasDisplayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        const scaledWidth = img.width * scale;
+        const scaledHeight = img.height * scale;
         
         // Center the image with pan offset
-        const x = (canvasDisplayWidth - displayWidth) / 2 + this.panX;
-        const y = (canvasDisplayHeight - displayHeight) / 2 + this.panY;
+        const x = (displayWidth - scaledWidth) / 2 + this.panX;
+        const y = (displayHeight - scaledHeight) / 2 + this.panY;
         
         // Draw image with high quality
         this.ctx.save();
-        this.ctx.drawImage(img, x, y, displayWidth, displayHeight);
+        
+        // Apply window/level if needed (inversion)
+        if (this.inverted) {
+            this.ctx.filter = 'invert(1)';
+        }
+        
+        this.ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
         this.ctx.restore();
+        
+        console.log(`Image drawn: ${scaledWidth}x${scaledHeight} at (${x}, ${y}), scale: ${scale}`);
         
         // Update overlay labels with current image info
         this.updateOverlayLabels();
@@ -2921,6 +2945,137 @@ Pixel Count: ${data.pixel_count}`;
         } else {
             dropdownMenu.style.maxHeight = ''; // Reset
         }
+    }
+    
+    // Add bulk DICOM upload functionality
+    async uploadDicomFiles(files) {
+        if (!files || files.length === 0) {
+            console.error('No files provided for upload');
+            return;
+        }
+        
+        console.log(`Starting upload of ${files.length} files`);
+        
+        // Filter DICOM files
+        const dicomFiles = Array.from(files).filter(file => {
+            const ext = file.name.toLowerCase();
+            return ext.endsWith('.dcm') || ext.endsWith('.dicom') || 
+                   ext.endsWith('.ima') || ext.endsWith('.img') || 
+                   file.type === 'application/dicom';
+        });
+        
+        if (dicomFiles.length === 0) {
+            alert('No valid DICOM files found. Please select .dcm, .dicom, .ima, or .img files.');
+            if (window.showUploadProgress) window.showUploadProgress(false);
+            return;
+        }
+        
+        try {
+            // Use bulk upload endpoint for large file sets
+            if (dicomFiles.length > 10) {
+                await this.handleBulkUpload(dicomFiles);
+            } else {
+                await this.handleStandardUpload(dicomFiles);
+            }
+        } catch (error) {
+            console.error('Upload failed:', error);
+            alert(`Upload failed: ${error.message}`);
+            if (window.showUploadProgress) window.showUploadProgress(false);
+        }
+    }
+    
+    async handleStandardUpload(files) {
+        const formData = new FormData();
+        files.forEach(file => {
+            formData.append('files', file);
+        });
+        
+        const response = await fetch('/viewer/api/upload/', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': this.getCSRFToken()
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Upload failed: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('Upload successful:', result);
+        
+        if (window.showUploadProgress) window.showUploadProgress(false);
+        
+        // Redirect to worklist or refresh if we have studies
+        if (result.studies_created > 0) {
+            alert(`Upload successful! ${result.studies_created} studies created.`);
+            if (result.study_id) {
+                // Load the first study
+                await this.loadStudy(result.study_id);
+            } else {
+                // Redirect to worklist
+                window.location.href = '/worklist/';
+            }
+        }
+    }
+    
+    async handleBulkUpload(files) {
+        // Create a zip-like structure for bulk upload
+        const formData = new FormData();
+        files.forEach(file => {
+            formData.append('files', file);
+        });
+        
+        const response = await fetch('/viewer/api/bulk-upload/', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': this.getCSRFToken()
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Bulk upload failed: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('Bulk upload initiated:', result);
+        
+        if (result.upload_id) {
+            // Monitor upload progress
+            await this.monitorUploadProgress(result.upload_id);
+        }
+    }
+    
+    async monitorUploadProgress(uploadId) {
+        const checkProgress = async () => {
+            try {
+                const response = await fetch(`/viewer/api/upload-progress/${uploadId}/`);
+                const progress = await response.json();
+                
+                if (progress.status === 'completed') {
+                    if (window.showUploadProgress) window.showUploadProgress(false);
+                    alert(`Upload completed! ${progress.studies_created || 0} studies created.`);
+                    window.location.href = '/worklist/';
+                    return;
+                } else if (progress.status === 'failed') {
+                    if (window.showUploadProgress) window.showUploadProgress(false);
+                    alert(`Upload failed: ${progress.error || 'Unknown error'}`);
+                    return;
+                } else {
+                    // Still processing, check again in 2 seconds
+                    setTimeout(checkProgress, 2000);
+                }
+            } catch (error) {
+                console.error('Error checking upload progress:', error);
+                if (window.showUploadProgress) window.showUploadProgress(false);
+                alert('Error monitoring upload progress');
+            }
+        };
+        
+        // Start monitoring
+        checkProgress();
     }
 }
 

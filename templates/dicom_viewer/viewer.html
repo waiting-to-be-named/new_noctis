@@ -20,7 +20,7 @@
             background: rgba(0, 0, 0, 0.95);
             color: white;
             padding: 15px;
-            z-index: 10001; /* Higher than dropdowns */
+            z-index: 12000; /* Lower than dropdowns but higher than main content */
             max-height: calc(100vh - 130px); /* Prevent excessive height */
             overflow-y: auto;
             display: none;
@@ -306,15 +306,16 @@
             background: #28a745;
         }
         
-        /* Series Selector Position Controls */
+        /* Series Selector Position Controls - Fixed positioning */
         .series-position-controls {
             position: fixed;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.8);
+            top: 80px;
+            right: 340px;
+            background: rgba(0, 0, 0, 0.9);
             padding: 10px;
             border-radius: 5px;
-            z-index: 1001;
+            z-index: 5000;
+            border: 1px solid #444;
         }
         
         .position-btn {
@@ -825,10 +826,60 @@
         
         function handleFileUpload(files) {
             closeUploadModal();
+            
+            // Show progress indicator
+            showUploadProgress(true);
+            
             if (window.viewer && window.viewer.uploadDicomFiles) {
+                console.log(`Starting upload of ${files.length} files`);
                 window.viewer.uploadDicomFiles(files);
             } else {
                 console.log('Viewer not ready or upload method not available');
+                showUploadProgress(false);
+                alert('Viewer not ready. Please try again.');
+            }
+        }
+        
+        function showUploadProgress(show) {
+            // Create or show upload progress indicator
+            let progressDiv = document.getElementById('upload-progress');
+            if (!progressDiv && show) {
+                progressDiv = document.createElement('div');
+                progressDiv.id = 'upload-progress';
+                progressDiv.innerHTML = `
+                    <div class="progress-content">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Uploading DICOM files...</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill"></div>
+                        </div>
+                    </div>
+                `;
+                progressDiv.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.8);
+                    z-index: 20000;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                `;
+                document.body.appendChild(progressDiv);
+            }
+            
+            if (progressDiv) {
+                progressDiv.style.display = show ? 'flex' : 'none';
+                if (!show) {
+                    setTimeout(() => {
+                        if (progressDiv.parentNode) {
+                            progressDiv.parentNode.removeChild(progressDiv);
+                        }
+                    }, 500);
+                }
             }
         }
     </script>
