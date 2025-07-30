@@ -1,5 +1,4 @@
-// Fixed DICOM Viewer JavaScript
-// This version addresses duplicate buttons and no images displayed issues
+// static/js/dicom_viewer_fixed.js
 
 class DicomViewer {
     constructor(initialStudyId = null) {
@@ -28,8 +27,6 @@ class DicomViewer {
         this.annotations = [];
         this.currentMeasurement = null;
         this.currentEllipse = null;
-
-        // Measurement unit
         this.measurementUnit = 'mm';
         this.isDragging = false;
         this.dragStart = null;
@@ -65,18 +62,10 @@ class DicomViewer {
         // Store initial study ID
         this.initialStudyId = initialStudyId;
         
-        // Flag to prevent duplicate initialization
-        this.initialized = false;
-        
         this.init();
     }
     
     async init() {
-        if (this.initialized) {
-            console.log('DicomViewer already initialized, skipping...');
-            return;
-        }
-        
         console.log('Initializing DicomViewer with initialStudyId:', this.initialStudyId);
         
         this.setupCanvas();
@@ -87,47 +76,18 @@ class DicomViewer {
         this.setup3DControls();
         this.setupAIPanel();
         
-        // Load initial study if provided with improved error handling
+        // Load initial study if provided
         if (this.initialStudyId) {
             console.log('Loading initial study:', this.initialStudyId);
             try {
-                // Show loading state
                 this.showLoadingState();
-                
                 await this.loadStudy(this.initialStudyId);
-                
-                // Force UI updates after loading
                 setTimeout(() => {
                     this.redraw();
                     this.updatePatientInfo();
-                    this.updateSliders();
-                    
-                    // Ensure patient info is visible
-                    const patientInfo = document.getElementById('patient-info');
-                    if (patientInfo && this.currentStudy) {
-                        patientInfo.textContent = `Patient: ${this.currentStudy.patient_name} | Study Date: ${this.currentStudy.study_date} | Modality: ${this.currentStudy.modality}`;
-                        patientInfo.style.display = 'block';
-                    }
-                    
-                    // Update image controls if available
-                    if (this.currentImages && this.currentImages.length > 0) {
-                        const sliceSlider = document.getElementById('slice-slider');
-                        if (sliceSlider) {
-                            sliceSlider.max = this.currentImages.length - 1;
-                            sliceSlider.value = 0;
-                        }
-                        
-                        const sliceValue = document.getElementById('slice-value');
-                        if (sliceValue) {
-                            sliceValue.textContent = '1';
-                        }
-                    }
-                    
-                    console.log('Initial study loaded successfully');
-                }, 200);
-                
+                }, 100);
             } catch (error) {
-                console.error('Failed to load initial study:', error);
+                console.error('Error loading initial study:', error);
                 this.showError('Failed to load initial study: ' + error.message);
             }
         }
@@ -136,110 +96,70 @@ class DicomViewer {
     }
     
     setupCanvas() {
-        // Set canvas size
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
     }
     
     resizeCanvas() {
-        const viewport = document.querySelector('.viewport');
-        if (viewport) {
-            // Use devicePixelRatio for high-DPI displays
-            const devicePixelRatio = window.devicePixelRatio || 1;
-            const displayWidth = viewport.clientWidth;
-            const displayHeight = viewport.clientHeight;
-            
-            // Set canvas size
-            this.canvas.style.width = displayWidth + 'px';
-            this.canvas.style.height = displayHeight + 'px';
-            
-            // Set actual canvas size
-            this.canvas.width = displayWidth * devicePixelRatio;
-            this.canvas.height = displayHeight * devicePixelRatio;
-            
-            // Scale context to match device pixel ratio
-            this.ctx.scale(devicePixelRatio, devicePixelRatio);
+        const container = this.canvas.parentElement;
+        if (container) {
+            const rect = container.getBoundingClientRect();
+            this.canvas.width = rect.width;
+            this.canvas.height = rect.height;
+            this.canvas.style.width = rect.width + 'px';
+            this.canvas.style.height = rect.height + 'px';
         }
     }
     
     setupEventListeners() {
         // Tool buttons
         document.querySelectorAll('.tool-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const tool = btn.dataset.tool;
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const tool = btn.getAttribute('data-tool');
                 this.handleToolClick(tool);
+                
+                // Update active state
+                document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
             });
         });
         
-        // Window/Level sliders
-        const wwSlider = document.getElementById('ww-slider');
-        const wlSlider = document.getElementById('wl-slider');
-        const zoomSlider = document.getElementById('zoom-slider');
-        const sliceSlider = document.getElementById('slice-slider');
-        
-        if (wwSlider) {
-            wwSlider.addEventListener('input', (e) => {
-                this.windowWidth = parseInt(e.target.value);
-                document.getElementById('ww-value').textContent = this.windowWidth;
-                this.updateDisplay();
-            });
-        }
-        
-        if (wlSlider) {
-            wlSlider.addEventListener('input', (e) => {
-                this.windowLevel = parseInt(e.target.value);
-                document.getElementById('wl-value').textContent = this.windowLevel;
-                this.updateDisplay();
-            });
-        }
-        
-        if (zoomSlider) {
-            zoomSlider.addEventListener('input', (e) => {
-                this.zoomFactor = parseInt(e.target.value) / 100;
-                document.getElementById('zoom-value').textContent = Math.round(this.zoomFactor * 100) + '%';
-                this.updateDisplay();
-            });
-        }
-        
-        if (sliceSlider) {
-            sliceSlider.addEventListener('input', (e) => {
-                this.currentImageIndex = parseInt(e.target.value);
-                document.getElementById('slice-value').textContent = this.currentImageIndex + 1;
-                this.loadCurrentImage();
-            });
-        }
-        
         // Preset buttons
         document.querySelectorAll('.preset-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const preset = btn.dataset.preset;
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const preset = btn.getAttribute('data-preset');
                 this.applyPreset(preset);
             });
         });
         
-        // Load DICOM button - only add event listener if it doesn't already exist
+        // Load DICOM button - fixed implementation
         const loadDicomBtn = document.getElementById('load-dicom-btn');
-        if (loadDicomBtn && !loadDicomBtn.hasAttribute('data-listener-added')) {
-            loadDicomBtn.setAttribute('data-listener-added', 'true');
-            loadDicomBtn.addEventListener('click', () => {
+        if (loadDicomBtn) {
+            loadDicomBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log('Load DICOM button clicked');
                 this.showUploadModal();
             });
         }
         
-        // Worklist button - only add event listener if it doesn't already exist
+        // Worklist button - fixed implementation
         const worklistBtn = document.getElementById('worklist-btn');
-        if (worklistBtn && !worklistBtn.hasAttribute('data-listener-added')) {
-            worklistBtn.setAttribute('data-listener-added', 'true');
-            worklistBtn.addEventListener('click', () => {
+        if (worklistBtn) {
+            worklistBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log('Worklist button clicked');
                 window.location.href = '/worklist/';
             });
         }
         
-        // Clear measurements - only add event listener if it doesn't already exist
+        // Clear measurements button
         const clearMeasurementsBtn = document.getElementById('clear-measurements');
-        if (clearMeasurementsBtn && !clearMeasurementsBtn.hasAttribute('data-listener-added')) {
-            clearMeasurementsBtn.setAttribute('data-listener-added', 'true');
-            clearMeasurementsBtn.addEventListener('click', () => {
+        if (clearMeasurementsBtn) {
+            clearMeasurementsBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log('Clear measurements button clicked');
                 this.clearMeasurements();
             });
         }
@@ -255,7 +175,6 @@ class DicomViewer {
         this.setupUploadModal();
     }
     
-    // Add loading state method
     showLoadingState() {
         if (this.ctx) {
             this.ctx.fillStyle = '#000';
@@ -264,16 +183,163 @@ class DicomViewer {
             this.ctx.font = '20px Arial';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
-            this.ctx.fillText('Loading study from worklist...', this.canvas.width / 2, this.canvas.height / 2);
+            this.ctx.fillText('Loading study...', this.canvas.width / 2, this.canvas.height / 2);
         }
     }
     
-    // Improve the loadStudy method to ensure proper UI updates
+    setupUploadModal() {
+        const modal = document.getElementById('upload-modal');
+        if (!modal) return;
+        
+        const closeBtn = modal.querySelector('.modal-close');
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const hiddenFileInput = document.getElementById('hidden-file-input');
+        
+        // Close modal
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                modal.style.display = 'none';
+            });
+        }
+        
+        // Close modal when clicking outside
+        window.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+        
+        // File input change
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => {
+                this.uploadFiles(e.target.files);
+            });
+        }
+        
+        // Hidden file input for directory upload
+        if (hiddenFileInput) {
+            hiddenFileInput.addEventListener('change', (e) => {
+                this.uploadFolder(e.target.files);
+            });
+        }
+        
+        // Drag and drop
+        if (uploadArea) {
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('drag-over');
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('drag-over');
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('drag-over');
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    this.uploadFiles(files);
+                }
+            });
+        }
+    }
+    
+    showUploadModal() {
+        const modal = document.getElementById('upload-modal');
+        if (modal) {
+            modal.style.display = 'block';
+        } else {
+            console.error('Upload modal not found');
+        }
+    }
+    
+    async uploadFiles(files) {
+        if (!files || files.length === 0) return;
+        
+        const formData = new FormData();
+        for (let file of files) {
+            formData.append('files', file);
+        }
+        
+        try {
+            const response = await fetch('/viewer/api/upload/', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Upload successful:', result);
+                
+                // Reload studies after upload
+                await this.loadBackendStudies();
+                
+                // If a study was created, load it
+                if (result.study_id) {
+                    await this.loadStudy(result.study_id);
+                }
+            } else {
+                throw new Error(`Upload failed: ${response.statusText}`);
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            this.showError('Upload failed: ' + error.message);
+        }
+    }
+    
+    async uploadFolder(files) {
+        if (!files || files.length === 0) return;
+        
+        const formData = new FormData();
+        for (let file of files) {
+            formData.append('files', file);
+        }
+        
+        try {
+            const response = await fetch('/viewer/api/upload-folder/', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Folder upload successful:', result);
+                
+                // Reload studies after upload
+                await this.loadBackendStudies();
+                
+                // If a study was created, load it
+                if (result.study_id) {
+                    await this.loadStudy(result.study_id);
+                }
+            } else {
+                throw new Error(`Folder upload failed: ${response.statusText}`);
+            }
+        } catch (error) {
+            console.error('Folder upload error:', error);
+            this.showError('Folder upload failed: ' + error.message);
+        }
+    }
+    
+    async loadBackendStudies() {
+        try {
+            const response = await fetch('/viewer/api/studies/');
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Loaded studies:', data.studies);
+            }
+        } catch (error) {
+            console.error('Error loading studies:', error);
+        }
+    }
+    
     async loadStudy(studyId) {
         try {
             console.log(`Loading study ${studyId}...`);
             
-            // Show loading indicator
             this.showLoadingState();
             
             const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
@@ -320,19 +386,13 @@ class DicomViewer {
                 window.loadClinicalInfo(studyId);
             }
             
-            // Force a redraw to ensure the image is displayed
-            setTimeout(() => {
-                this.redraw();
-                this.updatePatientInfo();
-            }, 100);
-            
             console.log('Study loaded successfully');
             
         } catch (error) {
             console.error('Error loading study:', error);
             this.showError('Error loading study: ' + error.message);
             
-            // Clear canvas
+            // Clear canvas on error
             this.ctx.fillStyle = '#000';
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             this.ctx.fillStyle = '#ff0000';
@@ -342,80 +402,773 @@ class DicomViewer {
             this.ctx.fillText('Failed to load study', this.canvas.width / 2, this.canvas.height / 2 - 20);
             this.ctx.fillText(error.message, this.canvas.width / 2, this.canvas.height / 2 + 20);
             
-            // Reset patient info on error
             this.updatePatientInfo();
         }
     }
     
-    // Improve the updatePatientInfo method to ensure it's always visible
+    async loadCurrentImage() {
+        if (!this.currentImages.length) {
+            console.log('No images available');
+            return;
+        }
+        
+        const imageData = this.currentImages[this.currentImageIndex];
+        console.log(`Loading image ${this.currentImageIndex + 1}/${this.currentImages.length}, ID: ${imageData.id}`);
+        
+        try {
+            const params = new URLSearchParams({
+                window_width: this.windowWidth,
+                window_level: this.windowLevel,
+                inverted: this.inverted
+            });
+            
+            const response = await fetch(`/viewer/api/images/${imageData.id}/data/?${params}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.image_data) {
+                const img = new Image();
+                img.onload = () => {
+                    console.log('Image loaded successfully');
+                    this.currentImage = {
+                        image: img,
+                        metadata: data.metadata,
+                        id: imageData.id,
+                        rows: data.metadata.rows,
+                        columns: data.metadata.columns,
+                        pixel_spacing_x: data.metadata.pixel_spacing_x,
+                        pixel_spacing_y: data.metadata.pixel_spacing_y,
+                        pixel_spacing: `${data.metadata.pixel_spacing_x},${data.metadata.pixel_spacing_y}`,
+                        slice_thickness: data.metadata.slice_thickness,
+                        width: img.width,
+                        height: img.height
+                    };
+                    
+                    // Ensure canvas is properly sized before drawing
+                    this.resizeCanvas();
+                    this.updateDisplay();
+                    this.loadMeasurements();
+                    this.loadAnnotations();
+                    this.updatePatientInfo();
+                };
+                img.onerror = (error) => {
+                    console.error('Failed to load image data:', error);
+                    console.error('Image source:', img.src);
+                    this.showError('Failed to load image. Please try refreshing or selecting another image.');
+                };
+                img.src = data.image_data;
+            } else {
+                throw new Error(data.error || 'No image data received');
+            }
+            
+        } catch (error) {
+            console.error('Error loading image:', error);
+            this.showError('Error loading image: ' + error.message);
+        }
+    }
+    
+    showError(message) {
+        console.error(message);
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-message';
+        errorDiv.innerHTML = `
+            <div class="error-content">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>${message}</span>
+                <button onclick="this.parentElement.parentElement.remove()">×</button>
+            </div>
+        `;
+        errorDiv.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ff4444;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            z-index: 1000;
+            max-width: 400px;
+        `;
+        document.body.appendChild(errorDiv);
+        
+        setTimeout(() => {
+            if (errorDiv.parentElement) {
+                errorDiv.remove();
+            }
+        }, 5000);
+    }
+    
     updatePatientInfo() {
         const patientInfo = document.getElementById('patient-info');
-        if (!patientInfo) {
-            console.warn('Patient info element not found');
-            return;
-        }
+        if (!patientInfo) return;
         
-        if (!this.currentStudy) {
+        if (this.currentStudy) {
+            const studyDate = this.currentStudy.study_date || 'Unknown';
+            const modality = this.currentStudy.modality || 'Unknown';
+            patientInfo.textContent = `Patient: ${this.currentStudy.patient_name} | Study Date: ${studyDate} | Modality: ${modality}`;
+        } else {
             patientInfo.textContent = 'Patient: - | Study Date: - | Modality: -';
-            patientInfo.style.display = 'block';
-            return;
+        }
+    }
+    
+    updateSliders() {
+        const wwSlider = document.getElementById('ww-slider');
+        const wlSlider = document.getElementById('wl-slider');
+        const wwValue = document.getElementById('ww-value');
+        const wlValue = document.getElementById('wl-value');
+        
+        if (wwSlider && wlSlider && wwValue && wlValue) {
+            wwSlider.value = this.windowWidth;
+            wlSlider.value = this.windowLevel;
+            wwValue.textContent = this.windowWidth;
+            wlValue.textContent = this.windowLevel;
+            
+            // Add event listeners
+            wwSlider.addEventListener('input', (e) => {
+                this.windowWidth = parseInt(e.target.value);
+                wwValue.textContent = this.windowWidth;
+                this.updateDisplay();
+            });
+            
+            wlSlider.addEventListener('input', (e) => {
+                this.windowLevel = parseInt(e.target.value);
+                wlValue.textContent = this.windowLevel;
+                this.updateDisplay();
+            });
+        }
+    }
+    
+    updateDisplay() {
+        if (!this.currentImage) return;
+        
+        // Clear canvas with black background
+        this.ctx.fillStyle = '#000';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Calculate display parameters
+        const img = this.currentImage.image;
+        const scale = this.getScale();
+        
+        const displayWidth = img.width * scale;
+        const displayHeight = img.height * scale;
+        const canvasDisplayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const canvasDisplayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        const x = (canvasDisplayWidth - displayWidth) / 2 + this.panX;
+        const y = (canvasDisplayHeight - displayHeight) / 2 + this.panY;
+        
+        // Draw image
+        this.ctx.drawImage(img, x, y, displayWidth, displayHeight);
+        
+        // Draw measurements after the image
+        this.drawMeasurements();
+        
+        // Draw annotations
+        this.drawAnnotations();
+        
+        // Draw crosshair if enabled
+        if (this.crosshair) {
+            this.drawCrosshair();
         }
         
-        patientInfo.textContent = `Patient: ${this.currentStudy.patient_name} | Study Date: ${this.currentStudy.study_date} | Modality: ${this.currentStudy.modality}`;
-        patientInfo.style.display = 'block';
+        // Update overlay labels
+        this.updateOverlayLabels();
+    }
+    
+    getScale() {
+        if (!this.currentImage) return 1;
+        const img = this.currentImage.image;
+        const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        const baseScale = Math.min(displayWidth / img.width, displayHeight / img.height);
+        const clampedBase = baseScale > 1 ? 1 : baseScale;
+        return this.zoomFactor * clampedBase;
+    }
+    
+    drawMeasurements() {
+        if (!this.currentImage) return;
         
-        // Update image info in right panel if elements exist
-        const currentImageData = this.currentImages[this.currentImageIndex];
-        if (currentImageData) {
-            const infoDimensions = document.getElementById('info-dimensions');
-            const infoPixelSpacing = document.getElementById('info-pixel-spacing');
-            const infoSeries = document.getElementById('info-series');
-            const infoInstitution = document.getElementById('info-institution');
-            
-            if (infoDimensions) {
-                infoDimensions.textContent = `${currentImageData.rows} × ${currentImageData.columns}`;
+        this.ctx.save();
+        this.ctx.strokeStyle = 'red';
+        this.ctx.lineWidth = 2;
+        this.ctx.fillStyle = 'red';
+        this.ctx.font = '14px Arial';
+        
+        this.measurements.forEach(measurement => {
+            // Draw measurement lines and annotations
+            if (measurement.coordinates && measurement.coordinates.length >= 2) {
+                const start = this.imageToCanvasCoords(measurement.coordinates[0].x, measurement.coordinates[0].y);
+                const end = this.imageToCanvasCoords(measurement.coordinates[1].x, measurement.coordinates[1].y);
+                
+                this.ctx.beginPath();
+                this.ctx.moveTo(start.x, start.y);
+                this.ctx.lineTo(end.x, end.y);
+                this.ctx.stroke();
+                
+                // Draw measurement value
+                const midX = (start.x + end.x) / 2;
+                const midY = (start.y + end.y) / 2;
+                this.ctx.fillText(`${measurement.value.toFixed(1)} ${measurement.unit}`, midX, midY - 10);
             }
+        });
+        
+        this.ctx.restore();
+    }
+    
+    drawAnnotations() {
+        if (!this.currentImage) return;
+        
+        this.ctx.save();
+        this.ctx.font = '14px Arial';
+        this.ctx.textAlign = 'left';
+        this.ctx.textBaseline = 'top';
+        
+        this.annotations.forEach(annotation => {
+            const canvasPos = this.imageToCanvasCoords(annotation.x_coordinate, annotation.y_coordinate);
+            this.ctx.fillStyle = annotation.color;
+            this.ctx.font = `${annotation.font_size}px Arial`;
+            this.ctx.fillText(annotation.text, canvasPos.x, canvasPos.y);
+        });
+        
+        this.ctx.restore();
+    }
+    
+    drawCrosshair() {
+        if (!this.currentImage) return;
+        
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        
+        this.ctx.save();
+        this.ctx.strokeStyle = 'yellow';
+        this.ctx.lineWidth = 1;
+        this.ctx.setLineDash([5, 5]);
+        
+        this.ctx.beginPath();
+        this.ctx.moveTo(centerX, 0);
+        this.ctx.lineTo(centerX, this.canvas.height);
+        this.ctx.moveTo(0, centerY);
+        this.ctx.lineTo(this.canvas.width, centerY);
+        this.ctx.stroke();
+        
+        this.ctx.restore();
+    }
+    
+    updateOverlayLabels() {
+        const wlInfo = document.getElementById('wl-info');
+        const zoomInfo = document.getElementById('zoom-info');
+        
+        if (wlInfo) {
+            wlInfo.innerHTML = `WW: ${this.windowWidth}<br>WL: ${this.windowLevel}<br>Slice: ${this.currentImageIndex + 1}/${this.currentImages.length}`;
+        }
+        
+        if (zoomInfo) {
+            zoomInfo.innerHTML = `Zoom: ${Math.round(this.zoomFactor * 100)}%`;
+        }
+    }
+    
+    handleToolClick(tool) {
+        this.activeTool = tool;
+        
+        switch (tool) {
+            case 'windowing':
+                this.canvas.style.cursor = 'default';
+                break;
+            case 'zoom':
+                this.canvas.style.cursor = 'zoom-in';
+                break;
+            case 'pan':
+                this.canvas.style.cursor = 'grab';
+                break;
+            case 'measure':
+                this.canvas.style.cursor = 'crosshair';
+                break;
+            case 'ellipse':
+                this.canvas.style.cursor = 'crosshair';
+                break;
+            case 'annotate':
+                this.canvas.style.cursor = 'text';
+                break;
+            case 'crosshair':
+                this.crosshair = !this.crosshair;
+                this.updateDisplay();
+                break;
+            case 'invert':
+                this.inverted = !this.inverted;
+                this.loadCurrentImage();
+                break;
+            case 'reset':
+                this.resetView();
+                break;
+            case 'volume':
+                this.volumeTool = !this.volumeTool;
+                break;
+        }
+    }
+    
+    applyPreset(preset) {
+        if (this.windowPresets[preset]) {
+            this.windowWidth = this.windowPresets[preset].ww;
+            this.windowLevel = this.windowPresets[preset].wl;
+            this.updateSliders();
+            this.loadCurrentImage();
+        }
+    }
+    
+    resetView() {
+        this.zoomFactor = 1.0;
+        this.panX = 0;
+        this.panY = 0;
+        this.windowWidth = 400;
+        this.windowLevel = 40;
+        this.inverted = false;
+        this.updateSliders();
+        this.updateDisplay();
+    }
+    
+    onMouseDown(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        this.isDragging = true;
+        this.dragStart = { x, y };
+        
+        if (this.activeTool === 'pan') {
+            this.canvas.style.cursor = 'grabbing';
+        }
+    }
+    
+    onMouseMove(e) {
+        if (!this.isDragging) return;
+        
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        if (this.activeTool === 'pan') {
+            this.panX += x - this.dragStart.x;
+            this.panY += y - this.dragStart.y;
+            this.dragStart = { x, y };
+            this.updateDisplay();
+        }
+    }
+    
+    onMouseUp(e) {
+        this.isDragging = false;
+        this.dragStart = null;
+        
+        if (this.activeTool === 'pan') {
+            this.canvas.style.cursor = 'grab';
+        }
+    }
+    
+    onWheel(e) {
+        e.preventDefault();
+        
+        if (this.activeTool === 'zoom') {
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            this.zoomFactor *= delta;
+            this.zoomFactor = Math.max(0.1, Math.min(5, this.zoomFactor));
+            this.updateDisplay();
+        }
+    }
+    
+    onDoubleClick(e) {
+        if (this.activeTool === 'annotate') {
+            const rect = this.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const imagePos = this.canvasToImageCoords(x, y);
             
-            if (infoPixelSpacing && currentImageData.pixel_spacing_x && currentImageData.pixel_spacing_y) {
-                infoPixelSpacing.textContent = `${currentImageData.pixel_spacing_x} × ${currentImageData.pixel_spacing_y} mm`;
-            }
-            
-            if (infoSeries && currentImageData.series_description) {
-                infoSeries.textContent = currentImageData.series_description;
-            }
-            
-            if (infoInstitution && this.currentStudy.institution_name) {
-                infoInstitution.textContent = this.currentStudy.institution_name;
+            const text = prompt('Enter annotation text:');
+            if (text) {
+                this.addAnnotation(imagePos.x, imagePos.y, text);
             }
         }
     }
     
-    // Add a global function to manually trigger study loading (for debugging)
-    static loadStudyFromWorklist(studyId) {
-        if (window.viewer) {
-            window.viewer.loadStudy(studyId);
+    imageToCanvasCoords(imageX, imageY) {
+        if (!this.currentImage) return { x: imageX, y: imageY };
+        
+        const scale = this.getScale();
+        const displayWidth = this.currentImage.image.width * scale;
+        const displayHeight = this.currentImage.image.height * scale;
+        const canvasDisplayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const canvasDisplayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        const x = (canvasDisplayWidth - displayWidth) / 2 + this.panX;
+        const y = (canvasDisplayHeight - displayHeight) / 2 + this.panY;
+        
+        return {
+            x: x + imageX * scale,
+            y: y + imageY * scale
+        };
+    }
+    
+    canvasToImageCoords(canvasX, canvasY) {
+        if (!this.currentImage) return { x: canvasX, y: canvasY };
+        
+        const scale = this.getScale();
+        const displayWidth = this.currentImage.image.width * scale;
+        const displayHeight = this.currentImage.image.height * scale;
+        const canvasDisplayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const canvasDisplayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        const x = (canvasDisplayWidth - displayWidth) / 2 + this.panX;
+        const y = (canvasDisplayHeight - displayHeight) / 2 + this.panY;
+        
+        return {
+            x: (canvasX - x) / scale,
+            y: (canvasY - y) / scale
+        };
+    }
+    
+    async addMeasurement(measurementData) {
+        try {
+            const response = await fetch('/viewer/api/measurements/save/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                },
+                body: JSON.stringify(measurementData)
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                this.measurements.push(result.measurement);
+                this.updateMeasurementsList();
+                this.updateDisplay();
+            }
+        } catch (error) {
+            console.error('Error saving measurement:', error);
+        }
+    }
+    
+    async addAnnotation(x, y, text) {
+        try {
+            const response = await fetch('/viewer/api/annotations/save/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                },
+                body: JSON.stringify({
+                    image_id: this.currentImage.id,
+                    x_coordinate: x,
+                    y_coordinate: y,
+                    text: text
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                this.annotations.push(result.annotation);
+                this.updateDisplay();
+            }
+        } catch (error) {
+            console.error('Error saving annotation:', error);
+        }
+    }
+    
+    async loadMeasurements() {
+        if (!this.currentImage) return;
+        
+        try {
+            const response = await fetch(`/viewer/api/images/${this.currentImage.id}/measurements/`);
+            if (response.ok) {
+                const data = await response.json();
+                this.measurements = data.measurements || [];
+            }
+        } catch (error) {
+            console.error('Error loading measurements:', error);
+        }
+    }
+    
+    async loadAnnotations() {
+        if (!this.currentImage) return;
+        
+        try {
+            const response = await fetch(`/viewer/api/images/${this.currentImage.id}/annotations/`);
+            if (response.ok) {
+                const data = await response.json();
+                this.annotations = data.annotations || [];
+            }
+        } catch (error) {
+            console.error('Error loading annotations:', error);
+        }
+    }
+    
+    updateMeasurementsList() {
+        const measurementsList = document.getElementById('measurements-list');
+        if (!measurementsList) return;
+        
+        measurementsList.innerHTML = '';
+        this.measurements.forEach((measurement, index) => {
+            const item = document.createElement('div');
+            item.className = 'measurement-item';
+            item.innerHTML = `
+                <span>${measurement.measurement_type}: ${measurement.value.toFixed(1)} ${measurement.unit}</span>
+                <button onclick="viewer.deleteMeasurement(${index})">×</button>
+            `;
+            measurementsList.appendChild(item);
+        });
+    }
+    
+    async clearMeasurements() {
+        if (!this.currentImage) return;
+        
+        try {
+            const response = await fetch(`/viewer/api/images/${this.currentImage.id}/clear-measurements/`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': this.getCSRFToken()
+                }
+            });
+            
+            if (response.ok) {
+                this.measurements = [];
+                this.updateMeasurementsList();
+                this.updateDisplay();
+            }
+        } catch (error) {
+            console.error('Error clearing measurements:', error);
+        }
+    }
+    
+    deleteMeasurement(index) {
+        if (index >= 0 && index < this.measurements.length) {
+            this.measurements.splice(index, 1);
+            this.updateMeasurementsList();
+            this.updateDisplay();
+        }
+    }
+    
+    getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
+    getCSRFToken() {
+        const token = this.getCookie('csrftoken');
+        if (!token) {
+            console.warn('CSRF token not found');
+            return '';
+        }
+        return token;
+    }
+    
+    redraw() {
+        this.updateDisplay();
+    }
+    
+    setupNotifications() {
+        // Check for notifications every 30 seconds
+        this.notificationCheckInterval = setInterval(() => {
+            this.checkNotifications();
+        }, 30000);
+    }
+    
+    async checkNotifications() {
+        try {
+            const response = await fetch('/worklist/api/notifications/count/');
+            if (response.ok) {
+                const data = await response.json();
+                const countElement = document.getElementById('notification-count');
+                if (countElement) {
+                    countElement.textContent = data.count;
+                }
+            }
+        } catch (error) {
+            console.error('Error checking notifications:', error);
+        }
+    }
+    
+    setupMeasurementUnitSelector() {
+        const unitSelector = document.getElementById('measurement-unit');
+        if (unitSelector) {
+            unitSelector.addEventListener('change', (e) => {
+                this.measurementUnit = e.target.value;
+            });
+        }
+    }
+    
+    setup3DControls() {
+        // 3D reconstruction controls
+        const threeDButtons = document.querySelectorAll('[data-3d-type]');
+        threeDButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const type = btn.getAttribute('data-3d-type');
+                this.apply3DReconstruction(type);
+            });
+        });
+    }
+    
+    setupAIPanel() {
+        // AI analysis controls
+        const aiButtons = document.querySelectorAll('[data-ai-type]');
+        aiButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const type = btn.getAttribute('data-ai-type');
+                this.performAIAnalysis(type);
+            });
+        });
+    }
+    
+    async performAIAnalysis(analysisType = 'general') {
+        if (!this.currentImage) {
+            this.showError('No image loaded for AI analysis');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/viewer/api/images/${this.currentImage.id}/ai-analysis/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                },
+                body: JSON.stringify({
+                    analysis_type: analysisType
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                this.displayAIResults(result);
+            } else {
+                throw new Error('AI analysis failed');
+            }
+        } catch (error) {
+            console.error('AI analysis error:', error);
+            this.showError('AI analysis failed: ' + error.message);
+        }
+    }
+    
+    displayAIResults(results) {
+        const aiResultsDiv = document.getElementById('ai-results');
+        if (aiResultsDiv) {
+            aiResultsDiv.innerHTML = `
+                <h4>AI Analysis Results</h4>
+                <p><strong>Summary:</strong> ${results.summary}</p>
+                <p><strong>Confidence:</strong> ${(results.confidence_score * 100).toFixed(1)}%</p>
+                <button onclick="viewer.toggleAIHighlights()">Toggle Highlights</button>
+                <button onclick="viewer.copyAIResults()">Copy Results</button>
+            `;
+            aiResultsDiv.style.display = 'block';
+        }
+        
+        this.aiAnalysisResults = results;
+    }
+    
+    toggleAIHighlights() {
+        this.showAIHighlights = !this.showAIHighlights;
+        this.updateDisplay();
+    }
+    
+    copyAIResults() {
+        if (this.aiAnalysisResults) {
+            const text = `AI Analysis Results:\nSummary: ${this.aiAnalysisResults.summary}\nConfidence: ${(this.aiAnalysisResults.confidence_score * 100).toFixed(1)}%`;
+            navigator.clipboard.writeText(text);
+        }
+    }
+    
+    async apply3DReconstruction(type = 'mpr') {
+        if (!this.currentSeries) {
+            this.showError('No series selected for 3D reconstruction');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/viewer/api/series/${this.currentSeries.id}/3d-reconstruction/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                },
+                body: JSON.stringify({
+                    reconstruction_type: type
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                this.show3DResult(result, type);
+            } else {
+                throw new Error('3D reconstruction failed');
+            }
+        } catch (error) {
+            console.error('3D reconstruction error:', error);
+            this.showError('3D reconstruction failed: ' + error.message);
+        }
+    }
+    
+    show3DResult(data, type) {
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>3D Reconstruction: ${type.toUpperCase()}</h2>
+                <div id="3d-viewer"></div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        const closeBtn = modal.querySelector('.close');
+        closeBtn.onclick = () => modal.remove();
+        
+        // Display 3D reconstruction data
+        const viewer = modal.querySelector('#3d-viewer');
+        if (data.images && data.images.length > 0) {
+            viewer.innerHTML = data.images.map(img => `<img src="${img}" style="max-width: 100%; margin: 10px;">`).join('');
         } else {
-            console.error('Viewer not initialized');
+            viewer.innerHTML = '<p>No 3D reconstruction data available</p>';
         }
     }
 }
 
-// Add initialization check
+// Initialize viewer when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM loaded, checking for initial study ID:', window.initialStudyId);
+    console.log('DOM loaded, initializing viewer...');
     
-    // Ensure viewer is properly initialized with initial study
-    if (window.initialStudyId && window.viewer) {
-        console.log('Found initial study ID and viewer, ensuring proper initialization');
-        setTimeout(() => {
-            if (window.viewer && !window.viewer.currentStudy) {
-                console.log('Viewer exists but no study loaded, attempting to load initial study');
-                window.viewer.loadStudy(window.initialStudyId);
+    // Wait a bit for the main dicom_viewer.js to load
+    setTimeout(() => {
+        // Initialize the viewer with the initial study ID
+        if (typeof DicomViewer !== 'undefined') {
+            // Check if viewer is already initialized
+            if (!window.viewer) {
+                window.viewer = new DicomViewer(window.initialStudyId);
+                console.log('Viewer initialized with study ID:', window.initialStudyId);
+            } else {
+                console.log('Viewer already initialized, ensuring study is loaded');
+                if (window.initialStudyId && !window.viewer.currentStudy) {
+                    window.viewer.loadStudy(window.initialStudyId);
+                }
             }
-        }, 1000);
-    }
+        } else {
+            console.error('DicomViewer class not found');
+        }
+        
+        // Load clinical info for initial study if present
+        if (window.initialStudyId && window.loadClinicalInfo) {
+            window.loadClinicalInfo(window.initialStudyId);
+        }
+    }, 100);
 });
-
-// Export for global access
-window.DicomViewer = DicomViewer;
-window.loadStudyFromWorklist = DicomViewer.loadStudyFromWorklist;
