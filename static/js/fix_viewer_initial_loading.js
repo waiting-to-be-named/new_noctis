@@ -6,6 +6,8 @@ if (typeof DicomViewer !== 'undefined') {
     const originalInit = DicomViewer.prototype.init;
     
     DicomViewer.prototype.init = async function() {
+        console.log('Initializing DicomViewer with initialStudyId:', this.initialStudyId);
+        
         this.setupCanvas();
         this.setupEventListeners();
         await this.loadBackendStudies();
@@ -18,6 +20,9 @@ if (typeof DicomViewer !== 'undefined') {
         if (this.initialStudyId) {
             console.log('Loading initial study:', this.initialStudyId);
             try {
+                // Show loading state
+                this.showLoadingState();
+                
                 await this.loadStudy(this.initialStudyId);
                 
                 // Force UI updates after loading
@@ -57,6 +62,19 @@ if (typeof DicomViewer !== 'undefined') {
         }
     };
     
+    // Add loading state method
+    DicomViewer.prototype.showLoadingState = function() {
+        if (this.ctx) {
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '20px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText('Loading study from worklist...', this.canvas.width / 2, this.canvas.height / 2);
+        }
+    };
+    
     // Improve the loadStudy method to ensure proper UI updates
     const originalLoadStudy = DicomViewer.prototype.loadStudy;
     
@@ -65,13 +83,7 @@ if (typeof DicomViewer !== 'undefined') {
             console.log(`Loading study ${studyId}...`);
             
             // Show loading indicator
-            this.ctx.fillStyle = '#000';
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-            this.ctx.fillStyle = '#fff';
-            this.ctx.font = '20px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            this.ctx.fillText('Loading study...', this.canvas.width / 2, this.canvas.height / 2);
+            this.showLoadingState();
             
             const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
             
@@ -198,3 +210,19 @@ window.loadStudyFromWorklist = function(studyId) {
         console.error('Viewer not initialized');
     }
 };
+
+// Add initialization check
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, checking for initial study ID:', window.initialStudyId);
+    
+    // Ensure viewer is properly initialized with initial study
+    if (window.initialStudyId && window.viewer) {
+        console.log('Found initial study ID and viewer, ensuring proper initialization');
+        setTimeout(() => {
+            if (window.viewer && !window.viewer.currentStudy) {
+                console.log('Viewer exists but no study loaded, attempting to load initial study');
+                window.viewer.loadStudy(window.initialStudyId);
+            }
+        }, 1000);
+    }
+});

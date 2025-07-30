@@ -294,6 +294,7 @@
         // Set initial study ID if provided by the backend
         {% if initial_study_id %}
             window.initialStudyId = {{ initial_study_id }};
+            console.log('Initial study ID set from backend:', window.initialStudyId);
         {% endif %}
         
         {% if initial_study_error %}
@@ -342,11 +343,33 @@
                 });
         }
         
-        // Load clinical info for initial study if present
+        // Initialize viewer with initial study ID
         document.addEventListener('DOMContentLoaded', function() {
-            if (window.initialStudyId) {
-                loadClinicalInfo(window.initialStudyId);
-            }
+            console.log('DOM loaded, initializing viewer...');
+            
+            // Wait a bit for the main dicom_viewer.js to load
+            setTimeout(() => {
+                // Initialize the viewer with the initial study ID
+                if (typeof DicomViewer !== 'undefined') {
+                    // Check if viewer is already initialized
+                    if (!window.viewer) {
+                        window.viewer = new DicomViewer(window.initialStudyId);
+                        console.log('Viewer initialized with study ID:', window.initialStudyId);
+                    } else {
+                        console.log('Viewer already initialized, ensuring study is loaded');
+                        if (window.initialStudyId && !window.viewer.currentStudy) {
+                            window.viewer.loadStudy(window.initialStudyId);
+                        }
+                    }
+                } else {
+                    console.error('DicomViewer class not found');
+                }
+                
+                // Load clinical info for initial study if present
+                if (window.initialStudyId) {
+                    loadClinicalInfo(window.initialStudyId);
+                }
+            }, 100);
         });
     </script>
     <script src="{% static 'js/dicom_viewer.js' %}"></script>
