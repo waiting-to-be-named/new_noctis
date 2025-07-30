@@ -3,7 +3,16 @@
 class DicomViewer {
     constructor(initialStudyId = null) {
         this.canvas = document.getElementById('dicom-canvas');
+        if (!this.canvas) {
+            console.error('Canvas element not found! Make sure element with id "dicom-canvas" exists.');
+            return;
+        }
+        
         this.ctx = this.canvas.getContext('2d');
+        if (!this.ctx) {
+            console.error('Failed to get 2D context from canvas!');
+            return;
+        }
         
         // State variables
         this.currentStudy = null;
@@ -891,11 +900,15 @@ class DicomViewer {
             
             // Update display and UI after successful loading
             this.resizeCanvas(); // Ensure canvas is properly sized
-            this.updateDisplay();
-            this.loadMeasurements();
-            this.loadAnnotations();
-            this.updatePatientInfo();
-            this.updateSliders();
+            
+            // Give a small delay to ensure image is fully processed
+            setTimeout(() => {
+                this.updateDisplay();
+                this.loadMeasurements();
+                this.loadAnnotations();
+                this.updatePatientInfo();
+                this.updateSliders();
+            }, 50);
             
             console.log('Image loading completed successfully');
             
@@ -1010,25 +1023,33 @@ class DicomViewer {
     }
     
     updateDisplay() {
+        if (!this.canvas || !this.ctx) {
+            console.error('Canvas or context not initialized');
+            return;
+        }
+        
+        // Clear the entire canvas first
+        this.ctx.save();
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+        this.ctx.fillStyle = '#000';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.restore();
+        
         // Get canvas display dimensions
         const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
         const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
         
         if (!this.currentImage) {
             // Show "No image loaded" state
-            this.ctx.fillStyle = '#000';
-            this.ctx.fillRect(0, 0, displayWidth, displayHeight);
+            this.ctx.save();
             this.ctx.fillStyle = '#666';
             this.ctx.font = '16px Arial';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
             this.ctx.fillText('No image loaded', displayWidth / 2, displayHeight / 2);
+            this.ctx.restore();
             return;
         }
-        
-        // Clear canvas with black background
-        this.ctx.fillStyle = '#000';
-        this.ctx.fillRect(0, 0, displayWidth, displayHeight);
         
         // Ensure image smoothing is disabled for medical images
         this.ctx.imageSmoothingEnabled = false;
@@ -1057,10 +1078,14 @@ class DicomViewer {
             this.ctx.filter = 'invert(1)';
         }
         
-        this.ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
-        this.ctx.restore();
+        try {
+            this.ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
+            console.log(`Image drawn successfully: ${scaledWidth}x${scaledHeight} at (${x}, ${y}), scale: ${scale}`);
+        } catch (error) {
+            console.error('Error drawing image:', error);
+        }
         
-        console.log(`Image drawn: ${scaledWidth}x${scaledHeight} at (${x}, ${y}), scale: ${scale}`);
+        this.ctx.restore();
         
         // Update overlay labels with current image info
         this.updateOverlayLabels();
@@ -2845,7 +2870,7 @@ Pixel Count: ${data.pixel_count}`;
             
             // Load the first image
             if (this.currentImages.length > 0) {
-                await this.loadImage(0);
+                await this.loadCurrentImage();
                 this.updateImageControls();
             }
             
