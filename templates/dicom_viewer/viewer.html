@@ -14,13 +14,15 @@
             bottom: 0;
             left: 0;
             right: 0;
-            background: rgba(0, 0, 0, 0.9);
+            background: rgba(0, 0, 0, 0.95);
             color: white;
             padding: 15px;
             z-index: 1000;
-            max-height: 200px;
+            max-height: 250px;
             overflow-y: auto;
             display: none;
+            border-top: 2px solid #007bff;
+            backdrop-filter: blur(10px);
         }
         
         .series-selector.show {
@@ -640,6 +642,20 @@
             initializeEnhancedUpload();
             initializeSeriesSelector();
             initializeEnhancedControls();
+            
+            // Initialize viewer with proper error handling
+            if (typeof DicomViewer !== 'undefined') {
+                try {
+                    // Get study ID from URL parameters
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const studyId = urlParams.get('study_id');
+                    
+                    window.viewer = new DicomViewer(studyId);
+                } catch (error) {
+                    console.error('Error initializing DicomViewer:', error);
+                    showError('Failed to initialize viewer. Please refresh the page.');
+                }
+            }
         });
         
         function initializeEnhancedUpload() {
@@ -912,6 +928,26 @@
                 closeEnhancedUpload();
             }
         });
+        
+        // Global error handling function
+        function showError(message) {
+            console.error('Error:', message);
+            alert('Error: ' + message);
+        }
+        
+        // Global clinical info toggle function
+        function toggleClinicalInfo() {
+            const content = document.getElementById('clinical-info-content');
+            const button = document.querySelector('.btn-toggle i');
+            
+            if (content.classList.contains('collapsed')) {
+                content.classList.remove('collapsed');
+                button.className = 'fas fa-chevron-up';
+            } else {
+                content.classList.add('collapsed');
+                button.className = 'fas fa-chevron-down';
+            }
+        }
     </script>
 </body>
 </html>
