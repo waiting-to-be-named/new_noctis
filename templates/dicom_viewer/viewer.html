@@ -688,7 +688,13 @@
 
     <!-- Series Position Controls -->
     <!-- Removed as series selector is always at bottom -->
-
+    {% comment %}Expose initial study ID for JS initialization{% endcomment %}
+    <script>
+        // Provide the initial study ID from the Django context to the JS viewer
+        window.initialStudyId = {% if initial_study_id %}{{ initial_study_id }}{% else %}null{% endif %};
+    </script>
+    
+    <!-- Main viewer logic -->
     <script src="{% static 'js/dicom_viewer.js' %}"></script>
     <script>
         // Enhanced upload functionality
