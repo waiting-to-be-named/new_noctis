@@ -134,22 +134,28 @@ class DicomViewer {
     }
     
     setupCanvas() {
-        // Set canvas size
+        // Set canvas size with improved resolution handling
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
+        
+        // Set up image smoothing for medical images
+        this.ctx.imageSmoothingEnabled = false; // Preserve sharp medical image details
+        this.ctx.imageSmoothingQuality = 'high';
     }
     
     resizeCanvas() {
         const viewport = document.querySelector('.viewport');
         if (viewport) {
-            // Use devicePixelRatio for high-DPI displays
-            const devicePixelRatio = window.devicePixelRatio || 1;
+            // Use high devicePixelRatio for crisp medical images
+            const devicePixelRatio = Math.max(window.devicePixelRatio || 1, 2);
             const displayWidth = viewport.clientWidth;
             const displayHeight = viewport.clientHeight;
             
+            // Set actual canvas dimensions for high resolution
             this.canvas.width = displayWidth * devicePixelRatio;
             this.canvas.height = displayHeight * devicePixelRatio;
             
+            // Set CSS dimensions for display
             this.canvas.style.width = displayWidth + 'px';
             this.canvas.style.height = displayHeight + 'px';
             
@@ -157,7 +163,14 @@ class DicomViewer {
             this.ctx.setTransform(1, 0, 0, 1, 0, 0);
             this.ctx.scale(devicePixelRatio, devicePixelRatio);
             
-            this.redraw();
+            // Disable image smoothing for medical images
+            this.ctx.imageSmoothingEnabled = false;
+            this.ctx.imageSmoothingQuality = 'high';
+            
+            // Force redraw if image is loaded
+            if (this.currentImage) {
+                this.redraw();
+            }
         }
     }
     
@@ -170,7 +183,7 @@ class DicomViewer {
             });
         });
         
-        // Dropdown functionality
+        // Enhanced dropdown functionality with dynamic positioning
         document.querySelectorAll('.dropdown-toggle').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -185,6 +198,13 @@ class DicomViewer {
                 
                 // Toggle current dropdown
                 const dropdownTool = btn.closest('.dropdown-tool');
+                const dropdownMenu = dropdownTool.querySelector('.dropdown-menu');
+                
+                if (!dropdownTool.classList.contains('active')) {
+                    // About to show - calculate optimal position
+                    this.positionDropdown(dropdownTool, dropdownMenu);
+                }
+                
                 dropdownTool.classList.toggle('active');
             });
         });
@@ -777,64 +797,112 @@ class DicomViewer {
     async loadCurrentImage() {
         if (!this.currentImages.length) {
             console.log('No images available');
+            this.updateDisplay(); // Show "no image" state
             return;
         }
         
         const imageData = this.currentImages[this.currentImageIndex];
         console.log(`Loading image ${this.currentImageIndex + 1}/${this.currentImages.length}, ID: ${imageData.id}`);
         
+        // Show loading state
+        this.ctx.fillStyle = '#000';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.fillStyle = '#00ff00';
+        this.ctx.font = '16px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        this.ctx.fillText('Loading image...', displayWidth / 2, displayHeight / 2);
+        
         try {
+            // Request high-quality image data
             const params = new URLSearchParams({
                 window_width: this.windowWidth,
                 window_level: this.windowLevel,
-                inverted: this.inverted
+                inverted: this.inverted,
+                high_quality: 'true', // Request high quality rendering
+                preserve_aspect: 'true'
             });
             
             const response = await fetch(`/viewer/api/images/${imageData.id}/data/?${params}`);
             
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                throw new Error(`Failed to load image: HTTP ${response.status} - ${response.statusText}`);
             }
             
             const data = await response.json();
             
-            if (data.image_data) {
-                const img = new Image();
+            if (!data.image_data) {
+                throw new Error(data.error || 'No image data received from server');
+            }
+            
+            // Create and load the image with proper error handling
+            const img = new Image();
+            
+            // Set up image loading promise for better control
+            const imageLoadPromise = new Promise((resolve, reject) => {
                 img.onload = () => {
-                    console.log('Image loaded successfully');
+                    console.log(`Image loaded successfully: ${img.width}x${img.height}`);
+                    
+                    // Store image with enhanced metadata
                     this.currentImage = {
                         image: img,
                         metadata: data.metadata,
                         id: imageData.id,
-                        rows: data.metadata.rows,
-                        columns: data.metadata.columns,
-                        pixel_spacing_x: data.metadata.pixel_spacing_x,
-                        pixel_spacing_y: data.metadata.pixel_spacing_y,
-                        pixel_spacing: `${data.metadata.pixel_spacing_x},${data.metadata.pixel_spacing_y}`,
-                        slice_thickness: data.metadata.slice_thickness,
+                        rows: data.metadata.rows || img.height,
+                        columns: data.metadata.columns || img.width,
+                        pixel_spacing_x: data.metadata.pixel_spacing_x || 1.0,
+                        pixel_spacing_y: data.metadata.pixel_spacing_y || 1.0,
+                        pixel_spacing: data.metadata.pixel_spacing || `${data.metadata.pixel_spacing_x || 1.0},${data.metadata.pixel_spacing_y || 1.0}`,
+                        slice_thickness: data.metadata.slice_thickness || 1.0,
                         width: img.width,
-                        height: img.height
+                        height: img.height,
+                        window_width: this.windowWidth,
+                        window_level: this.windowLevel,
+                        original_width: data.metadata.columns || img.width,
+                        original_height: data.metadata.rows || img.height
                     };
-                    // Ensure canvas is properly sized before drawing
-                    this.resizeCanvas();
-                    this.updateDisplay();
-                    this.loadMeasurements();
-                    this.loadAnnotations();
-                    this.updatePatientInfo();
+                    
+                    resolve();
                 };
+                
                 img.onerror = (error) => {
-                    console.error('Failed to load image data:', error);
-                    console.error('Image source:', img.src);
-                    this.showError('Failed to load image. Please try refreshing or selecting another image.');
+                    console.error('Image loading failed:', error);
+                    console.error('Image source length:', data.image_data ? data.image_data.length : 'N/A');
+                    reject(new Error('Failed to decode image data'));
                 };
-                img.src = data.image_data;
-            } else {
-                throw new Error(data.error || 'No image data received');
-            }
+            });
+            
+            // Set image source (base64 data URL)
+            img.src = data.image_data;
+            
+            // Wait for image to load
+            await imageLoadPromise;
+            
+            // Update display and UI after successful loading
+            this.resizeCanvas(); // Ensure canvas is properly sized
+            this.updateDisplay();
+            this.loadMeasurements();
+            this.loadAnnotations();
+            this.updatePatientInfo();
+            this.updateSliders();
+            
+            console.log('Image loading completed successfully');
             
         } catch (error) {
             console.error('Error loading image:', error);
-            this.showError('Error loading image: ' + error.message);
+            this.showError(`Error loading image: ${error.message}`);
+            
+            // Show error state in canvas
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.fillStyle = '#ff0000';
+            this.ctx.font = '14px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText('Failed to load image', displayWidth / 2, displayHeight / 2 - 10);
+            this.ctx.fillText(error.message, displayWidth / 2, displayHeight / 2 + 10);
         }
     }
     
@@ -933,52 +1001,70 @@ class DicomViewer {
     }
     
     updateDisplay() {
-        if (!this.currentImage) return;
+        if (!this.currentImage) {
+            // Show "No image loaded" state
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.fillStyle = '#666';
+            this.ctx.font = '16px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+            const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+            this.ctx.fillText('No image loaded', displayWidth / 2, displayHeight / 2);
+            return;
+        }
         
         // Clear canvas with black background
         this.ctx.fillStyle = '#000';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // Calculate display parameters
+        // Ensure image smoothing is disabled for medical images
+        this.ctx.imageSmoothingEnabled = false;
+        this.ctx.imageSmoothingQuality = 'high';
+        
+        // Calculate display parameters with improved scaling
         const img = this.currentImage.image;
         const scale = this.getScale();
         
         const displayWidth = img.width * scale;
         const displayHeight = img.height * scale;
-        // Use display dimensions for positioning
+        
+        // Use display dimensions for accurate positioning
         const canvasDisplayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
         const canvasDisplayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        
+        // Center the image with pan offset
         const x = (canvasDisplayWidth - displayWidth) / 2 + this.panX;
         const y = (canvasDisplayHeight - displayHeight) / 2 + this.panY;
         
-        // Draw image
+        // Draw image with high quality
+        this.ctx.save();
         this.ctx.drawImage(img, x, y, displayWidth, displayHeight);
+        this.ctx.restore();
         
-        // Draw measurements after the image
-        this.drawMeasurements();
-        
-        // Draw annotations
-        this.drawAnnotations();
-        
-        // Draw crosshair if enabled
-        if (this.crosshair) {
-            this.drawCrosshair();
-        }
-        
-        // Update overlay labels
+        // Update overlay labels with current image info
         this.updateOverlayLabels();
     }
     
-    // New helper to calculate the current pixel scale while preventing unintended up-scaling
+    // Enhanced scale calculation with better quality preservation
     getScale() {
         if (!this.currentImage) return 1;
+        
         const img = this.currentImage.image;
-        // Use the display size (style dimensions) instead of canvas dimensions for scaling
         const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
         const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
-        const baseScale = Math.min(displayWidth / img.width, displayHeight / img.height);
-        const clampedBase = baseScale > 1 ? 1 : baseScale; // never upscale automatically
-        return this.zoomFactor * clampedBase;
+        
+        // Calculate base scale to fit image in viewport
+        const scaleX = displayWidth / img.width;
+        const scaleY = displayHeight / img.height;
+        const baseScale = Math.min(scaleX, scaleY);
+        
+        // For medical images, prefer 1:1 pixel mapping when possible
+        const optimalScale = baseScale > 1 ? 1 : baseScale;
+        
+        // Apply user zoom factor
+        return this.zoomFactor * optimalScale;
     }
     
     drawMeasurements() {
@@ -1937,12 +2023,23 @@ class DicomViewer {
     }
     
     redraw() {
+        // First update the main image display
         this.updateDisplay();
-        this.drawMeasurements();
-        this.drawAnnotations();
-        this.drawAIHighlights();
-        this.drawVolumeContour();
-        this.drawCrosshair();
+        
+        // Then draw overlays in proper order
+        if (this.currentImage) {
+            this.drawMeasurements();
+            this.drawAnnotations();
+            this.drawAIHighlights();
+            this.drawVolumeContour();
+            
+            // Draw crosshair if enabled
+            if (this.crosshair) {
+                this.drawCrosshair();
+            }
+        }
+        
+        // Always update overlay labels last
         this.updateOverlayLabels();
     }
 
@@ -2792,6 +2889,42 @@ Pixel Count: ${data.pixel_count}`;
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
             this.ctx.fillText('No image loaded', this.canvas.width / 2, this.canvas.height / 2);
+        }
+    }
+
+    // Dynamic dropdown positioning to prevent overflow
+    positionDropdown(dropdownTool, dropdownMenu) {
+        const toolRect = dropdownTool.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        const viewportWidth = window.innerWidth;
+        
+        // Reset positioning classes
+        dropdownTool.classList.remove('bottom-aligned', 'left-aligned');
+        
+        // Calculate available space
+        const spaceBelow = viewportHeight - toolRect.bottom;
+        const spaceAbove = toolRect.top;
+        const spaceRight = viewportWidth - toolRect.right;
+        
+        // Estimate dropdown dimensions (before it's shown)
+        const estimatedHeight = 300; // Approximate dropdown height
+        const estimatedWidth = 250;  // Approximate dropdown width
+        
+        // Vertical positioning
+        if (spaceBelow < estimatedHeight && spaceAbove > spaceBelow) {
+            dropdownTool.classList.add('bottom-aligned');
+        }
+        
+        // Horizontal positioning  
+        if (spaceRight < estimatedWidth) {
+            dropdownTool.classList.add('left-aligned');
+        }
+        
+        // For very small screens, ensure dropdown fits
+        if (viewportHeight < 600) {
+            dropdownMenu.style.maxHeight = `${viewportHeight - 100}px`;
+        } else {
+            dropdownMenu.style.maxHeight = ''; // Reset
         }
     }
 }

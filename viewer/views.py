@@ -3040,28 +3040,33 @@ def get_enhanced_image_data(request, image_id):
         window_width = request.GET.get('window_width', image.window_width)
         window_level = request.GET.get('window_level', image.window_center)
         inverted = request.GET.get('inverted', 'false').lower() == 'true'
-        resolution_factor = float(request.GET.get('resolution_factor', '1.0'))
-        density_enhancement = request.GET.get('density_enhancement', 'false').lower() == 'true'
-        contrast_boost = float(request.GET.get('contrast_boost', '1.0'))
+        high_quality = request.GET.get('high_quality', 'false').lower() == 'true'
+        preserve_aspect = request.GET.get('preserve_aspect', 'true').lower() == 'true'
         
-        # Convert to appropriate types
+        # Set defaults if None
         if window_width:
             try:
                 window_width = float(window_width)
-            except (ValueError, TypeError):
+            except ValueError:
                 window_width = 400
         if window_level:
             try:
                 window_level = float(window_level)
-            except (ValueError, TypeError):
+            except ValueError:
                 window_level = 40
         
-        print(f"Processing enhanced image with WW: {window_width}, WL: {window_level}, resolution_factor: {resolution_factor}")
+        print(f"Processing image with WW: {window_width}, WL: {window_level}, inverted: {inverted}, high_quality: {high_quality}")
         
-        # Get enhanced processed image
-        image_base64 = image.get_enhanced_processed_image_base64(
-            window_width, window_level, inverted, resolution_factor, density_enhancement, contrast_boost
-        )
+        # Use enhanced processing for high quality requests
+        if high_quality:
+            image_base64 = image.get_enhanced_processed_image_base64(
+                window_width, window_level, inverted, 
+                resolution_factor=1.5,  # Enhance resolution
+                density_enhancement=True,  # Better tissue differentiation
+                contrast_boost=1.1  # Slight contrast enhancement
+            )
+        else:
+            image_base64 = image.get_processed_image_base64(window_width, window_level, inverted)
         
         if image_base64:
             print(f"Successfully processed enhanced image {image_id}")
