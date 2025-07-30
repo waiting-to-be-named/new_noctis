@@ -221,7 +221,9 @@ class DicomViewer {
         // Worklist button
         const worklistBtn = document.getElementById('worklist-btn');
         if (worklistBtn) {
-            worklistBtn.addEventListener('click', () => {
+            worklistBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log('Worklist button clicked');
                 window.location.href = '/worklist/';
             });
         }
@@ -268,14 +270,7 @@ class DicomViewer {
             });
         }
         
-        // Worklist button - only add event listener if it doesn't already exist
-        const worklistBtn = document.getElementById('worklist-btn');
-        if (worklistBtn && !worklistBtn.hasAttribute('data-listener-added')) {
-            worklistBtn.setAttribute('data-listener-added', 'true');
-            worklistBtn.addEventListener('click', () => {
-                window.location.href = '/worklist/';
-            });
-        }
+
         
         // Clear measurements - only add event listener if it doesn't already exist
         const clearMeasurementsBtn = document.getElementById('clear-measurements');
@@ -2935,4 +2930,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Get initial study ID from global variable (if set by template)
     const initialStudyId = window.initialStudyId || null;
     viewer = new DicomViewer(initialStudyId);
+    window.viewer = viewer; // Make viewer globally accessible
+    console.log('DICOM Viewer initialized');
 });

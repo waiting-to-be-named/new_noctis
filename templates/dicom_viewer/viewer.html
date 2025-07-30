@@ -11,17 +11,20 @@
         /* Enhanced Series Selector Styles */
         .series-selector {
             position: fixed;
-            bottom: 0;
-            left: 0;
+            top: 80px;
+            bottom: 50px;
+            left: auto;
             right: 0;
+            width: 320px;
+            max-width: 90vw;
             background: rgba(0, 0, 0, 0.95);
             color: white;
             padding: 15px;
             z-index: 10001; /* Higher than dropdowns */
-            max-height: 300px; /* Prevent excessive height */
+            max-height: calc(100vh - 130px); /* Prevent excessive height */
             overflow-y: auto;
             display: none;
-            border-top: 2px solid #00ff00;
+            border-left: 2px solid #00ff00;
             backdrop-filter: blur(10px);
         }
         
@@ -164,132 +167,112 @@
             margin-top: 2px;
         }
         
-        /* Enhanced Upload Interface */
-        .enhanced-upload-container {
+        /* Simple Upload Modal */
+        .upload-modal {
             position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
             z-index: 2000;
-            max-width: 500px;
-            width: 90%;
-            display: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
-        .enhanced-upload-container.show {
+        .modal-content {
+            background: #2a2a2a;
+            border-radius: 10px;
+            padding: 0;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            max-width: 500px;
+            width: 90%;
+            color: white;
+        }
+        
+        .modal-header {
+            padding: 20px 30px;
+            border-bottom: 1px solid #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            color: #00ff00;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .close-btn:hover {
+            color: #ff0000;
+        }
+        
+        .modal-body {
+            padding: 30px;
+        }
+        
+        .upload-options {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .upload-option-btn {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 20px;
+            background: #1a1a1a;
+            border: 2px solid #444;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: left;
+        }
+        
+        .upload-option-btn:hover {
+            border-color: #00ff00;
+            background: #0a2a0a;
+        }
+        
+        .upload-option-btn i {
+            font-size: 24px;
+            color: #00ff00;
+            min-width: 30px;
+        }
+        
+        .upload-option-btn span {
+            font-size: 16px;
+            font-weight: bold;
             display: block;
         }
         
-        .upload-header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        
-        .upload-title {
-            font-size: 24px;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 10px;
-        }
-        
-        .upload-subtitle {
-            color: #666;
-            font-size: 14px;
-        }
-        
-        .upload-drop-zone {
-            border: 2px dashed #007bff;
-            border-radius: 10px;
-            padding: 40px 20px;
-            text-align: center;
-            margin-bottom: 20px;
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-        
-        .upload-drop-zone:hover {
-            border-color: #0056b3;
-            background: rgba(0, 123, 255, 0.05);
-        }
-        
-        .upload-drop-zone.dragover {
-            border-color: #28a745;
-            background: rgba(40, 167, 69, 0.1);
-        }
-        
-        .upload-icon {
-            font-size: 48px;
-            color: #007bff;
-            margin-bottom: 15px;
-        }
-        
-        .upload-text {
-            font-size: 16px;
-            color: #333;
-            margin-bottom: 10px;
-        }
-        
-        .upload-hint {
+        .upload-option-btn small {
             font-size: 12px;
-            color: #666;
-        }
-        
-        .upload-progress {
-            margin-top: 20px;
-            display: none;
-        }
-        
-        .progress-bar {
-            width: 100%;
-            height: 20px;
-            background: #f0f0f0;
-            border-radius: 10px;
-            overflow: hidden;
-            margin-bottom: 10px;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #007bff, #0056b3);
-            width: 0%;
-            transition: width 0.3s ease;
-        }
-        
-        .progress-text {
-            font-size: 12px;
-            color: #666;
-            text-align: center;
-        }
-        
-        .upload-stats {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-            margin-top: 15px;
-        }
-        
-        .stat-item {
-            background: #f8f9fa;
-            padding: 10px;
-            border-radius: 5px;
-            text-align: center;
-        }
-        
-        .stat-value {
-            font-size: 18px;
-            font-weight: bold;
-            color: #007bff;
-        }
-        
-        .stat-label {
-            font-size: 11px;
-            color: #666;
+            color: #888;
+            display: block;
             margin-top: 2px;
         }
+        
+
+        
+
         
         /* Enhanced Controls */
         .enhanced-controls {
@@ -458,9 +441,9 @@
                         <i class="fas fa-list"></i>
                         Worklist
                     </button>
-                    <button id="enhanced-upload-btn" class="primary-btn">
-                        <i class="fas fa-upload"></i>
-                        Enhanced Upload
+                    <button id="load-dicom-btn" class="primary-btn">
+                        <i class="fas fa-folder-open"></i>
+                        Load DICOM
                     </button>
                     <button id="series-selector-btn" class="secondary-btn" title="Series Selector">
                         <i class="fas fa-th-large"></i>
@@ -610,51 +593,29 @@
         </div>
     </div>
 
-    <!-- Enhanced Upload Container -->
-    <div class="enhanced-upload-container" id="enhanced-upload-container">
-        <div class="upload-header">
-            <div class="upload-title">Enhanced Bulk Upload</div>
-            <div class="upload-subtitle">Upload large DICOM files with multiple folders</div>
-        </div>
-        
-        <div class="upload-drop-zone" id="upload-drop-zone">
-            <div class="upload-icon">
-                <i class="fas fa-cloud-upload-alt"></i>
+    <!-- Simple DICOM Upload Modal -->
+    <div class="upload-modal" id="upload-modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Load DICOM Files</h3>
+                <button class="close-btn" onclick="closeUploadModal()">&times;</button>
             </div>
-            <div class="upload-text">Drag & Drop files here or click to browse</div>
-            <div class="upload-hint">Supports ZIP, TAR, TAR.GZ archives and individual DICOM files (max 2GB)</div>
-            <input type="file" id="file-input" accept=".zip,.tar,.tar.gz,.dcm,.dicom,.img,.ima" style="display: none;">
-        </div>
-        
-        <div class="upload-progress" id="upload-progress">
-            <div class="progress-bar">
-                <div class="progress-fill" id="progress-fill"></div>
+            <div class="modal-body">
+                <div class="upload-options">
+                    <button class="upload-option-btn" onclick="selectFiles()">
+                        <i class="fas fa-file-medical"></i>
+                        <span>Select DICOM Files</span>
+                        <small>Choose individual DICOM files</small>
+                    </button>
+                    <button class="upload-option-btn" onclick="selectFolder()">
+                        <i class="fas fa-folder"></i>
+                        <span>Select Folder</span>
+                        <small>Choose folder containing DICOM files</small>
+                    </button>
+                </div>
+                <input type="file" id="file-input" multiple accept=".dcm,.dicom,.img,.ima" style="display: none;">
+                <input type="file" id="folder-input" webkitdirectory style="display: none;">
             </div>
-            <div class="progress-text" id="progress-text">Processing...</div>
-            
-            <div class="upload-stats" id="upload-stats">
-                <div class="stat-item">
-                    <div class="stat-value" id="processed-files">0</div>
-                    <div class="stat-label">Files Processed</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="successful-files">0</div>
-                    <div class="stat-label">Successful</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="studies-created">0</div>
-                    <div class="stat-label">Studies Created</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="series-created">0</div>
-                    <div class="stat-label">Series Created</div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="upload-actions">
-            <button class="secondary-btn" onclick="closeEnhancedUpload()">Cancel</button>
-            <button class="primary-btn" id="start-upload-btn" onclick="startEnhancedUpload()">Start Upload</button>
         </div>
     </div>
 
@@ -697,148 +658,12 @@
         
         // Initialize enhanced features
         document.addEventListener('DOMContentLoaded', function() {
-            initializeEnhancedUpload();
             initializeSeriesSelector();
             initializeEnhancedControls();
         });
         
-        function initializeEnhancedUpload() {
-            const dropZone = document.getElementById('upload-drop-zone');
-            const fileInput = document.getElementById('file-input');
-            
-            // Drag and drop functionality
-            dropZone.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                dropZone.classList.add('dragover');
-            });
-            
-            dropZone.addEventListener('dragleave', () => {
-                dropZone.classList.remove('dragover');
-            });
-            
-            dropZone.addEventListener('drop', (e) => {
-                e.preventDefault();
-                dropZone.classList.remove('dragover');
-                const files = e.dataTransfer.files;
-                if (files.length > 0) {
-                    handleFileSelection(files[0]);
-                }
-            });
-            
-            dropZone.addEventListener('click', () => {
-                fileInput.click();
-            });
-            
-            fileInput.addEventListener('change', (e) => {
-                if (e.target.files.length > 0) {
-                    handleFileSelection(e.target.files[0]);
-                }
-            });
-        }
-        
-        function handleFileSelection(file) {
-            // Show upload progress
-            document.getElementById('upload-progress').style.display = 'block';
-            document.getElementById('start-upload-btn').disabled = false;
-            
-            // Store file for upload
-            window.selectedFile = file;
-        }
-        
-        function startEnhancedUpload() {
-            if (!window.selectedFile) {
-                alert('Please select a file first');
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('file', window.selectedFile);
-            
-            // Disable start button
-            document.getElementById('start-upload-btn').disabled = true;
-            
-            fetch('/viewer/api/enhanced-bulk-upload/', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.upload_id) {
-                    currentUploadId = data.upload_id;
-                    startProgressPolling();
-                } else {
-                    alert('Upload failed: ' + (data.error || 'Unknown error'));
-                }
-            })
-            .catch(error => {
-                console.error('Upload error:', error);
-                alert('Upload failed: ' + error.message);
-            });
-        }
-        
-        function startProgressPolling() {
-            if (uploadProgressInterval) {
-                clearInterval(uploadProgressInterval);
-            }
-            
-            uploadProgressInterval = setInterval(() => {
-                fetch(`/viewer/api/enhanced-upload-progress/${currentUploadId}/`)
-                    .then(response => response.json())
-                    .then(data => {
-                        updateUploadProgress(data);
-                        
-                        if (data.status === 'completed' || data.status === 'failed') {
-                            clearInterval(uploadProgressInterval);
-                            handleUploadComplete(data);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Progress polling error:', error);
-                    });
-            }, 1000);
-        }
-        
-        function updateUploadProgress(data) {
-            const progressFill = document.getElementById('progress-fill');
-            const progressText = document.getElementById('progress-text');
-            
-            if (data.total_files > 0) {
-                const percentage = (data.processed_files / data.total_files) * 100;
-                progressFill.style.width = percentage + '%';
-                
-                progressText.textContent = `Processing: ${data.processed_files}/${data.total_files} files`;
-                
-                // Update stats
-                document.getElementById('processed-files').textContent = data.processed_files;
-                document.getElementById('successful-files').textContent = data.successful_files;
-                document.getElementById('studies-created').textContent = data.studies_created || 0;
-                document.getElementById('series-created').textContent = data.series_created || 0;
-            }
-        }
-        
-        function handleUploadComplete(data) {
-            if (data.status === 'completed') {
-                alert(`Upload completed successfully!\nFiles processed: ${data.successful_files}\nStudies created: ${data.studies_created}`);
-                closeEnhancedUpload();
-                // Refresh the viewer if needed
-                if (window.viewer && window.viewer.loadStudies) {
-                    window.viewer.loadStudies();
-                }
-            } else {
-                alert('Upload failed: ' + (data.error || 'Unknown error'));
-            }
-        }
-        
-        function closeEnhancedUpload() {
-            document.getElementById('enhanced-upload-container').classList.remove('show');
-            document.getElementById('upload-progress').style.display = 'none';
-            document.getElementById('start-upload-btn').disabled = false;
-            window.selectedFile = null;
-            
-            if (uploadProgressInterval) {
-                clearInterval(uploadProgressInterval);
-            }
-        }
+
+
         
         // Series selector functionality
         function initializeSeriesSelector() {
@@ -961,17 +786,51 @@
             }
         }
         
-        // Enhanced upload button
-        document.getElementById('enhanced-upload-btn').addEventListener('click', () => {
-            document.getElementById('enhanced-upload-container').classList.add('show');
+        // Load DICOM button
+        document.getElementById('load-dicom-btn').addEventListener('click', () => {
+            document.getElementById('upload-modal').style.display = 'flex';
         });
         
         // Close upload on escape
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                closeEnhancedUpload();
+                closeUploadModal();
             }
         });
+        
+        function closeUploadModal() {
+            document.getElementById('upload-modal').style.display = 'none';
+        }
+        
+        function selectFiles() {
+            document.getElementById('file-input').click();
+        }
+        
+        function selectFolder() {
+            document.getElementById('folder-input').click();
+        }
+        
+        // Handle file selection
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileUpload(e.target.files);
+            }
+        });
+        
+        document.getElementById('folder-input').addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileUpload(e.target.files);
+            }
+        });
+        
+        function handleFileUpload(files) {
+            closeUploadModal();
+            if (window.viewer && window.viewer.uploadDicomFiles) {
+                window.viewer.uploadDicomFiles(files);
+            } else {
+                console.log('Viewer not ready or upload method not available');
+            }
+        }
     </script>
 </body>
 </html>
