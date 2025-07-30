@@ -210,6 +210,31 @@
                     </div>
                 </div>
 
+                <!-- Enhancement Section -->
+                <div class="panel-section">
+                    <h3 class="section-title">Image Enhancement</h3>
+                    
+                    <div class="control-group">
+                        <div class="control-header">
+                            <label>Density Enhancement</label>
+                            <span id="enhancement-value">1.0x</span>
+                        </div>
+                        <input type="range" id="enhancement-slider" min="1.0" max="3.0" value="1.0" step="0.1" class="slider">
+                    </div>
+                    
+                    <div class="control-group">
+                        <div class="control-header">
+                            <label>Interpolation</label>
+                        </div>
+                        <select id="interpolation-select" class="form-select">
+                            <option value="lanczos">Lanczos (High Quality)</option>
+                            <option value="bicubic">Bicubic</option>
+                            <option value="bilinear">Bilinear</option>
+                            <option value="nearest">Nearest Neighbor</option>
+                        </select>
+                    </div>
+                </div>
+
                 <!-- Transform Section -->
                 <div class="panel-section">
                     <h3 class="section-title">Transform</h3>
@@ -220,6 +245,17 @@
                             <span id="zoom-value">100%</span>
                         </div>
                         <input type="range" id="zoom-slider" min="25" max="500" value="100" class="slider">
+                    </div>
+                </div>
+
+                <!-- Series Selection Section -->
+                <div class="panel-section" id="series-section" style="display: none;">
+                    <h3 class="section-title">Series Selection</h3>
+                    <div class="series-grid" id="series-grid">
+                        <!-- Series thumbnails will be populated here -->
+                    </div>
+                    <div class="series-list" id="series-list">
+                        <!-- Alternative list view for series -->
                     </div>
                 </div>
 

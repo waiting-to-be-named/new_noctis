@@ -243,8 +243,8 @@ class DicomImage(models.Model):
             print(f"Error getting pixel array for image {self.id}: {e}")
             return None
     
-    def apply_windowing(self, pixel_array, window_width=None, window_level=None, inverted=False):
-        """Apply window/level to pixel array with improved brightness handling"""
+    def apply_windowing(self, pixel_array, window_width=None, window_level=None, inverted=False, enhancement_level=1.0):
+        """Apply window/level to pixel array with enhanced density differentiation"""
         if pixel_array is None:
             return None
         
@@ -253,37 +253,89 @@ class DicomImage(models.Model):
             ww = window_width if window_width is not None else (self.window_width or 400)
             wl = window_level if window_level is not None else (self.window_center or 40)
             
-            # Convert to float for calculations
-            image_data = pixel_array.astype(np.float32)
+            # Convert to float for calculations with higher precision
+            image_data = pixel_array.astype(np.float64)
             
-            # Get image statistics for better default values
+            # Get image statistics for better default values and enhancement
             min_pixel = np.min(image_data)
             max_pixel = np.max(image_data)
             pixel_range = max_pixel - min_pixel
+            mean_pixel = np.mean(image_data)
+            std_pixel = np.std(image_data)
             
-            # If no window/level provided, use image statistics for better defaults
+            # If no window/level provided, use advanced image statistics
             if window_width is None and window_level is None:
                 if pixel_range > 0:
-                    # Use 95% of the pixel range for better contrast
-                    wl = min_pixel + pixel_range * 0.5
-                    ww = pixel_range * 0.95
+                    # Use histogram-based windowing for better contrast
+                    hist, bins = np.histogram(image_data, bins=256)
+                    
+                    # Find optimal window based on histogram distribution
+                    cumsum = np.cumsum(hist)
+                    total_pixels = cumsum[-1]
+                    
+                    # Use 2nd to 98th percentile for optimal windowing
+                    lower_bound = np.searchsorted(cumsum, total_pixels * 0.02)
+                    upper_bound = np.searchsorted(cumsum, total_pixels * 0.98)
+                    
+                    wl = (bins[lower_bound] + bins[upper_bound]) / 2
+                    ww = bins[upper_bound] - bins[lower_bound]
+                    
+                    # Ensure minimum window width for visibility
+                    ww = max(ww, pixel_range * 0.1)
                 else:
                     # Fallback to reasonable defaults
                     wl = 40
                     ww = 400
             
-            # Apply window/level
+            # Enhanced windowing with sigmoid curve for better density differentiation
             min_val = wl - ww / 2
             max_val = wl + ww / 2
             
-            # Clip and normalize
-            image_data = np.clip(image_data, min_val, max_val)
-            
-            # Avoid division by zero
-            if max_val - min_val > 0:
-                image_data = (image_data - min_val) / (max_val - min_val) * 255
+            # Apply sigmoid-based windowing for smoother transitions
+            if enhancement_level > 1.0:
+                # Normalize to [-1, 1] range
+                normalized = (image_data - wl) / (ww / 2)
+                normalized = np.clip(normalized, -3, 3)  # Clip to prevent overflow
+                
+                # Apply sigmoid function for enhanced contrast
+                sigmoid_factor = enhancement_level
+                enhanced = np.tanh(normalized * sigmoid_factor) / np.tanh(sigmoid_factor)
+                
+                # Map back to [0, 255] range
+                image_data = (enhanced + 1) * 127.5
             else:
-                image_data = np.zeros_like(image_data)
+                # Standard linear windowing
+                image_data = np.clip(image_data, min_val, max_val)
+                
+                # Avoid division by zero
+                if max_val - min_val > 0:
+                    image_data = (image_data - min_val) / (max_val - min_val) * 255
+                else:
+                    image_data = np.zeros_like(image_data)
+            
+            # Apply histogram equalization for better contrast (optional)
+            if enhancement_level > 1.5:
+                # Convert to uint8 for histogram equalization
+                temp_image = np.clip(image_data, 0, 255).astype(np.uint8)
+                
+                # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+                from scipy import ndimage
+                
+                # Simple histogram equalization
+                hist, bins = np.histogram(temp_image.flatten(), 256, [0, 256])
+                cdf = hist.cumsum()
+                cdf_normalized = cdf * 255 / cdf[-1]
+                
+                # Apply histogram equalization
+                image_data = np.interp(temp_image.flatten(), bins[:-1], cdf_normalized).reshape(temp_image.shape)
+            
+            # Edge enhancement for better detail visibility
+            if enhancement_level > 2.0:
+                from scipy import ndimage
+                # Apply unsharp mask filter
+                blurred = ndimage.gaussian_filter(image_data, sigma=1.0)
+                sharpened = image_data + 0.5 * (image_data - blurred)
+                image_data = np.clip(sharpened, 0, 255)
             
             if inverted:
                 image_data = 255 - image_data
@@ -293,30 +345,75 @@ class DicomImage(models.Model):
             
             return image_data.astype(np.uint8)
         except Exception as e:
-            print(f"Error applying windowing: {e}")
+            print(f"Error applying enhanced windowing: {e}")
             import traceback
             traceback.print_exc()
+            # Fallback to basic windowing
+            return self._apply_basic_windowing(pixel_array, window_width, window_level, inverted)
+    
+    def _apply_basic_windowing(self, pixel_array, window_width=None, window_level=None, inverted=False):
+        """Fallback basic windowing method"""
+        try:
+            ww = window_width if window_width is not None else (self.window_width or 400)
+            wl = window_level if window_level is not None else (self.window_center or 40)
+            
+            image_data = pixel_array.astype(np.float32)
+            min_val = wl - ww / 2
+            max_val = wl + ww / 2
+            
+            image_data = np.clip(image_data, min_val, max_val)
+            if max_val - min_val > 0:
+                image_data = (image_data - min_val) / (max_val - min_val) * 255
+            else:
+                image_data = np.zeros_like(image_data)
+            
+            if inverted:
+                image_data = 255 - image_data
+            
+            return np.clip(image_data, 0, 255).astype(np.uint8)
+        except Exception as e:
+            print(f"Error in basic windowing fallback: {e}")
             return None
     
-    def get_processed_image_base64(self, window_width=None, window_level=None, inverted=False):
-        """Get processed image as base64 string"""
+    def get_processed_image_base64(self, window_width=None, window_level=None, inverted=False, enhancement_level=1.0, interpolation='lanczos'):
+        """Get processed image as base64 string with enhanced quality options"""
         try:
             pixel_array = self.get_pixel_array()
             if pixel_array is None:
                 print(f"Could not get pixel array for image {self.id}")
                 return None
             
-            processed_array = self.apply_windowing(pixel_array, window_width, window_level, inverted)
+            processed_array = self.apply_windowing(pixel_array, window_width, window_level, inverted, enhancement_level)
             if processed_array is None:
                 print(f"Could not apply windowing for image {self.id}")
                 return None
             
-            # Convert to PIL Image
+            # Convert to PIL Image with high quality settings
             pil_image = Image.fromarray(processed_array, mode='L')
             
-            # Convert to base64
+            # Apply high-quality interpolation if image is small
+            original_size = pil_image.size
+            min_display_size = 512
+            
+            if max(original_size) < min_display_size:
+                # Calculate upscaling factor
+                scale_factor = min_display_size / max(original_size)
+                new_size = (int(original_size[0] * scale_factor), int(original_size[1] * scale_factor))
+                
+                # Choose interpolation method
+                interp_method = Image.LANCZOS  # Default high quality
+                if interpolation.lower() == 'bicubic':
+                    interp_method = Image.BICUBIC
+                elif interpolation.lower() == 'bilinear':
+                    interp_method = Image.BILINEAR
+                elif interpolation.lower() == 'nearest':
+                    interp_method = Image.NEAREST
+                
+                pil_image = pil_image.resize(new_size, interp_method)
+            
+            # Convert to base64 with optimized PNG compression
             buffer = io.BytesIO()
-            pil_image.save(buffer, format='PNG')
+            pil_image.save(buffer, format='PNG', optimize=True, compress_level=6)
             image_base64 = base64.b64encode(buffer.getvalue()).decode()
             
             return f"data:image/png;base64,{image_base64}"

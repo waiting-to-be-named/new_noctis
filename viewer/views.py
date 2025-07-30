@@ -1570,6 +1570,8 @@ def get_image_data(request, image_id):
         window_width = request.GET.get('window_width', image.window_width)
         window_level = request.GET.get('window_level', image.window_center)
         inverted = request.GET.get('inverted', 'false').lower() == 'true'
+        enhancement_level = request.GET.get('enhancement_level', '1.0')
+        interpolation = request.GET.get('interpolation', 'lanczos')
         
         # Convert to appropriate types
         if window_width:
@@ -1583,10 +1585,21 @@ def get_image_data(request, image_id):
             except (ValueError, TypeError):
                 window_level = 40
         
-        print(f"Processing image with WW: {window_width}, WL: {window_level}, inverted: {inverted}")
+        try:
+            enhancement_level = float(enhancement_level)
+            enhancement_level = max(1.0, min(3.0, enhancement_level))  # Clamp between 1.0 and 3.0
+        except (ValueError, TypeError):
+            enhancement_level = 1.0
         
-        # Get processed image
-        image_base64 = image.get_processed_image_base64(window_width, window_level, inverted)
+        # Validate interpolation method
+        valid_interpolations = ['lanczos', 'bicubic', 'bilinear', 'nearest']
+        if interpolation.lower() not in valid_interpolations:
+            interpolation = 'lanczos'
+        
+        print(f"Processing image with WW: {window_width}, WL: {window_level}, inverted: {inverted}, enhancement: {enhancement_level}, interpolation: {interpolation}")
+        
+        # Get processed image with enhanced quality
+        image_base64 = image.get_processed_image_base64(window_width, window_level, inverted, enhancement_level, interpolation)
         
         if image_base64:
             print(f"Successfully processed image {image_id}")

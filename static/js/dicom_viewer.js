@@ -8,6 +8,7 @@ class DicomViewer {
         // State variables
         this.currentStudy = null;
         this.currentSeries = null;
+        this.allSeries = [];
         this.currentImages = [];
         this.currentImageIndex = 0;
         this.currentImage = null;
@@ -20,6 +21,10 @@ class DicomViewer {
         this.panY = 0;
         this.inverted = false;
         this.crosshair = false;
+        
+        // Enhancement parameters
+        this.enhancementLevel = 1.0;
+        this.interpolationMethod = 'lanczos';
         
         // Tools
         this.activeTool = 'windowing';
@@ -230,6 +235,24 @@ class DicomViewer {
             document.getElementById('zoom-value').textContent = e.target.value + '%';
             this.updateDisplay();
         });
+        
+        // Enhancement controls
+        const enhancementSlider = document.getElementById('enhancement-slider');
+        if (enhancementSlider) {
+            enhancementSlider.addEventListener('input', (e) => {
+                this.enhancementLevel = parseFloat(e.target.value);
+                document.getElementById('enhancement-value').textContent = this.enhancementLevel.toFixed(1) + 'x';
+                this.loadCurrentImage();
+            });
+        }
+        
+        const interpolationSelect = document.getElementById('interpolation-select');
+        if (interpolationSelect) {
+            interpolationSelect.addEventListener('change', (e) => {
+                this.interpolationMethod = e.target.value;
+                this.loadCurrentImage();
+            });
+        }
         
         // Preset buttons
         document.querySelectorAll('.preset-btn').forEach(btn => {
@@ -726,9 +749,18 @@ class DicomViewer {
             console.log(`Found ${data.images.length} images in study`);
             
             this.currentStudy = data.study;
-            this.currentSeries = data.series || null;
-            this.currentImages = data.images;
+            
+            // Group images by series
+            this.allSeries = this.groupImagesBySeries(data.images);
+            console.log(`Found ${this.allSeries.length} series in study`);
+            
+            // Set current series (first one by default)
+            this.currentSeries = this.allSeries.length > 0 ? this.allSeries[0] : null;
+            this.currentImages = this.currentSeries ? this.currentSeries.images : data.images;
             this.currentImageIndex = 0;
+            
+            // Update series selector UI
+            this.updateSeriesSelector();
             
             // Clear any existing measurements for new study
             this.measurements = [];
@@ -774,6 +806,157 @@ class DicomViewer {
         }
     }
     
+    groupImagesBySeries(images) {
+        const seriesMap = new Map();
+        
+        images.forEach(image => {
+            const seriesUID = image.series_instance_uid || 'unknown';
+            const seriesNumber = image.series_number || 0;
+            const seriesDescription = image.series_description || 'Unknown Series';
+            
+            if (!seriesMap.has(seriesUID)) {
+                seriesMap.set(seriesUID, {
+                    uid: seriesUID,
+                    number: seriesNumber,
+                    description: seriesDescription,
+                    images: [],
+                    thumbnail: null
+                });
+            }
+            
+            seriesMap.get(seriesUID).images.push(image);
+        });
+        
+        // Convert to array and sort by series number
+        const seriesArray = Array.from(seriesMap.values());
+        seriesArray.sort((a, b) => a.number - b.number);
+        
+        // Set thumbnails (first image of each series)
+        seriesArray.forEach(series => {
+            if (series.images.length > 0) {
+                series.thumbnail = series.images[0];
+            }
+        });
+        
+        return seriesArray;
+    }
+    
+    updateSeriesSelector() {
+        const seriesSection = document.getElementById('series-section');
+        const seriesGrid = document.getElementById('series-grid');
+        const seriesList = document.getElementById('series-list');
+        
+        if (!seriesSection || !seriesGrid || !seriesList) {
+            return;
+        }
+        
+        // Show/hide series selector based on number of series
+        if (this.allSeries.length > 1) {
+            seriesSection.style.display = 'block';
+            
+            // Clear existing content
+            seriesGrid.innerHTML = '';
+            seriesList.innerHTML = '';
+            
+            // Create series thumbnails
+            this.allSeries.forEach((series, index) => {
+                // Grid view (thumbnails)
+                const seriesItem = document.createElement('div');
+                seriesItem.className = `series-item ${index === 0 ? 'active' : ''}`;
+                seriesItem.innerHTML = `
+                    <div class="series-thumbnail" data-series-index="${index}">
+                        <div class="series-info">
+                            <div class="series-number">Series ${series.number}</div>
+                            <div class="series-description">${series.description}</div>
+                            <div class="series-count">${series.images.length} images</div>
+                        </div>
+                    </div>
+                `;
+                
+                // Add click handler
+                seriesItem.addEventListener('click', () => this.selectSeries(index));
+                seriesGrid.appendChild(seriesItem);
+                
+                // List view (detailed)
+                const listItem = document.createElement('div');
+                listItem.className = `series-list-item ${index === 0 ? 'active' : ''}`;
+                listItem.innerHTML = `
+                    <div class="series-details" data-series-index="${index}">
+                        <span class="series-number">S${series.number}</span>
+                        <span class="series-desc">${series.description}</span>
+                        <span class="series-count">${series.images.length}</span>
+                    </div>
+                `;
+                
+                listItem.addEventListener('click', () => this.selectSeries(index));
+                seriesList.appendChild(listItem);
+            });
+            
+            // Load thumbnails asynchronously
+            this.loadSeriesThumbnails();
+        } else {
+            seriesSection.style.display = 'none';
+        }
+    }
+    
+    async loadSeriesThumbnails() {
+        // Load thumbnail images for each series
+        this.allSeries.forEach(async (series, index) => {
+            if (series.thumbnail) {
+                try {
+                    const params = new URLSearchParams({
+                        window_width: 400,
+                        window_level: 40,
+                        inverted: false,
+                        enhancement_level: 1.0,
+                        interpolation: 'bilinear'
+                    });
+                    
+                    const response = await fetch(`/viewer/api/images/${series.thumbnail.id}/data/?${params}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.image_data) {
+                            const thumbnailDiv = document.querySelector(`[data-series-index="${index}"]`);
+                            if (thumbnailDiv) {
+                                thumbnailDiv.style.backgroundImage = `url(${data.image_data})`;
+                                thumbnailDiv.style.backgroundSize = 'cover';
+                                thumbnailDiv.style.backgroundPosition = 'center';
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`Failed to load thumbnail for series ${index}:`, error);
+                }
+            }
+        });
+    }
+    
+    selectSeries(seriesIndex) {
+        if (seriesIndex < 0 || seriesIndex >= this.allSeries.length) {
+            return;
+        }
+        
+        console.log(`Selecting series ${seriesIndex}: ${this.allSeries[seriesIndex].description}`);
+        
+        // Update active series
+        this.currentSeries = this.allSeries[seriesIndex];
+        this.currentImages = this.currentSeries.images;
+        this.currentImageIndex = 0;
+        
+        // Update UI
+        document.querySelectorAll('.series-item, .series-list-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        
+        document.querySelectorAll(`[data-series-index="${seriesIndex}"]`).forEach(item => {
+            item.closest('.series-item, .series-list-item').classList.add('active');
+        });
+        
+        // Update sliders and load new image
+        this.updateSliders();
+        this.loadCurrentImage();
+    }
+    
     async loadCurrentImage() {
         if (!this.currentImages.length) {
             console.log('No images available');
@@ -787,7 +970,9 @@ class DicomViewer {
             const params = new URLSearchParams({
                 window_width: this.windowWidth,
                 window_level: this.windowLevel,
-                inverted: this.inverted
+                inverted: this.inverted,
+                enhancement_level: this.enhancementLevel,
+                interpolation: this.interpolationMethod
             });
             
             const response = await fetch(`/viewer/api/images/${imageData.id}/data/?${params}`);

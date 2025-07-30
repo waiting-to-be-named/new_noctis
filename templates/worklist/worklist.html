@@ -39,26 +39,66 @@
         <div class="upload-section">
             <div class="upload-container">
                 <div class="upload-zone" id="upload-zone">
-                    <i class="fas fa-cloud-upload-alt" style="font-size: 24px; margin-bottom: 10px;"></i>
-                    <p>Drop DICOM files or folders here, or click to browse</p>
-                    <p style="font-size: 12px; color: #666; margin-top: 5px;">
-                        <i class="fas fa-info-circle"></i> Large folders (100+ files) will be processed in the background
-                    </p>
+                    <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                    <p class="upload-text">Drop DICOM files or folders here, or click to browse</p>
+                    <div class="upload-capabilities">
+                        <div class="capability-item">
+                            <i class="fas fa-folder-tree"></i>
+                            <span>Supports nested folders</span>
+                        </div>
+                        <div class="capability-item">
+                            <i class="fas fa-layer-group"></i>
+                            <span>Handles 2000+ files efficiently</span>
+                        </div>
+                        <div class="capability-item">
+                            <i class="fas fa-rocket"></i>
+                            <span>Background processing for large uploads</span>
+                        </div>
+                    </div>
                     <input type="file" id="file-input" multiple webkitdirectory style="display: none;">
-                    <input type="file" id="file-input-files" multiple accept=".dcm,.dicom" style="display: none;">
+                    <input type="file" id="file-input-files" multiple accept=".dcm,.dicom,.img,.ima,.raw,.dat,.bin" style="display: none;">
                 </div>
-                <button class="btn btn-upload" onclick="selectUploadType()">
-                    <i class="fas fa-folder-open"></i> Upload Folder
-                </button>
-                <button class="btn btn-upload" onclick="document.getElementById('file-input-files').click()">
-                    <i class="fas fa-file-medical"></i> Upload Files
-                </button>
+                <div class="upload-actions">
+                    <button class="btn btn-upload btn-folder" onclick="selectUploadType()">
+                        <i class="fas fa-folder-open"></i> 
+                        <span>Upload Folder</span>
+                        <small>Choose entire directories</small>
+                    </button>
+                    <button class="btn btn-upload btn-files" onclick="document.getElementById('file-input-files').click()">
+                        <i class="fas fa-file-medical"></i> 
+                        <span>Upload Files</span>
+                        <small>Select individual files</small>
+                    </button>
+                </div>
             </div>
             <div class="upload-progress" id="upload-progress">
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progress-fill"></div>
+                <div class="upload-stats" id="upload-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Files:</span>
+                        <span class="stat-value" id="total-files">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Processed:</span>
+                        <span class="stat-value" id="processed-files">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Success Rate:</span>
+                        <span class="stat-value" id="success-rate">0%</span>
+                    </div>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <div class="progress-percentage" id="progress-percentage">0%</div>
                 </div>
                 <div class="file-info" id="file-info"></div>
+                <div class="upload-details" id="upload-details" style="display: none;">
+                    <div class="detail-section">
+                        <h4>Processing Details:</h4>
+                        <div class="detail-list" id="detail-list"></div>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -301,23 +341,56 @@
         });
         
         function uploadFiles(files) {
-            const formData = new FormData();
+            if (files.length === 0) {
+                showUploadError('No files selected');
+                return;
+            }
+            
+            // Enhanced file validation
+            const validExtensions = ['.dcm', '.dicom', '.img', '.ima', '.raw', '.dat', '.bin'];
+            const maxFileSize = 100 * 1024 * 1024; // 100MB
+            let validFiles = [];
+            let invalidFiles = [];
+            
             files.forEach(file => {
+                const fileExt = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+                const hasValidExt = validExtensions.includes(fileExt) || !file.name.includes('.');
+                const validSize = file.size <= maxFileSize;
+                
+                if (hasValidExt && validSize && file.size > 128) { // Minimum 128 bytes
+                    validFiles.push(file);
+                } else {
+                    invalidFiles.push({
+                        name: file.name,
+                        reason: !hasValidExt ? 'Invalid format' : 
+                               !validSize ? 'File too large' : 'File too small'
+                    });
+                }
+            });
+            
+            if (validFiles.length === 0) {
+                showUploadError('No valid DICOM files found');
+                return;
+            }
+            
+            // Initialize upload UI
+            initializeUploadProgress(validFiles.length, invalidFiles);
+            
+            const formData = new FormData();
+            validFiles.forEach(file => {
                 formData.append('files', file);
             });
             
-            uploadProgress.style.display = 'block';
-            fileInfo.textContent = `Uploading ${files.length} file(s)...`;
-            
-            // Choose upload endpoint based on file count
-            const uploadUrl = files.length > 100 ? '/viewer/api/bulk-upload/' : '/viewer/api/upload/';
+            // Choose upload endpoint based on file count with lower threshold for bulk
+            const uploadUrl = validFiles.length > 50 ? '/viewer/api/bulk-upload/' : '/viewer/api/upload/';
+            const isBulkUpload = validFiles.length > 50;
             
             const xhr = new XMLHttpRequest();
             
             xhr.upload.addEventListener('progress', (e) => {
                 if (e.lengthComputable) {
                     const percentComplete = (e.loaded / e.total) * 100;
-                    progressFill.style.width = percentComplete + '%';
+                    updateProgressBar(percentComplete);
                 }
             });
             
@@ -328,40 +401,110 @@
                         
                         if (response.status === 'processing') {
                             // Background processing started
-                            fileInfo.textContent = `Processing ${files.length} files in background...`;
+                            updateUploadStatus('processing', 
+                                `Processing ${validFiles.length} files in background...`,
+                                response.upload_id);
                             monitorUploadProgress(response.upload_id);
                         } else {
                             // Immediate completion
-                            fileInfo.textContent = `Upload complete! ${response.successful_files ? response.successful_files.length : 0} files processed.`;
-                            setTimeout(() => {
-                                uploadProgress.style.display = 'none';
-                                location.reload(); // Reload to show new entries
-                            }, 2000);
+                            handleUploadComplete(response);
                         }
                     } catch (parseError) {
                         console.error('Failed to parse JSON response:', parseError);
                         console.error('Response text:', xhr.responseText);
-                        fileInfo.textContent = 'Upload failed: Invalid server response. Please try again.';
+                        showUploadError('Invalid server response. Please try again.');
                     }
                 } else {
                     try {
                         const errorResponse = JSON.parse(xhr.responseText);
-                        fileInfo.textContent = `Upload failed: ${errorResponse.error || 'Unknown error'}`;
+                        showUploadError(errorResponse.error || 'Unknown error');
                     } catch (parseError) {
                         console.error('Failed to parse error response:', parseError);
                         console.error('Response text:', xhr.responseText);
-                        fileInfo.textContent = `Upload failed: Server error (${xhr.status}). Please try again.`;
+                        showUploadError(`Server error (${xhr.status}). Please try again.`);
                     }
                 }
             });
             
             xhr.addEventListener('error', () => {
-                fileInfo.textContent = 'Upload failed. Please try again.';
+                showUploadError('Network error. Please check your connection and try again.');
             });
             
             xhr.open('POST', uploadUrl);
             xhr.setRequestHeader('X-CSRFToken', getCSRFToken());
             xhr.send(formData);
+        }
+        
+        function initializeUploadProgress(totalFiles, invalidFiles) {
+            uploadProgress.style.display = 'block';
+            
+            // Update stats
+            document.getElementById('total-files').textContent = totalFiles;
+            document.getElementById('processed-files').textContent = '0';
+            document.getElementById('success-rate').textContent = '0%';
+            
+            // Reset progress
+            updateProgressBar(0);
+            
+            // Show invalid files warning if any
+            if (invalidFiles.length > 0) {
+                const warningMsg = `Note: ${invalidFiles.length} file(s) skipped (${invalidFiles.map(f => f.reason).join(', ')})`;
+                updateUploadStatus('warning', warningMsg);
+                
+                // Show details
+                const detailsList = document.getElementById('detail-list');
+                detailsList.innerHTML = invalidFiles.map(f => 
+                    `<div class="detail-item warning">
+                        <span class="file-name">${f.name}</span>
+                        <span class="file-status">${f.reason}</span>
+                    </div>`
+                ).join('');
+                document.getElementById('upload-details').style.display = 'block';
+            }
+        }
+        
+        function updateProgressBar(percentage) {
+            const progressFill = document.getElementById('progress-fill');
+            const progressPercentage = document.getElementById('progress-percentage');
+            
+            progressFill.style.width = percentage + '%';
+            progressPercentage.textContent = Math.round(percentage) + '%';
+        }
+        
+        function updateUploadStatus(type, message, uploadId = null) {
+            const fileInfo = document.getElementById('file-info');
+            fileInfo.className = `upload-status ${type}`;
+            fileInfo.textContent = message;
+            
+            if (uploadId) {
+                fileInfo.setAttribute('data-upload-id', uploadId);
+            }
+        }
+        
+        function showUploadError(message) {
+            updateUploadStatus('error', `Upload failed: ${message}`);
+            setTimeout(() => {
+                uploadProgress.style.display = 'none';
+            }, 5000);
+        }
+        
+        function handleUploadComplete(response) {
+            const successCount = response.successful_files ? response.successful_files.length : 0;
+            const totalCount = response.total_files || 0;
+            
+            // Update final stats
+            document.getElementById('processed-files').textContent = totalCount;
+            document.getElementById('success-rate').textContent = 
+                totalCount > 0 ? Math.round((successCount / totalCount) * 100) + '%' : '0%';
+            
+            updateProgressBar(100);
+            updateUploadStatus('success', 
+                `Upload complete! ${successCount} files processed successfully.`);
+            
+            setTimeout(() => {
+                uploadProgress.style.display = 'none';
+                location.reload(); // Reload to show new entries
+            }, 3000);
         }
         
         function monitorUploadProgress(uploadId) {
@@ -375,39 +518,84 @@
                                 .then(response => response.json())
                                 .then(result => {
                                     if (result.error) {
-                                        fileInfo.textContent = `Upload failed: ${result.error}`;
+                                        showUploadError(result.error);
                                     } else {
+                                        // Update final progress
                                         const percentComplete = (progress.processed_files / progress.total_files) * 100;
-                                        progressFill.style.width = percentComplete + '%';
-                                        fileInfo.textContent = `Upload complete! ${result.successful_files ? result.successful_files.length : 0} files processed from ${result.total_studies} study(ies).`;
+                                        updateProgressBar(percentComplete);
+                                        
+                                        // Update final stats
+                                        document.getElementById('processed-files').textContent = progress.processed_files;
+                                        const successCount = result.successful_files ? result.successful_files.length : 0;
+                                        const successRate = progress.total_files > 0 ? 
+                                            Math.round((successCount / progress.total_files) * 100) : 0;
+                                        document.getElementById('success-rate').textContent = successRate + '%';
+                                        
+                                        // Show completion message
+                                        updateUploadStatus('success', 
+                                            `Upload complete! ${successCount} files processed from ${result.total_studies || 1} study(ies).`);
+                                        
+                                        // Update details if available
+                                        if (result.processing_details) {
+                                            updateProcessingDetails(result.processing_details);
+                                        }
+                                        
                                         setTimeout(() => {
                                             uploadProgress.style.display = 'none';
                                             location.reload(); // Reload to show new entries
-                                        }, 2000);
+                                        }, 3000);
                                     }
                                     clearInterval(progressInterval);
                                 })
                                 .catch(error => {
                                     console.error('Error getting upload result:', error);
-                                    fileInfo.textContent = 'Upload completed but could not get final result.';
+                                    updateUploadStatus('warning', 'Upload completed but could not get final result.');
                                     clearInterval(progressInterval);
                                 });
                         } else if (progress.status === 'error') {
-                            fileInfo.textContent = `Upload failed: ${progress.errors.join(', ')}`;
+                            showUploadError(progress.errors.join(', '));
                             clearInterval(progressInterval);
                         } else {
                             // Update progress
                             const percentComplete = (progress.processed_files / progress.total_files) * 100;
-                            progressFill.style.width = percentComplete + '%';
-                            fileInfo.textContent = `Processing ${progress.processed_files}/${progress.total_files} files... ${progress.current_study || ''}`;
+                            updateProgressBar(percentComplete);
+                            
+                            // Update stats
+                            document.getElementById('processed-files').textContent = progress.processed_files;
+                            if (progress.successful_files > 0) {
+                                const successRate = Math.round((progress.successful_files / progress.processed_files) * 100);
+                                document.getElementById('success-rate').textContent = successRate + '%';
+                            }
+                            
+                            // Update status message with current study info
+                            let statusMsg = `Processing: ${progress.processed_files}/${progress.total_files} files (${Math.round(percentComplete)}%)`;
+                            if (progress.current_study) {
+                                statusMsg += ` - Current: ${progress.current_study}`;
+                            }
+                            updateUploadStatus('processing', statusMsg);
                         }
                     })
                     .catch(error => {
                         console.error('Error monitoring upload progress:', error);
-                        fileInfo.textContent = 'Error monitoring upload progress.';
+                        updateUploadStatus('warning', 'Error checking upload progress. Upload may still be processing.');
                         clearInterval(progressInterval);
                     });
-            }, 2000); // Check every 2 seconds
+            }, 1500); // Slightly faster polling for better UX
+        }
+        
+        function updateProcessingDetails(details) {
+            const detailsList = document.getElementById('detail-list');
+            const uploadDetails = document.getElementById('upload-details');
+            
+            if (details && details.length > 0) {
+                detailsList.innerHTML = details.map(detail => 
+                    `<div class="detail-item ${detail.type || 'info'}">
+                        <span class="file-name">${detail.study || detail.file || 'Unknown'}</span>
+                        <span class="file-status">${detail.message || detail.status || 'Processed'}</span>
+                    </div>`
+                ).join('');
+                uploadDetails.style.display = 'block';
+            }
         }
         
         // Row selection
