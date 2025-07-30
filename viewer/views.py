@@ -27,6 +27,13 @@ from django.contrib.auth.models import Group
 from .serializers import DicomStudySerializer, DicomImageSerializer
 import io
 from scipy import stats
+import threading
+import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from django.core.cache import cache
+from django.db import transaction
+import gc
 
 
 # Ensure required directories exist
@@ -960,6 +967,508 @@ def upload_dicom_folder(request):
         create_system_error_notification(f"DICOM folder upload error: {str(e)}", request.user)
         
         return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
+
+
+# Bulk upload system for handling large folders with 2000+ images
+class BulkUploadManager:
+    """Manages bulk uploads with chunked processing and progress tracking"""
+    
+    def __init__(self, user, facility=None):
+        self.user = user
+        self.facility = facility
+        self.upload_id = str(uuid.uuid4())
+        self.progress = {
+            'total_files': 0,
+            'processed_files': 0,
+            'successful_files': 0,
+            'failed_files': 0,
+            'current_study': None,
+            'status': 'initializing',
+            'errors': [],
+            'warnings': []
+        }
+        self.studies = {}
+        self.lock = threading.Lock()
+        
+    def update_progress(self, **kwargs):
+        """Thread-safe progress update"""
+        with self.lock:
+            self.progress.update(kwargs)
+            # Cache progress for frontend polling
+            cache.set(f'upload_progress_{self.upload_id}', self.progress, timeout=3600)
+    
+    def process_file_batch(self, files_batch):
+        """Process a batch of files efficiently"""
+        batch_results = {
+            'successful': [],
+            'failed': [],
+            'studies': {}
+        }
+        
+        for file in files_batch:
+            try:
+                # Validate file
+                file_name = file.name.lower()
+                file_size = file.size
+                
+                if file_size > 100 * 1024 * 1024:  # 100MB limit
+                    batch_results['failed'].append(f"File {file.name} is too large (max 100MB)")
+                    continue
+                
+                # Check if file is DICOM candidate
+                is_dicom_candidate = (
+                    file_name.endswith(('.dcm', '.dicom')) or
+                    file_name.endswith(('.dcm.gz', '.dicom.gz')) or
+                    file_name.endswith(('.dcm.bz2', '.dicom.bz2')) or
+                    '.' not in file.name or
+                    file_name.endswith('.img') or
+                    file_name.endswith('.ima') or
+                    file_name.endswith('.raw') or
+                    file_size > 1024
+                )
+                
+                if not is_dicom_candidate:
+                    batch_results['failed'].append(f"File {file.name} does not appear to be a DICOM file")
+                    continue
+                
+                # Save file with unique name
+                unique_filename = f"{uuid.uuid4()}_{file.name}"
+                file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file.read()))
+                
+                # Read DICOM data
+                dicom_data = None
+                try:
+                    dicom_data = pydicom.dcmread(default_storage.path(file_path))
+                except Exception as e1:
+                    try:
+                        file.seek(0)
+                        dicom_data = pydicom.dcmread(file)
+                        file.seek(0)
+                        file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file.read()))
+                    except Exception as e2:
+                        try:
+                            file.seek(0)
+                            file_bytes = file.read()
+                            dicom_data = pydicom.dcmread(file_bytes)
+                            file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file_bytes))
+                        except Exception as e3:
+                            print(f"Failed to read DICOM file {file.name}: {e1}, {e2}, {e3}")
+                            try:
+                                default_storage.delete(file_path)
+                            except:
+                                pass
+                            batch_results['failed'].append(f"Could not read DICOM data from {file.name}")
+                            continue
+                
+                if not dicom_data:
+                    batch_results['failed'].append(f"No DICOM data found in {file.name}")
+                    continue
+                
+                # Get study UID with fallback
+                study_uid = str(dicom_data.get('StudyInstanceUID', ''))
+                if not study_uid:
+                    study_uid = f"STUDY_{uuid.uuid4()}"
+                
+                # Group by study
+                if study_uid not in batch_results['studies']:
+                    batch_results['studies'][study_uid] = {
+                        'files': [],
+                        'dicom_data': [],
+                        'file_paths': []
+                    }
+                
+                batch_results['studies'][study_uid]['files'].append(file.name)
+                batch_results['studies'][study_uid]['dicom_data'].append(dicom_data)
+                batch_results['studies'][study_uid]['file_paths'].append(file_path)
+                batch_results['successful'].append(file.name)
+                
+            except Exception as e:
+                print(f"Error processing file {file.name}: {e}")
+                batch_results['failed'].append(f"Error processing {file.name}: {str(e)}")
+                if 'file_path' in locals():
+                    try:
+                        default_storage.delete(file_path)
+                    except:
+                        pass
+        
+        return batch_results
+    
+    def process_study(self, study_uid, study_data):
+        """Process a complete study with all its files"""
+        try:
+            with transaction.atomic():
+                # Create study from first file
+                first_dicom = study_data['dicom_data'][0]
+                
+                # Extract patient information with fallbacks
+                patient_name = 'Unknown'
+                if hasattr(first_dicom, 'PatientName'):
+                    try:
+                        patient_name = str(first_dicom.PatientName)
+                    except:
+                        patient_name = 'Unknown'
+                
+                patient_id = 'Unknown'
+                if hasattr(first_dicom, 'PatientID'):
+                    try:
+                        patient_id = str(first_dicom.PatientID)
+                    except:
+                        patient_id = 'Unknown'
+                
+                # Extract other fields with safe fallbacks
+                study_date = parse_dicom_date(getattr(first_dicom, 'StudyDate', None))
+                study_time = parse_dicom_time(getattr(first_dicom, 'StudyTime', None))
+                study_description = str(getattr(first_dicom, 'StudyDescription', ''))
+                modality = str(first_dicom.Modality) if hasattr(first_dicom, 'Modality') else 'OT'
+                institution_name = str(getattr(first_dicom, 'InstitutionName', ''))
+                accession_number = str(getattr(first_dicom, 'AccessionNumber', ''))
+                referring_physician = str(getattr(first_dicom, 'ReferringPhysicianName', ''))
+                
+                study, created = DicomStudy.objects.get_or_create(
+                    study_instance_uid=study_uid,
+                    defaults={
+                        'patient_name': patient_name,
+                        'patient_id': patient_id,
+                        'study_date': study_date,
+                        'study_time': study_time,
+                        'study_description': study_description,
+                        'modality': modality,
+                        'institution_name': institution_name,
+                        'uploaded_by': self.user if self.user.is_authenticated else None,
+                        'facility': self.facility,
+                        'accession_number': accession_number,
+                        'referring_physician': referring_physician,
+                    }
+                )
+                
+                # Create notifications for new study uploads
+                if created:
+                    try:
+                        radiologist_group = Group.objects.get(name='Radiologists')
+                        for radiologist in radiologist_group.user_set.all():
+                            Notification.objects.create(
+                                recipient=radiologist,
+                                notification_type='new_study',
+                                title='New Study Uploaded',
+                                message=f'New {modality} study uploaded for {patient_name} - {study_description}',
+                                related_study=study
+                            )
+                    except Group.DoesNotExist:
+                        pass
+                
+                # Create worklist entry if study was created
+                if created:
+                    try:
+                        facility = study.facility
+                        if not facility:
+                            facility, _ = Facility.objects.get_or_create(
+                                name="Default Facility",
+                                defaults={
+                                    'address': 'Unknown',
+                                    'phone': 'Unknown',
+                                    'email': 'unknown@facility.com'
+                                }
+                            )
+                            study.facility = facility
+                            study.save()
+                        
+                        WorklistEntry.objects.create(
+                            patient_name=study.patient_name,
+                            patient_id=study.patient_id,
+                            accession_number=study.accession_number or f"ACC{study.id:06d}",
+                            scheduled_station_ae_title="UPLOAD",
+                            scheduled_procedure_step_start_date=study.study_date or datetime.now().date(),
+                            scheduled_procedure_step_start_time=study.study_time or datetime.now().time(),
+                            modality=study.modality,
+                            scheduled_performing_physician=study.referring_physician or "Unknown",
+                            procedure_description=study.study_description,
+                            facility=facility,
+                            study=study,
+                            status='scheduled'
+                        )
+                    except Exception as e:
+                        print(f"Error creating worklist entry: {e}")
+                
+                # Process each file in the study
+                for i, dicom_data in enumerate(study_data['dicom_data']):
+                    try:
+                        # Create or get series with fallback UID
+                        series_uid = str(dicom_data.get('SeriesInstanceUID', ''))
+                        if not series_uid:
+                            series_uid = f"SERIES_{uuid.uuid4()}"
+                        
+                        series, created = DicomSeries.objects.get_or_create(
+                            study=study,
+                            series_instance_uid=series_uid,
+                            defaults={
+                                'series_number': int(dicom_data.get('SeriesNumber', 0)),
+                                'series_description': str(getattr(dicom_data, 'SeriesDescription', '')),
+                                'modality': str(dicom_data.Modality) if hasattr(dicom_data, 'Modality') else 'OT',
+                            }
+                        )
+                        
+                        # Create image with fallback UID
+                        image_instance_uid = str(dicom_data.get('SOPInstanceUID', ''))
+                        if not image_instance_uid:
+                            image_instance_uid = f"IMAGE_{uuid.uuid4()}"
+                        
+                        # Extract image data with safe fallbacks
+                        rows = 0
+                        columns = 0
+                        bits_allocated = 16
+                        samples_per_pixel = 1
+                        photometric_interpretation = 'MONOCHROME2'
+                        
+                        if hasattr(dicom_data, 'Rows'):
+                            try:
+                                rows = int(dicom_data.Rows)
+                            except:
+                                rows = 0
+                        
+                        if hasattr(dicom_data, 'Columns'):
+                            try:
+                                columns = int(dicom_data.Columns)
+                            except:
+                                columns = 0
+                        
+                        if hasattr(dicom_data, 'BitsAllocated'):
+                            try:
+                                bits_allocated = int(dicom_data.BitsAllocated)
+                            except:
+                                bits_allocated = 16
+                        
+                        if hasattr(dicom_data, 'SamplesPerPixel'):
+                            try:
+                                samples_per_pixel = int(dicom_data.SamplesPerPixel)
+                            except:
+                                samples_per_pixel = 1
+                        
+                        if hasattr(dicom_data, 'PhotometricInterpretation'):
+                            try:
+                                photometric_interpretation = str(dicom_data.PhotometricInterpretation)
+                            except:
+                                photometric_interpretation = 'MONOCHROME2'
+                        
+                        # Parse pixel spacing
+                        pixel_spacing_x = None
+                        pixel_spacing_y = None
+                        if hasattr(dicom_data, 'PixelSpacing'):
+                            try:
+                                pixel_spacing = dicom_data.PixelSpacing
+                                if isinstance(pixel_spacing, (list, tuple)) and len(pixel_spacing) >= 2:
+                                    pixel_spacing_x = float(pixel_spacing[0])
+                                    pixel_spacing_y = float(pixel_spacing[1])
+                            except Exception:
+                                pass
+                        
+                        image, created = DicomImage.objects.get_or_create(
+                            series=series,
+                            sop_instance_uid=image_instance_uid,
+                            defaults={
+                                'image_number': int(dicom_data.get('InstanceNumber', 0)),
+                                'file_path': study_data['file_paths'][i],
+                                'rows': rows,
+                                'columns': columns,
+                                'bits_allocated': bits_allocated,
+                                'samples_per_pixel': samples_per_pixel,
+                                'photometric_interpretation': photometric_interpretation,
+                                'pixel_spacing': str(getattr(dicom_data, 'PixelSpacing', '')),
+                                'pixel_spacing_x': pixel_spacing_x,
+                                'pixel_spacing_y': pixel_spacing_y,
+                                'slice_thickness': float(getattr(dicom_data, 'SliceThickness', 0)),
+                                'window_center': float(getattr(dicom_data, 'WindowCenter', 40)),
+                                'window_width': float(getattr(dicom_data, 'WindowWidth', 400)),
+                            }
+                        )
+                        
+                        if not created:
+                            # Image already exists, clean up the duplicate file
+                            try:
+                                default_storage.delete(study_data['file_paths'][i])
+                            except:
+                                pass
+                            
+                    except Exception as e:
+                        print(f"Error processing image in study {study_uid}: {e}")
+                        continue
+                
+                return study
+                
+        except Exception as e:
+            print(f"Error processing study {study_uid}: {e}")
+            raise
+    
+    def process_upload(self, files):
+        """Main upload processing with chunked processing"""
+        try:
+            self.update_progress(status='processing', total_files=len(files))
+            
+            # Process files in chunks to manage memory
+            chunk_size = 50  # Process 50 files at a time
+            all_studies = {}
+            all_successful = []
+            all_failed = []
+            
+            for i in range(0, len(files), chunk_size):
+                chunk = files[i:i + chunk_size]
+                
+                # Process chunk
+                chunk_results = self.process_file_batch(chunk)
+                
+                # Merge results
+                all_successful.extend(chunk_results['successful'])
+                all_failed.extend(chunk_results['failed'])
+                
+                # Merge studies
+                for study_uid, study_data in chunk_results['studies'].items():
+                    if study_uid not in all_studies:
+                        all_studies[study_uid] = study_data
+                    else:
+                        all_studies[study_uid]['files'].extend(study_data['files'])
+                        all_studies[study_uid]['dicom_data'].extend(study_data['dicom_data'])
+                        all_studies[study_uid]['file_paths'].extend(study_data['file_paths'])
+                
+                # Update progress
+                self.update_progress(
+                    processed_files=i + len(chunk),
+                    successful_files=len(all_successful),
+                    failed_files=len(all_failed)
+                )
+                
+                # Force garbage collection to free memory
+                gc.collect()
+            
+            # Process studies
+            processed_studies = []
+            for study_uid, study_data in all_studies.items():
+                try:
+                    self.update_progress(current_study=f"Processing study {study_uid}")
+                    study = self.process_study(study_uid, study_data)
+                    processed_studies.append(study)
+                except Exception as e:
+                    print(f"Error processing study {study_uid}: {e}")
+                    all_failed.append(f"Error processing study {study_uid}: {str(e)}")
+                    continue
+            
+            # Final progress update
+            self.update_progress(
+                status='completed',
+                processed_files=len(files),
+                successful_files=len(all_successful),
+                failed_files=len(all_failed)
+            )
+            
+            return {
+                'upload_id': self.upload_id,
+                'successful_files': all_successful,
+                'failed_files': all_failed,
+                'studies': processed_studies,
+                'total_files': len(files),
+                'total_studies': len(processed_studies)
+            }
+            
+        except Exception as e:
+            self.update_progress(status='error', errors=[str(e)])
+            raise
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def bulk_upload_dicom_folder(request):
+    """Handle bulk DICOM folder uploads with chunked processing for large folders"""
+    try:
+        # Ensure media directories exist
+        ensure_directories()
+        
+        if 'files' not in request.FILES:
+            return JsonResponse({'error': 'No files provided'}, status=400)
+        
+        files = request.FILES.getlist('files')
+        if not files:
+            return JsonResponse({'error': 'No files provided'}, status=400)
+        
+        # Check if this is a large upload (more than 100 files)
+        if len(files) > 100:
+            # Use background processing for large uploads
+            upload_manager = BulkUploadManager(
+                user=request.user,
+                facility=request.user.facility if hasattr(request.user, 'facility') else None
+            )
+            
+            # Start background processing
+            def background_upload():
+                try:
+                    result = upload_manager.process_upload(files)
+                    # Store final result in cache
+                    cache.set(f'upload_result_{upload_manager.upload_id}', result, timeout=3600)
+                except Exception as e:
+                    print(f"Background upload error: {e}")
+                    cache.set(f'upload_result_{upload_manager.upload_id}', {'error': str(e)}, timeout=3600)
+            
+            # Start background thread
+            upload_thread = threading.Thread(target=background_upload)
+            upload_thread.daemon = True
+            upload_thread.start()
+            
+            return JsonResponse({
+                'upload_id': upload_manager.upload_id,
+                'message': f'Started processing {len(files)} files in background',
+                'status': 'processing'
+            })
+        else:
+            # Use regular processing for smaller uploads
+            upload_manager = BulkUploadManager(
+                user=request.user,
+                facility=request.user.facility if hasattr(request.user, 'facility') else None
+            )
+            
+            result = upload_manager.process_upload(files)
+            
+            return JsonResponse({
+                'upload_id': upload_manager.upload_id,
+                'message': f'Successfully processed {len(result["successful_files"])} files from {len(result["studies"])} study(ies)',
+                'successful_files': result['successful_files'],
+                'failed_files': result['failed_files'],
+                'total_files': result['total_files'],
+                'total_studies': result['total_studies'],
+                'status': 'completed'
+            })
+            
+    except Exception as e:
+        print(f"Unexpected error in bulk_upload_dicom_folder: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Create error notification
+        create_system_error_notification(f"Bulk DICOM folder upload error: {str(e)}", request.user)
+        
+        return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
+
+
+@api_view(['GET'])
+def get_upload_progress(request, upload_id):
+    """Get upload progress for background uploads"""
+    try:
+        progress = cache.get(f'upload_progress_{upload_id}')
+        if progress is None:
+            return JsonResponse({'error': 'Upload not found or expired'}, status=404)
+        
+        return JsonResponse(progress)
+    except Exception as e:
+        return JsonResponse({'error': f'Error getting progress: {str(e)}'}, status=500)
+
+
+@api_view(['GET'])
+def get_upload_result(request, upload_id):
+    """Get final upload result for background uploads"""
+    try:
+        result = cache.get(f'upload_result_{upload_id}')
+        if result is None:
+            return JsonResponse({'error': 'Upload result not found or expired'}, status=404)
+        
+        return JsonResponse(result)
+    except Exception as e:
+        return JsonResponse({'error': f'Error getting result: {str(e)}'}, status=500)
 
 
 @api_view(['GET'])

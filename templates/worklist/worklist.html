@@ -41,6 +41,9 @@
                 <div class="upload-zone" id="upload-zone">
                     <i class="fas fa-cloud-upload-alt" style="font-size: 24px; margin-bottom: 10px;"></i>
                     <p>Drop DICOM files or folders here, or click to browse</p>
+                    <p style="font-size: 12px; color: #666; margin-top: 5px;">
+                        <i class="fas fa-info-circle"></i> Large folders (100+ files) will be processed in the background
+                    </p>
                     <input type="file" id="file-input" multiple webkitdirectory style="display: none;">
                     <input type="file" id="file-input-files" multiple accept=".dcm,.dicom" style="display: none;">
                 </div>
@@ -306,6 +309,9 @@
             uploadProgress.style.display = 'block';
             fileInfo.textContent = `Uploading ${files.length} file(s)...`;
             
+            // Choose upload endpoint based on file count
+            const uploadUrl = files.length > 100 ? '/viewer/api/bulk-upload/' : '/viewer/api/upload/';
+            
             const xhr = new XMLHttpRequest();
             
             xhr.upload.addEventListener('progress', (e) => {
@@ -319,11 +325,19 @@
                 if (xhr.status === 200) {
                     try {
                         const response = JSON.parse(xhr.responseText);
-                        fileInfo.textContent = `Upload complete! ${response.uploaded_files ? response.uploaded_files.length : 0} files processed.`;
-                        setTimeout(() => {
-                            uploadProgress.style.display = 'none';
-                            location.reload(); // Reload to show new entries
-                        }, 2000);
+                        
+                        if (response.status === 'processing') {
+                            // Background processing started
+                            fileInfo.textContent = `Processing ${files.length} files in background...`;
+                            monitorUploadProgress(response.upload_id);
+                        } else {
+                            // Immediate completion
+                            fileInfo.textContent = `Upload complete! ${response.successful_files ? response.successful_files.length : 0} files processed.`;
+                            setTimeout(() => {
+                                uploadProgress.style.display = 'none';
+                                location.reload(); // Reload to show new entries
+                            }, 2000);
+                        }
                     } catch (parseError) {
                         console.error('Failed to parse JSON response:', parseError);
                         console.error('Response text:', xhr.responseText);
@@ -345,9 +359,55 @@
                 fileInfo.textContent = 'Upload failed. Please try again.';
             });
             
-            xhr.open('POST', '/viewer/api/upload/');
+            xhr.open('POST', uploadUrl);
             xhr.setRequestHeader('X-CSRFToken', getCSRFToken());
             xhr.send(formData);
+        }
+        
+        function monitorUploadProgress(uploadId) {
+            const progressInterval = setInterval(() => {
+                fetch(`/viewer/api/upload-progress/${uploadId}/`)
+                    .then(response => response.json())
+                    .then(progress => {
+                        if (progress.status === 'completed') {
+                            // Get final result
+                            fetch(`/viewer/api/upload-result/${uploadId}/`)
+                                .then(response => response.json())
+                                .then(result => {
+                                    if (result.error) {
+                                        fileInfo.textContent = `Upload failed: ${result.error}`;
+                                    } else {
+                                        const percentComplete = (progress.processed_files / progress.total_files) * 100;
+                                        progressFill.style.width = percentComplete + '%';
+                                        fileInfo.textContent = `Upload complete! ${result.successful_files ? result.successful_files.length : 0} files processed from ${result.total_studies} study(ies).`;
+                                        setTimeout(() => {
+                                            uploadProgress.style.display = 'none';
+                                            location.reload(); // Reload to show new entries
+                                        }, 2000);
+                                    }
+                                    clearInterval(progressInterval);
+                                })
+                                .catch(error => {
+                                    console.error('Error getting upload result:', error);
+                                    fileInfo.textContent = 'Upload completed but could not get final result.';
+                                    clearInterval(progressInterval);
+                                });
+                        } else if (progress.status === 'error') {
+                            fileInfo.textContent = `Upload failed: ${progress.errors.join(', ')}`;
+                            clearInterval(progressInterval);
+                        } else {
+                            // Update progress
+                            const percentComplete = (progress.processed_files / progress.total_files) * 100;
+                            progressFill.style.width = percentComplete + '%';
+                            fileInfo.textContent = `Processing ${progress.processed_files}/${progress.total_files} files... ${progress.current_study || ''}`;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error monitoring upload progress:', error);
+                        fileInfo.textContent = 'Error monitoring upload progress.';
+                        clearInterval(progressInterval);
+                    });
+            }, 2000); // Check every 2 seconds
         }
         
         // Row selection
