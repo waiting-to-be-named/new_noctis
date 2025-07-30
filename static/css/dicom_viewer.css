@@ -1266,3 +1266,277 @@ body {
     background: #1a3a1a;
     border-color: #00ff00;
 }
+
+/* Enhanced DICOM Viewer Styling */
+
+/* Series Selection UI */
+.series-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.series-item {
+    border: 2px solid #333;
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: #1a1a1a;
+}
+
+.series-item:hover {
+    border-color: #00ff00;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 255, 0, 0.2);
+}
+
+.series-item.active {
+    border-color: #00ff00;
+    background: rgba(0, 255, 0, 0.1);
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+}
+
+.series-thumbnail {
+    height: 80px;
+    background: #2a2a2a;
+    background-size: cover;
+    background-position: center;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+}
+
+.series-info {
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+    padding: 8px;
+    width: 100%;
+    color: #fff;
+}
+
+.series-number {
+    font-size: 11px;
+    font-weight: bold;
+    color: #00ff00;
+    margin-bottom: 2px;
+}
+
+.series-description {
+    font-size: 10px;
+    color: #e0e0e0;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.series-count {
+    font-size: 9px;
+    color: #aaa;
+}
+
+/* Alternative List View for Series */
+.series-list {
+    display: none; /* Hidden by default, can be toggled */
+}
+
+.series-list-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border: 1px solid #333;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #1a1a1a;
+}
+
+.series-list-item:hover {
+    background: #2a2a2a;
+    border-color: #00ff00;
+}
+
+.series-list-item.active {
+    background: rgba(0, 255, 0, 0.1);
+    border-color: #00ff00;
+    color: #00ff00;
+}
+
+.series-details {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+
+.series-number {
+    background: #333;
+    color: #00ff00;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: bold;
+    min-width: 24px;
+    text-align: center;
+}
+
+.series-desc {
+    flex: 1;
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.series-count {
+    font-size: 10px;
+    color: #888;
+    background: #2a2a2a;
+    padding: 2px 6px;
+    border-radius: 10px;
+}
+
+/* Enhancement Controls */
+.form-select {
+    background: #2a2a2a;
+    border: 1px solid #555;
+    color: #e0e0e0;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    width: 100%;
+}
+
+.form-select:focus {
+    outline: none;
+    border-color: #00ff00;
+    box-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
+}
+
+.form-select option {
+    background: #2a2a2a;
+    color: #e0e0e0;
+}
+
+/* Enhanced Sliders */
+.slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: #333;
+    outline: none;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.slider:hover {
+    opacity: 1;
+}
+
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #00ff00;
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(0, 255, 0, 0.5);
+    transition: all 0.2s ease;
+}
+
+.slider::-webkit-slider-thumb:hover {
+    background: #00cc00;
+    transform: scale(1.1);
+    box-shadow: 0 0 12px rgba(0, 255, 0, 0.7);
+}
+
+.slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #00ff00;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 0 8px rgba(0, 255, 0, 0.5);
+    transition: all 0.2s ease;
+}
+
+.slider::-moz-range-thumb:hover {
+    background: #00cc00;
+    transform: scale(1.1);
+    box-shadow: 0 0 12px rgba(0, 255, 0, 0.7);
+}
+
+/* Enhancement Value Display */
+#enhancement-value {
+    color: #00ff00;
+    font-weight: bold;
+}
+
+/* Panel Section Improvements */
+.panel-section {
+    margin-bottom: 15px;
+    border: 1px solid #333;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.section-title {
+    background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
+    color: #00ff00;
+    padding: 10px 12px;
+    margin: 0;
+    font-size: 13px;
+    font-weight: bold;
+    text-transform: uppercase;
+    border-bottom: 1px solid #333;
+}
+
+.panel-section .control-group {
+    padding: 12px;
+    background: #1a1a1a;
+}
+
+.panel-section .control-group:not(:last-child) {
+    border-bottom: 1px solid #2a2a2a;
+}
+
+/* Animation for Series Loading */
+@keyframes seriesLoad {
+    0% { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+.series-item {
+    animation: seriesLoad 0.3s ease forwards;
+}
+
+.series-item:nth-child(2) { animation-delay: 0.1s; }
+.series-item:nth-child(3) { animation-delay: 0.2s; }
+.series-item:nth-child(4) { animation-delay: 0.3s; }
+.series-item:nth-child(5) { animation-delay: 0.4s; }
+
+/* Responsive Design for Series Selector */
+@media (max-width: 768px) {
+    .series-grid {
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        gap: 6px;
+    }
+    
+    .series-thumbnail {
+        height: 60px;
+    }
+    
+    .series-info {
+        padding: 4px 6px;
+    }
+    
+    .series-number, .series-description, .series-count {
+        font-size: 9px;
+    }
+}
