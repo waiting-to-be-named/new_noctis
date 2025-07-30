@@ -8,24 +8,105 @@
     <link rel="stylesheet" href="{% static 'css/dicom_viewer.css' %}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
+        /* Enhanced viewer UI refinements */
+        body {
+            overflow: hidden;
+            background: #000;
+        }
+        
+        .dicom-viewer {
+            background: #000;
+        }
+        
+        /* Better button styles */
+        .tool-btn {
+            transition: all 0.3s ease;
+        }
+        
+        .tool-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 255, 0, 0.3);
+        }
+        
+        /* Enhanced viewport appearance */
+        .viewport {
+            background: radial-gradient(ellipse at center, #0a0a0a 0%, #000 70%);
+            border: 1px solid rgba(0, 255, 0, 0.1);
+            transition: margin-bottom 0.3s ease;
+        }
+        
+        /* Adjust viewport when series selector is shown */
+        .dicom-viewer.series-selector-open .viewport {
+            margin-bottom: 180px;
+        }
+        
+        /* Better patient info display */
+        .patient-info {
+            background: linear-gradient(to right, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.7));
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0, 255, 0, 0.2);
+            padding: 12px 20px;
+            font-size: 14px;
+            color: #00ff00;
+            text-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
+        }
+        
+        /* Enhanced slider styling */
+        .slider-control input[type="range"] {
+            background: rgba(0, 255, 0, 0.1);
+            border: 1px solid rgba(0, 255, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .slider-control input[type="range"]:hover {
+            background: rgba(0, 255, 0, 0.2);
+            border-color: #00ff00;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+        }
+        
+        .slider-control .value {
+            color: #00ff00;
+            font-weight: bold;
+            text-shadow: 0 0 3px rgba(0, 255, 0, 0.5);
+        }
+        
+        /* Enhanced overlay labels */
+        .overlay-label {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 8px 12px;
+            border-radius: 4px;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(0, 255, 0, 0.2);
+            font-size: 12px;
+            line-height: 1.4;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+        }
+        
+        .overlay-label.top-left,
+        .overlay-label.top-right {
+            top: 70px;
+        }
+        
+        .overlay-label.bottom-left,
+        .overlay-label.bottom-right {
+            bottom: 20px;
+        }
+        
         /* Enhanced Series Selector Styles */
         .series-selector {
             position: fixed;
-            top: 80px;
-            bottom: 50px;
-            left: auto;
+            bottom: 0;
+            left: 0;
             right: 0;
-            width: 320px;
-            max-width: 90vw;
-            background: rgba(0, 0, 0, 0.95);
+            height: 180px;
+            background: linear-gradient(to bottom, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.95));
             color: white;
             padding: 15px;
-            z-index: 12000; /* Lower than dropdowns but higher than main content */
-            max-height: calc(100vh - 130px); /* Prevent excessive height */
-            overflow-y: auto;
+            z-index: 12000;
             display: none;
-            border-left: 2px solid #00ff00;
+            border-top: 2px solid #00ff00;
             backdrop-filter: blur(10px);
+            box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.5);
         }
         
         .series-selector.show {
@@ -44,23 +125,7 @@
             }
         }
         
-        .series-selector.top {
-            top: 80px; /* Below top bar */
-            bottom: auto;
-            border-top: none;
-            border-bottom: 2px solid #00ff00;
-        }
-        
-        .series-selector.side {
-            top: 80px;
-            bottom: 50px;
-            left: auto;
-            right: 0;
-            width: 300px;
-            max-width: 90vw;
-            border-left: 2px solid #00ff00;
-            border-top: none;
-        }
+        /* Remove old position-specific styles */
         
         .series-selector-header {
             display: flex;
@@ -96,17 +161,11 @@
         }
         
         .series-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            display: flex;
+            flex-wrap: nowrap;
             gap: 10px;
-            max-height: 200px;
-            overflow-y: auto;
-            padding: 5px 0;
-        }
-        
-        .series-selector.side .series-grid {
-            grid-template-columns: 1fr; /* Single column for side panel */
-            max-height: none;
+            overflow-x: auto;
+            padding-bottom: 10px;
         }
         
         .series-item {
@@ -118,6 +177,8 @@
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
+            min-width: 150px;
+            flex-shrink: 0;
         }
         
         .series-item:hover {
@@ -134,12 +195,13 @@
         }
         
         .series-preview {
-            width: 100%;
-            height: 60px;
+            width: 130px;
+            height: 100px;
             object-fit: cover;
             border-radius: 5px;
             margin-bottom: 8px;
             background: #000;
+            display: block;
         }
         
         .series-info {
@@ -307,16 +369,7 @@
         }
         
         /* Series Selector Position Controls - Fixed positioning */
-        .series-position-controls {
-            position: fixed;
-            top: 80px;
-            right: 340px;
-            background: rgba(0, 0, 0, 0.9);
-            padding: 10px;
-            border-radius: 5px;
-            z-index: 5000;
-            border: 1px solid #444;
-        }
+        /* Removed as series selector is always at bottom */
         
         .position-btn {
             background: none;
@@ -634,12 +687,7 @@
     </div>
 
     <!-- Series Position Controls -->
-    <div class="series-position-controls">
-        <div style="color: white; font-size: 10px; margin-bottom: 5px;">Series Position:</div>
-        <button class="position-btn active" data-position="bottom">Bottom</button>
-        <button class="position-btn" data-position="top">Top</button>
-        <button class="position-btn" data-position="side">Side</button>
-    </div>
+    <!-- Removed as series selector is always at bottom -->
 
     <script src="{% static 'js/dicom_viewer.js' %}"></script>
     <script>
@@ -671,32 +719,33 @@
             document.getElementById('series-selector-btn').addEventListener('click', toggleSeriesSelector);
             
             // Position controls
-            document.querySelectorAll('.position-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const position = e.target.dataset.position;
-                    setSeriesSelectorPosition(position);
-                    
-                    // Update active button
-                    document.querySelectorAll('.position-btn').forEach(b => b.classList.remove('active'));
-                    e.target.classList.add('active');
-                });
-            });
+            // Removed as series selector is always at bottom
         }
         
         function toggleSeriesSelector() {
             const selector = document.getElementById('series-selector');
+            const viewer = document.getElementById('dicom-viewer');
             selector.classList.toggle('show');
             
-            if (selector.classList.contains('show') && currentStudyId) {
-                loadSeriesData(currentStudyId);
+            // Add class to viewer to adjust viewport
+            if (selector.classList.contains('show')) {
+                viewer.classList.add('series-selector-open');
+                if (currentStudyId) {
+                    loadSeriesData(currentStudyId);
+                }
+            } else {
+                viewer.classList.remove('series-selector-open');
             }
+            
+            // Resize canvas after transition
+            setTimeout(() => {
+                if (window.viewer) {
+                    window.viewer.resizeCanvas();
+                }
+            }, 300);
         }
         
-        function setSeriesSelectorPosition(position) {
-            const selector = document.getElementById('series-selector');
-            selector.className = 'series-selector';
-            selector.classList.add(position);
-        }
+        // Series position is fixed at bottom, no need for position function
         
         function loadSeriesData(studyId) {
             fetch(`/viewer/api/studies/${studyId}/series-selector/`)
