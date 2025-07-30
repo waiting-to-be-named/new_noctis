@@ -24,10 +24,22 @@ urlpatterns = [
     path('api/upload-progress/<str:upload_id>/', views.get_upload_progress, name='get_upload_progress'),
     path('api/upload-result/<str:upload_id>/', views.get_upload_result, name='get_upload_result'),
     
+    # Enhanced bulk upload
+    path('api/enhanced-bulk-upload/', views.enhanced_bulk_upload_dicom_folder, name='enhanced_bulk_upload_dicom_folder'),
+    path('api/enhanced-upload-progress/<str:upload_id>/', views.get_enhanced_upload_progress, name='get_enhanced_upload_progress'),
+    path('api/enhanced-upload-result/<str:upload_id>/', views.get_enhanced_upload_result, name='get_enhanced_upload_result'),
+    
     # Study and image data
     path('api/studies/', views.get_studies, name='get_studies'),
     path('api/studies/<int:study_id>/images/', views.get_study_images, name='get_study_images'),
     path('api/images/<int:image_id>/data/', views.get_image_data, name='get_image_data'),
+    
+    # Enhanced image processing
+    path('api/images/<int:image_id>/enhanced-data/', views.get_enhanced_image_data, name='get_enhanced_image_data'),
+    
+    # Series selector functionality
+    path('api/studies/<int:study_id>/series-selector/', views.get_series_selector_data, name='get_series_selector_data'),
+    path('api/series/<int:series_id>/enhanced-images/', views.get_enhanced_series_images, name='get_enhanced_series_images'),
     
     # Measurements and annotations
     path('api/measurements/save/', views.save_measurement, name='save_measurement'),

@@ -34,7 +34,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from django.core.cache import cache
 from django.db import transaction
 import gc
+import zipfile
+import tempfile
+import shutil
+from pathlib import Path
+import logging
 
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Ensure required directories exist
 def ensure_directories():
@@ -43,8 +50,9 @@ def ensure_directories():
         media_root = default_storage.location
         dicom_dir = os.path.join(media_root, 'dicom_files')
         temp_dir = os.path.join(media_root, 'temp')
+        bulk_upload_dir = os.path.join(media_root, 'bulk_uploads')
         
-        for directory in [media_root, dicom_dir, temp_dir]:
+        for directory in [media_root, dicom_dir, temp_dir, bulk_upload_dir]:
             if not os.path.exists(directory):
                 try:
                     os.makedirs(directory, exist_ok=True)
@@ -61,8 +69,9 @@ def ensure_directories():
                         media_root = fallback_dir
                         dicom_dir = os.path.join(media_root, 'dicom_files')
                         temp_dir = os.path.join(media_root, 'temp')
+                        bulk_upload_dir = os.path.join(media_root, 'bulk_uploads')
                         # Create subdirectories in fallback location
-                        for subdir in [dicom_dir, temp_dir]:
+                        for subdir in [dicom_dir, temp_dir, bulk_upload_dir]:
                             if not os.path.exists(subdir):
                                 os.makedirs(subdir, exist_ok=True)
                                 print(f"Created fallback directory: {subdir}")
@@ -77,12 +86,441 @@ def ensure_directories():
         # Create minimal fallback structure
         fallback_media = os.path.join(os.getcwd(), 'media')
         fallback_dicom = os.path.join(fallback_media, 'dicom_files')
+        fallback_bulk = os.path.join(fallback_media, 'bulk_uploads')
         try:
             os.makedirs(fallback_dicom, exist_ok=True)
-            print(f"Created emergency fallback: {fallback_dicom}")
+            os.makedirs(fallback_bulk, exist_ok=True)
+            print(f"Created emergency fallback: {fallback_dicom}, {fallback_bulk}")
         except Exception as fallback_error:
             print(f"Emergency fallback failed: {fallback_error}")
             raise
+
+
+class EnhancedBulkUploadManager:
+    """Enhanced bulk upload manager for handling large files with multiple folders"""
+    
+    def __init__(self, user, facility=None):
+        self.user = user
+        self.facility = facility
+        self.upload_id = str(uuid.uuid4())
+        self.progress = {
+            'total_files': 0,
+            'processed_files': 0,
+            'successful_files': 0,
+            'failed_files': 0,
+            'current_study': None,
+            'current_series': None,
+            'status': 'initializing',
+            'errors': [],
+            'warnings': [],
+            'studies_created': 0,
+            'series_created': 0,
+            'images_processed': 0,
+            'total_size_mb': 0,
+            'processed_size_mb': 0,
+            'estimated_time_remaining': 0,
+            'current_folder': None,
+            'folder_progress': 0,
+            'total_folders': 0
+        }
+        self.studies = {}
+        self.lock = threading.Lock()
+        self.temp_dir = None
+        self.chunk_size = 50  # Process 50 files at a time
+        self.max_workers = 4  # Number of worker threads
+        
+    def update_progress(self, **kwargs):
+        """Thread-safe progress update with enhanced metrics"""
+        with self.lock:
+            self.progress.update(kwargs)
+            # Calculate estimated time remaining
+            if self.progress['processed_files'] > 0:
+                elapsed_time = time.time() - self.start_time
+                rate = self.progress['processed_files'] / elapsed_time
+                remaining_files = self.progress['total_files'] - self.progress['processed_files']
+                if rate > 0:
+                    self.progress['estimated_time_remaining'] = remaining_files / rate
+            
+            # Cache progress for frontend polling
+            cache.set(f'upload_progress_{self.upload_id}', self.progress, timeout=7200)  # 2 hours
+    
+    def extract_archive(self, uploaded_file):
+        """Extract uploaded archive (zip, tar, etc.) to temporary directory"""
+        try:
+            self.temp_dir = tempfile.mkdtemp(prefix=f'bulk_upload_{self.upload_id}_')
+            
+            if uploaded_file.name.lower().endswith('.zip'):
+                with zipfile.ZipFile(uploaded_file, 'r') as zip_ref:
+                    zip_ref.extractall(self.temp_dir)
+            else:
+                # For other archive types, save and extract
+                temp_path = os.path.join(self.temp_dir, uploaded_file.name)
+                with open(temp_path, 'wb') as f:
+                    for chunk in uploaded_file.chunks():
+                        f.write(chunk)
+                
+                # Extract based on file type
+                if uploaded_file.name.lower().endswith('.tar.gz'):
+                    import tarfile
+                    with tarfile.open(temp_path, 'r:gz') as tar:
+                        tar.extractall(self.temp_dir)
+                elif uploaded_file.name.lower().endswith('.tar'):
+                    import tarfile
+                    with tarfile.open(temp_path, 'r') as tar:
+                        tar.extractall(self.temp_dir)
+            
+            return True
+        except Exception as e:
+            logger.error(f"Failed to extract archive: {e}")
+            self.update_progress(errors=self.progress['errors'] + [f"Archive extraction failed: {str(e)}"])
+            return False
+    
+    def scan_files(self):
+        """Scan extracted files to count and categorize them"""
+        if not self.temp_dir or not os.path.exists(self.temp_dir):
+            return False
+        
+        files = []
+        total_size = 0
+        
+        for root, dirs, filenames in os.walk(self.temp_dir):
+            for filename in filenames:
+                file_path = os.path.join(root, filename)
+                file_size = os.path.getsize(file_path)
+                
+                # Check if file is likely a DICOM file
+                if self.is_dicom_candidate(filename, file_size):
+                    files.append({
+                        'path': file_path,
+                        'name': filename,
+                        'size': file_size,
+                        'relative_path': os.path.relpath(file_path, self.temp_dir)
+                    })
+                    total_size += file_size
+        
+        self.files_to_process = files
+        self.update_progress(
+            total_files=len(files),
+            total_size_mb=total_size / (1024 * 1024),
+            status='scanning_complete'
+        )
+        
+        return len(files) > 0
+    
+    def is_dicom_candidate(self, filename, file_size):
+        """Enhanced DICOM file detection"""
+        filename_lower = filename.lower()
+        
+        # Explicit DICOM extensions
+        dicom_extensions = ['.dcm', '.dicom', '.img', '.ima']
+        if any(filename_lower.endswith(ext) for ext in dicom_extensions):
+            return True
+        
+        # Compressed DICOM files
+        compressed_extensions = ['.dcm.gz', '.dicom.gz', '.dcm.bz2', '.dicom.bz2']
+        if any(filename_lower.endswith(ext) for ext in compressed_extensions):
+            return True
+        
+        # Raw data files
+        raw_extensions = ['.raw', '.dat', '.bin']
+        if any(filename_lower.endswith(ext) for ext in raw_extensions):
+            return True
+        
+        # Files without extension (common for DICOM)
+        if '.' not in filename:
+            return file_size > 512
+        
+        # Large files that might be DICOM
+        if file_size > 1024:  # 1KB minimum
+            return True
+        
+        return False
+    
+    def process_file_batch(self, files_batch):
+        """Process a batch of files with enhanced error handling"""
+        batch_results = {
+            'successful': [],
+            'failed': [],
+            'studies': {},
+            'total_size': 0
+        }
+        
+        for file_info in files_batch:
+            try:
+                file_path = file_info['path']
+                file_size = file_info['size']
+                
+                # Check file size (500MB limit for individual files)
+                if file_size > 500 * 1024 * 1024:
+                    batch_results['failed'].append(f"File {file_info['name']} is too large (max 500MB)")
+                    continue
+                
+                # Read DICOM data with multiple fallback methods
+                dicom_data = None
+                try:
+                    # Method 1: Direct read
+                    dicom_data = pydicom.dcmread(file_path)
+                except Exception as e1:
+                    try:
+                        # Method 2: Force read
+                        dicom_data = pydicom.dcmread(file_path, force=True)
+                    except Exception as e2:
+                        try:
+                            # Method 3: Read with specific transfer syntax
+                            dicom_data = pydicom.dcmread(file_path, force=True, specific_char_set='utf-8')
+                        except Exception as e3:
+                            logger.error(f"Failed to read DICOM file {file_info['name']}: {e1}, {e2}, {e3}")
+                            batch_results['failed'].append(f"Could not read DICOM data from {file_info['name']}")
+                            continue
+                
+                if not dicom_data:
+                    batch_results['failed'].append(f"No DICOM data found in {file_info['name']}")
+                    continue
+                
+                # Get study UID with fallback
+                study_uid = str(dicom_data.get('StudyInstanceUID', ''))
+                if not study_uid:
+                    study_uid = f"STUDY_{uuid.uuid4()}"
+                
+                # Get series UID with fallback
+                series_uid = str(dicom_data.get('SeriesInstanceUID', ''))
+                if not series_uid:
+                    series_uid = f"SERIES_{uuid.uuid4()}"
+                
+                # Group by study and series
+                if study_uid not in batch_results['studies']:
+                    batch_results['studies'][study_uid] = {
+                        'study_data': dicom_data,
+                        'series': {}
+                    }
+                
+                if series_uid not in batch_results['studies'][study_uid]['series']:
+                    batch_results['studies'][study_uid]['series'][series_uid] = []
+                
+                batch_results['studies'][study_uid]['series'][series_uid].append({
+                    'dicom_data': dicom_data,
+                    'file_path': file_path,
+                    'file_info': file_info
+                })
+                
+                batch_results['successful'].append(file_info['name'])
+                batch_results['total_size'] += file_size
+                
+            except Exception as e:
+                logger.error(f"Error processing file {file_info['name']}: {e}")
+                batch_results['failed'].append(f"Error processing {file_info['name']}: {str(e)}")
+        
+        return batch_results
+    
+    def process_study(self, study_uid, study_data):
+        """Process a study with enhanced series handling"""
+        try:
+            # Extract study information
+            study_info = self.extract_study_info(study_data['study_data'])
+            
+            # Create or get study
+            study, created = DicomStudy.objects.get_or_create(
+                study_instance_uid=study_uid,
+                defaults=study_info
+            )
+            
+            if created:
+                self.update_progress(studies_created=self.progress['studies_created'] + 1)
+            
+            # Process each series
+            for series_uid, series_files in study_data['series'].items():
+                if series_files:
+                    series_info = self.extract_series_info(series_files[0]['dicom_data'])
+                    
+                    # Create or get series
+                    series, series_created = DicomSeries.objects.get_or_create(
+                        study=study,
+                        series_instance_uid=series_uid,
+                        defaults=series_info
+                    )
+                    
+                    if series_created:
+                        self.update_progress(series_created=self.progress['series_created'] + 1)
+                    
+                    # Process images in series
+                    for image_data in series_files:
+                        try:
+                            self.process_image(series, image_data)
+                            self.update_progress(images_processed=self.progress['images_processed'] + 1)
+                        except Exception as e:
+                            logger.error(f"Error processing image in series {series_uid}: {e}")
+                            self.update_progress(errors=self.progress['errors'] + [f"Image processing error: {str(e)}"])
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error processing study {study_uid}: {e}")
+            self.update_progress(errors=self.progress['errors'] + [f"Study processing error: {str(e)}"])
+            return False
+    
+    def extract_study_info(self, dicom_data):
+        """Extract study information from DICOM data"""
+        return {
+            'patient_name': str(dicom_data.get('PatientName', 'Unknown')),
+            'patient_id': str(dicom_data.get('PatientID', 'Unknown')),
+            'study_date': self.parse_dicom_date(str(dicom_data.get('StudyDate', ''))),
+            'study_time': self.parse_dicom_time(str(dicom_data.get('StudyTime', ''))),
+            'study_description': str(dicom_data.get('StudyDescription', '')),
+            'modality': str(dicom_data.get('Modality', 'OT')),
+            'institution_name': str(dicom_data.get('InstitutionName', '')),
+            'accession_number': str(dicom_data.get('AccessionNumber', '')),
+            'referring_physician': str(dicom_data.get('ReferringPhysicianName', '')),
+            'uploaded_by': self.user,
+            'facility': self.facility
+        }
+    
+    def extract_series_info(self, dicom_data):
+        """Extract series information from DICOM data"""
+        return {
+            'series_number': int(dicom_data.get('SeriesNumber', 0)),
+            'series_description': str(dicom_data.get('SeriesDescription', '')),
+            'modality': str(dicom_data.get('Modality', 'OT')),
+            'body_part_examined': str(dicom_data.get('BodyPartExamined', ''))
+        }
+    
+    def process_image(self, series, image_data):
+        """Process individual DICOM image"""
+        dicom_data = image_data['dicom_data']
+        file_path = image_data['file_path']
+        
+        # Get SOP Instance UID
+        sop_instance_uid = str(dicom_data.get('SOPInstanceUID', f"INSTANCE_{uuid.uuid4()}"))
+        
+        # Create or get image
+        image, created = DicomImage.objects.get_or_create(
+            series=series,
+            sop_instance_uid=sop_instance_uid,
+            defaults={
+                'instance_number': int(dicom_data.get('InstanceNumber', 0)),
+                'rows': int(dicom_data.get('Rows', 0)),
+                'columns': int(dicom_data.get('Columns', 0)),
+                'pixel_spacing_x': float(dicom_data.get('PixelSpacing', [1.0, 1.0])[0]) if dicom_data.get('PixelSpacing') else None,
+                'pixel_spacing_y': float(dicom_data.get('PixelSpacing', [1.0, 1.0])[1]) if dicom_data.get('PixelSpacing') else None,
+                'slice_thickness': float(dicom_data.get('SliceThickness', 1.0)),
+                'window_width': float(dicom_data.get('WindowWidth', 400)),
+                'window_center': float(dicom_data.get('WindowCenter', 40)),
+                'bits_allocated': int(dicom_data.get('BitsAllocated', 16)),
+                'image_number': int(dicom_data.get('ImageNumber', 0)),
+                'photometric_interpretation': str(dicom_data.get('PhotometricInterpretation', 'MONOCHROME2')),
+                'samples_per_pixel': int(dicom_data.get('SamplesPerPixel', 1))
+            }
+        )
+        
+        if created:
+            # Save file to storage
+            unique_filename = f"{uuid.uuid4()}_{os.path.basename(file_path)}"
+            with open(file_path, 'rb') as f:
+                image.file_path.save(unique_filename, ContentFile(f.read()))
+            
+            # Save DICOM metadata
+            image.save_dicom_metadata()
+    
+    def process_upload(self, uploaded_file):
+        """Main upload processing method"""
+        self.start_time = time.time()
+        self.update_progress(status='starting')
+        
+        try:
+            # Extract archive if needed
+            if uploaded_file.name.lower().endswith(('.zip', '.tar.gz', '.tar')):
+                self.update_progress(status='extracting')
+                if not self.extract_archive(uploaded_file):
+                    return False
+            else:
+                # Single file upload
+                self.temp_dir = tempfile.mkdtemp(prefix=f'single_upload_{self.upload_id}_')
+                temp_path = os.path.join(self.temp_dir, uploaded_file.name)
+                with open(temp_path, 'wb') as f:
+                    for chunk in uploaded_file.chunks():
+                        f.write(chunk)
+                self.files_to_process = [{
+                    'path': temp_path,
+                    'name': uploaded_file.name,
+                    'size': uploaded_file.size,
+                    'relative_path': uploaded_file.name
+                }]
+                self.update_progress(total_files=1, total_size_mb=uploaded_file.size/(1024*1024))
+            
+            # Scan files
+            if not self.scan_files():
+                self.update_progress(status='no_files_found')
+                return False
+            
+            # Process files in chunks
+            self.update_progress(status='processing')
+            
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                # Split files into chunks
+                file_chunks = [self.files_to_process[i:i + self.chunk_size] 
+                             for i in range(0, len(self.files_to_process), self.chunk_size)]
+                
+                # Submit chunks for processing
+                future_to_chunk = {executor.submit(self.process_file_batch, chunk): chunk 
+                                 for chunk in file_chunks}
+                
+                # Collect results
+                for future in as_completed(future_to_chunk):
+                    try:
+                        batch_result = future.result()
+                        
+                        # Update progress
+                        self.update_progress(
+                            processed_files=self.progress['processed_files'] + len(batch_result['successful']) + len(batch_result['failed']),
+                            successful_files=self.progress['successful_files'] + len(batch_result['successful']),
+                            failed_files=self.progress['failed_files'] + len(batch_result['failed']),
+                            processed_size_mb=self.progress['processed_size_mb'] + batch_result['total_size']/(1024*1024),
+                            errors=self.progress['errors'] + batch_result['failed']
+                        )
+                        
+                        # Process studies
+                        for study_uid, study_data in batch_result['studies'].items():
+                            self.update_progress(current_study=study_uid)
+                            self.process_study(study_uid, study_data)
+                        
+                    except Exception as e:
+                        logger.error(f"Error in batch processing: {e}")
+                        self.update_progress(errors=self.progress['errors'] + [f"Batch processing error: {str(e)}"])
+            
+            # Cleanup
+            if self.temp_dir and os.path.exists(self.temp_dir):
+                shutil.rmtree(self.temp_dir)
+            
+            self.update_progress(status='completed')
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error in bulk upload processing: {e}")
+            self.update_progress(
+                status='failed',
+                errors=self.progress['errors'] + [f"Upload processing error: {str(e)}"]
+            )
+            return False
+    
+    def parse_dicom_date(self, date_str):
+        """Parse DICOM date string"""
+        if not date_str or date_str == 'None':
+            return None
+        try:
+            return datetime.strptime(date_str, '%Y%m%d').date()
+        except:
+            return None
+    
+    def parse_dicom_time(self, time_str):
+        """Parse DICOM time string"""
+        if not time_str or time_str == 'None':
+            return None
+        try:
+            # Handle various time formats
+            if len(time_str) >= 6:
+                return datetime.strptime(time_str[:6], '%H%M%S').time()
+            return None
+        except:
+            return None
 
 
 class HomeView(TemplateView):
@@ -995,484 +1433,6 @@ def upload_dicom_folder(request):
         return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
 
 
-# Bulk upload system for handling large folders with 2000+ images
-class BulkUploadManager:
-    """Manages bulk uploads with chunked processing and progress tracking"""
-    
-    def __init__(self, user, facility=None):
-        self.user = user
-        self.facility = facility
-        self.upload_id = str(uuid.uuid4())
-        self.progress = {
-            'total_files': 0,
-            'processed_files': 0,
-            'successful_files': 0,
-            'failed_files': 0,
-            'current_study': None,
-            'status': 'initializing',
-            'errors': [],
-            'warnings': []
-        }
-        self.studies = {}
-        self.lock = threading.Lock()
-        
-    def update_progress(self, **kwargs):
-        """Thread-safe progress update"""
-        with self.lock:
-            self.progress.update(kwargs)
-            # Cache progress for frontend polling
-            cache.set(f'upload_progress_{self.upload_id}', self.progress, timeout=3600)
-    
-    def process_file_batch(self, files_batch):
-        """Process a batch of files efficiently"""
-        batch_results = {
-            'successful': [],
-            'failed': [],
-            'studies': {}
-        }
-        
-        for file in files_batch:
-            try:
-                # Validate file
-                file_name = file.name.lower()
-                file_size = file.size
-                
-                if file_size > 100 * 1024 * 1024:  # 100MB limit
-                    batch_results['failed'].append(f"File {file.name} is too large (max 100MB)")
-                    continue
-                
-                # More permissive DICOM file detection
-                is_dicom_candidate = (
-                    file_name.endswith(('.dcm', '.dicom')) or
-                    file_name.endswith(('.dcm.gz', '.dicom.gz')) or
-                    file_name.endswith(('.dcm.bz2', '.dicom.bz2')) or
-                    file_name.endswith('.img') or  # Common DICOM format
-                    file_name.endswith('.ima') or  # Common DICOM format
-                    file_name.endswith('.raw') or  # Raw data
-                    file_name.endswith('.dat') or  # Data files
-                    file_name.endswith('.bin') or  # Binary files
-                    '.' not in file.name or  # Files without extension
-                    file_size > 512  # Files larger than 512 bytes (likely not text)
-                )
-                
-                if not is_dicom_candidate:
-                    batch_results['failed'].append(f"File {file.name} does not appear to be a DICOM file")
-                    continue
-                
-                # Save file with unique name
-                unique_filename = f"{uuid.uuid4()}_{file.name}"
-                file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file.read()))
-                
-                # Read DICOM data
-                dicom_data = None
-                try:
-                    dicom_data = pydicom.dcmread(default_storage.path(file_path))
-                except Exception as e1:
-                    try:
-                        file.seek(0)
-                        dicom_data = pydicom.dcmread(file)
-                        file.seek(0)
-                        file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file.read()))
-                    except Exception as e2:
-                        try:
-                            file.seek(0)
-                            file_bytes = file.read()
-                            dicom_data = pydicom.dcmread(file_bytes)
-                            file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file_bytes))
-                        except Exception as e3:
-                            print(f"Failed to read DICOM file {file.name}: {e1}, {e2}, {e3}")
-                            try:
-                                default_storage.delete(file_path)
-                            except:
-                                pass
-                            batch_results['failed'].append(f"Could not read DICOM data from {file.name}")
-                            continue
-                
-                if not dicom_data:
-                    batch_results['failed'].append(f"No DICOM data found in {file.name}")
-                    continue
-                
-                # Get study UID with fallback
-                study_uid = str(dicom_data.get('StudyInstanceUID', ''))
-                if not study_uid:
-                    study_uid = f"STUDY_{uuid.uuid4()}"
-                
-                # Group by study
-                if study_uid not in batch_results['studies']:
-                    batch_results['studies'][study_uid] = {
-                        'files': [],
-                        'dicom_data': [],
-                        'file_paths': []
-                    }
-                
-                batch_results['studies'][study_uid]['files'].append(file.name)
-                batch_results['studies'][study_uid]['dicom_data'].append(dicom_data)
-                batch_results['studies'][study_uid]['file_paths'].append(file_path)
-                batch_results['successful'].append(file.name)
-                
-            except Exception as e:
-                print(f"Error processing file {file.name}: {e}")
-                batch_results['failed'].append(f"Error processing {file.name}: {str(e)}")
-                if 'file_path' in locals():
-                    try:
-                        default_storage.delete(file_path)
-                    except:
-                        pass
-        
-        return batch_results
-    
-    def process_study(self, study_uid, study_data):
-        """Process a complete study with all its files"""
-        try:
-            with transaction.atomic():
-                # Create study from first file
-                first_dicom = study_data['dicom_data'][0]
-                
-                # Extract patient information with fallbacks
-                patient_name = 'Unknown'
-                if hasattr(first_dicom, 'PatientName'):
-                    try:
-                        patient_name = str(first_dicom.PatientName)
-                    except:
-                        patient_name = 'Unknown'
-                
-                patient_id = 'Unknown'
-                if hasattr(first_dicom, 'PatientID'):
-                    try:
-                        patient_id = str(first_dicom.PatientID)
-                    except:
-                        patient_id = 'Unknown'
-                
-                # Extract other fields with safe fallbacks
-                study_date = parse_dicom_date(getattr(first_dicom, 'StudyDate', None))
-                study_time = parse_dicom_time(getattr(first_dicom, 'StudyTime', None))
-                study_description = str(getattr(first_dicom, 'StudyDescription', ''))
-                modality = str(first_dicom.Modality) if hasattr(first_dicom, 'Modality') else 'OT'
-                institution_name = str(getattr(first_dicom, 'InstitutionName', ''))
-                accession_number = str(getattr(first_dicom, 'AccessionNumber', ''))
-                referring_physician = str(getattr(first_dicom, 'ReferringPhysicianName', ''))
-                
-                study, created = DicomStudy.objects.get_or_create(
-                    study_instance_uid=study_uid,
-                    defaults={
-                        'patient_name': patient_name,
-                        'patient_id': patient_id,
-                        'study_date': study_date,
-                        'study_time': study_time,
-                        'study_description': study_description,
-                        'modality': modality,
-                        'institution_name': institution_name,
-                        'uploaded_by': self.user if self.user.is_authenticated else None,
-                        'facility': self.facility,
-                        'accession_number': accession_number,
-                        'referring_physician': referring_physician,
-                    }
-                )
-                
-                # Create notifications for new study uploads
-                if created:
-                    try:
-                        radiologist_group = Group.objects.get(name='Radiologists')
-                        for radiologist in radiologist_group.user_set.all():
-                            Notification.objects.create(
-                                recipient=radiologist,
-                                notification_type='new_study',
-                                title='New Study Uploaded',
-                                message=f'New {modality} study uploaded for {patient_name} - {study_description}',
-                                related_study=study
-                            )
-                    except Group.DoesNotExist:
-                        pass
-                
-                # Create worklist entry if study was created
-                if created:
-                    try:
-                        facility = study.facility
-                        if not facility:
-                            facility, _ = Facility.objects.get_or_create(
-                                name="Default Facility",
-                                defaults={
-                                    'address': 'Unknown',
-                                    'phone': 'Unknown',
-                                    'email': 'unknown@facility.com'
-                                }
-                            )
-                            study.facility = facility
-                            study.save()
-                        
-                        WorklistEntry.objects.create(
-                            patient_name=study.patient_name,
-                            patient_id=study.patient_id,
-                            accession_number=study.accession_number or f"ACC{study.id:06d}",
-                            scheduled_station_ae_title="UPLOAD",
-                            scheduled_procedure_step_start_date=study.study_date or datetime.now().date(),
-                            scheduled_procedure_step_start_time=study.study_time or datetime.now().time(),
-                            modality=study.modality,
-                            scheduled_performing_physician=study.referring_physician or "Unknown",
-                            procedure_description=study.study_description,
-                            facility=facility,
-                            study=study,
-                            status='scheduled'
-                        )
-                    except Exception as e:
-                        print(f"Error creating worklist entry: {e}")
-                
-                # Process each file in the study
-                for i, dicom_data in enumerate(study_data['dicom_data']):
-                    try:
-                        # Create or get series with fallback UID
-                        series_uid = str(dicom_data.get('SeriesInstanceUID', ''))
-                        if not series_uid:
-                            series_uid = f"SERIES_{uuid.uuid4()}"
-                        
-                        series, created = DicomSeries.objects.get_or_create(
-                            study=study,
-                            series_instance_uid=series_uid,
-                            defaults={
-                                'series_number': int(dicom_data.get('SeriesNumber', 0)),
-                                'series_description': str(getattr(dicom_data, 'SeriesDescription', '')),
-                                'modality': str(dicom_data.Modality) if hasattr(dicom_data, 'Modality') else 'OT',
-                            }
-                        )
-                        
-                        # Create image with fallback UID
-                        image_instance_uid = str(dicom_data.get('SOPInstanceUID', ''))
-                        if not image_instance_uid:
-                            image_instance_uid = f"IMAGE_{uuid.uuid4()}"
-                        
-                        # Extract image data with safe fallbacks
-                        rows = 0
-                        columns = 0
-                        bits_allocated = 16
-                        samples_per_pixel = 1
-                        photometric_interpretation = 'MONOCHROME2'
-                        
-                        if hasattr(dicom_data, 'Rows'):
-                            try:
-                                rows = int(dicom_data.Rows)
-                            except:
-                                rows = 0
-                        
-                        if hasattr(dicom_data, 'Columns'):
-                            try:
-                                columns = int(dicom_data.Columns)
-                            except:
-                                columns = 0
-                        
-                        if hasattr(dicom_data, 'BitsAllocated'):
-                            try:
-                                bits_allocated = int(dicom_data.BitsAllocated)
-                            except:
-                                bits_allocated = 16
-                        
-                        if hasattr(dicom_data, 'SamplesPerPixel'):
-                            try:
-                                samples_per_pixel = int(dicom_data.SamplesPerPixel)
-                            except:
-                                samples_per_pixel = 1
-                        
-                        if hasattr(dicom_data, 'PhotometricInterpretation'):
-                            try:
-                                photometric_interpretation = str(dicom_data.PhotometricInterpretation)
-                            except:
-                                photometric_interpretation = 'MONOCHROME2'
-                        
-                        # Parse pixel spacing
-                        pixel_spacing_x = None
-                        pixel_spacing_y = None
-                        if hasattr(dicom_data, 'PixelSpacing'):
-                            try:
-                                pixel_spacing = dicom_data.PixelSpacing
-                                if isinstance(pixel_spacing, (list, tuple)) and len(pixel_spacing) >= 2:
-                                    pixel_spacing_x = float(pixel_spacing[0])
-                                    pixel_spacing_y = float(pixel_spacing[1])
-                            except Exception:
-                                pass
-                        
-                        image, created = DicomImage.objects.get_or_create(
-                            series=series,
-                            sop_instance_uid=image_instance_uid,
-                            defaults={
-                                'image_number': int(dicom_data.get('InstanceNumber', 0)),
-                                'file_path': study_data['file_paths'][i],
-                                'rows': rows,
-                                'columns': columns,
-                                'bits_allocated': bits_allocated,
-                                'samples_per_pixel': samples_per_pixel,
-                                'photometric_interpretation': photometric_interpretation,
-                                'pixel_spacing': str(getattr(dicom_data, 'PixelSpacing', '')),
-                                'pixel_spacing_x': pixel_spacing_x,
-                                'pixel_spacing_y': pixel_spacing_y,
-                                'slice_thickness': float(getattr(dicom_data, 'SliceThickness', 0)),
-                                'window_center': float(getattr(dicom_data, 'WindowCenter', 40)),
-                                'window_width': float(getattr(dicom_data, 'WindowWidth', 400)),
-                            }
-                        )
-                        
-                        if not created:
-                            # Image already exists, clean up the duplicate file
-                            try:
-                                default_storage.delete(study_data['file_paths'][i])
-                            except:
-                                pass
-                            
-                    except Exception as e:
-                        print(f"Error processing image in study {study_uid}: {e}")
-                        continue
-                
-                return study
-                
-        except Exception as e:
-            print(f"Error processing study {study_uid}: {e}")
-            raise
-    
-    def process_upload(self, files):
-        """Main upload processing with chunked processing"""
-        try:
-            self.update_progress(status='processing', total_files=len(files))
-            
-            # Process files in chunks to manage memory
-            chunk_size = 50  # Process 50 files at a time
-            all_studies = {}
-            all_successful = []
-            all_failed = []
-            
-            for i in range(0, len(files), chunk_size):
-                chunk = files[i:i + chunk_size]
-                
-                # Process chunk
-                chunk_results = self.process_file_batch(chunk)
-                
-                # Merge results
-                all_successful.extend(chunk_results['successful'])
-                all_failed.extend(chunk_results['failed'])
-                
-                # Merge studies
-                for study_uid, study_data in chunk_results['studies'].items():
-                    if study_uid not in all_studies:
-                        all_studies[study_uid] = study_data
-                    else:
-                        all_studies[study_uid]['files'].extend(study_data['files'])
-                        all_studies[study_uid]['dicom_data'].extend(study_data['dicom_data'])
-                        all_studies[study_uid]['file_paths'].extend(study_data['file_paths'])
-                
-                # Update progress
-                self.update_progress(
-                    processed_files=i + len(chunk),
-                    successful_files=len(all_successful),
-                    failed_files=len(all_failed)
-                )
-                
-                # Force garbage collection to free memory
-                gc.collect()
-            
-            # Process studies
-            processed_studies = []
-            for study_uid, study_data in all_studies.items():
-                try:
-                    self.update_progress(current_study=f"Processing study {study_uid}")
-                    study = self.process_study(study_uid, study_data)
-                    processed_studies.append(study)
-                except Exception as e:
-                    print(f"Error processing study {study_uid}: {e}")
-                    all_failed.append(f"Error processing study {study_uid}: {str(e)}")
-                    continue
-            
-            # Final progress update
-            self.update_progress(
-                status='completed',
-                processed_files=len(files),
-                successful_files=len(all_successful),
-                failed_files=len(all_failed)
-            )
-            
-            return {
-                'upload_id': self.upload_id,
-                'successful_files': all_successful,
-                'failed_files': all_failed,
-                'studies': processed_studies,
-                'total_files': len(files),
-                'total_studies': len(processed_studies)
-            }
-            
-        except Exception as e:
-            self.update_progress(status='error', errors=[str(e)])
-            raise
-
-
-@csrf_exempt
-@require_http_methods(['POST'])
-def bulk_upload_dicom_folder(request):
-    """Handle bulk DICOM folder uploads with chunked processing for large folders"""
-    try:
-        # Ensure media directories exist
-        ensure_directories()
-        
-        if 'files' not in request.FILES:
-            return JsonResponse({'error': 'No files provided'}, status=400)
-        
-        files = request.FILES.getlist('files')
-        if not files:
-            return JsonResponse({'error': 'No files provided'}, status=400)
-        
-        # Check if this is a large upload (more than 100 files)
-        if len(files) > 100:
-            # Use background processing for large uploads
-            upload_manager = BulkUploadManager(
-                user=request.user,
-                facility=request.user.facility if hasattr(request.user, 'facility') else None
-            )
-            
-            # Start background processing
-            def background_upload():
-                try:
-                    result = upload_manager.process_upload(files)
-                    # Store final result in cache
-                    cache.set(f'upload_result_{upload_manager.upload_id}', result, timeout=3600)
-                except Exception as e:
-                    print(f"Background upload error: {e}")
-                    cache.set(f'upload_result_{upload_manager.upload_id}', {'error': str(e)}, timeout=3600)
-            
-            # Start background thread
-            upload_thread = threading.Thread(target=background_upload)
-            upload_thread.daemon = True
-            upload_thread.start()
-            
-            return JsonResponse({
-                'upload_id': upload_manager.upload_id,
-                'message': f'Started processing {len(files)} files in background',
-                'status': 'processing'
-            })
-        else:
-            # Use regular processing for smaller uploads
-            upload_manager = BulkUploadManager(
-                user=request.user,
-                facility=request.user.facility if hasattr(request.user, 'facility') else None
-            )
-            
-            result = upload_manager.process_upload(files)
-            
-            return JsonResponse({
-                'upload_id': upload_manager.upload_id,
-                'message': f'Successfully processed {len(result["successful_files"])} files from {len(result["studies"])} study(ies)',
-                'successful_files': result['successful_files'],
-                'failed_files': result['failed_files'],
-                'total_files': result['total_files'],
-                'total_studies': result['total_studies'],
-                'status': 'completed'
-            })
-            
-    except Exception as e:
-        print(f"Unexpected error in bulk_upload_dicom_folder: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        # Create error notification
-        create_system_error_notification(f"Bulk DICOM folder upload error: {str(e)}", request.user)
-        
-        return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
-
-
 @api_view(['GET'])
 def get_upload_progress(request, upload_id):
     """Get upload progress for background uploads"""
@@ -1556,6 +1516,8 @@ def get_study_images(request, study_id):
         })
     except DicomStudy.DoesNotExist:
         return Response({'error': 'Study not found'}, status=404)
+    except Exception as e:
+        return Response({'error': f'Server error: {str(e)}'}, status=500)
 
 
 @api_view(['GET'])
@@ -2950,6 +2912,320 @@ def get_series_images(request, series_id):
                 'image_count': len(images_data),
             },
             'images': images_data
+        })
+    except DicomSeries.DoesNotExist:
+        return Response({'error': 'Series not found'}, status=404)
+    except Exception as e:
+        return Response({'error': f'Server error: {str(e)}'}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def enhanced_bulk_upload_dicom_folder(request):
+    """Enhanced bulk upload endpoint for handling large files with multiple folders"""
+    try:
+        # Ensure media directories exist
+        ensure_directories()
+        
+        if 'file' not in request.FILES:
+            return JsonResponse({'error': 'No file provided'}, status=400)
+        
+        uploaded_file = request.FILES['file']
+        if not uploaded_file:
+            return JsonResponse({'error': 'No file provided'}, status=400)
+        
+        # Check file size (2GB limit for bulk uploads)
+        if uploaded_file.size > 2 * 1024 * 1024 * 1024:
+            return JsonResponse({'error': 'File too large (max 2GB)'}, status=400)
+        
+        # Create enhanced upload manager
+        upload_manager = EnhancedBulkUploadManager(
+            user=request.user,
+            facility=request.user.facility if hasattr(request.user, 'facility') else None
+        )
+        
+        # Start background processing
+        def background_upload():
+            try:
+                success = upload_manager.process_upload(uploaded_file)
+                if success:
+                    result = {
+                        'upload_id': upload_manager.upload_id,
+                        'status': 'completed',
+                        'total_files': upload_manager.progress['total_files'],
+                        'successful_files': upload_manager.progress['successful_files'],
+                        'failed_files': upload_manager.progress['failed_files'],
+                        'studies_created': upload_manager.progress['studies_created'],
+                        'series_created': upload_manager.progress['series_created'],
+                        'images_processed': upload_manager.progress['images_processed'],
+                        'total_size_mb': upload_manager.progress['total_size_mb'],
+                        'errors': upload_manager.progress['errors']
+                    }
+                else:
+                    result = {
+                        'upload_id': upload_manager.upload_id,
+                        'status': 'failed',
+                        'errors': upload_manager.progress['errors']
+                    }
+                
+                # Store final result in cache
+                cache.set(f'upload_result_{upload_manager.upload_id}', result, timeout=7200)
+                
+            except Exception as e:
+                logger.error(f"Background upload error: {e}")
+                result = {
+                    'upload_id': upload_manager.upload_id,
+                    'status': 'failed',
+                    'error': str(e)
+                }
+                cache.set(f'upload_result_{upload_manager.upload_id}', result, timeout=7200)
+        
+        # Start background thread
+        upload_thread = threading.Thread(target=background_upload)
+        upload_thread.daemon = True
+        upload_thread.start()
+        
+        return JsonResponse({
+            'upload_id': upload_manager.upload_id,
+            'message': f'Started processing bulk upload in background',
+            'status': 'processing'
+        })
+        
+    except Exception as e:
+        logger.error(f"Unexpected error in enhanced_bulk_upload_dicom_folder: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Create error notification
+        create_system_error_notification(f"Enhanced bulk DICOM upload error: {str(e)}", request.user)
+        
+        return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
+
+
+@api_view(['GET'])
+def get_enhanced_upload_progress(request, upload_id):
+    """Get enhanced upload progress with detailed metrics"""
+    try:
+        progress = cache.get(f'upload_progress_{upload_id}')
+        if not progress:
+            return Response({'error': 'Upload progress not found'}, status=404)
+        
+        return Response(progress)
+    except Exception as e:
+        return Response({'error': f'Server error: {str(e)}'}, status=500)
+
+
+@api_view(['GET'])
+def get_enhanced_upload_result(request, upload_id):
+    """Get enhanced upload result with detailed statistics"""
+    try:
+        result = cache.get(f'upload_result_{upload_id}')
+        if not result:
+            return Response({'error': 'Upload result not found'}, status=404)
+        
+        return Response(result)
+    except Exception as e:
+        return Response({'error': f'Server error: {str(e)}'}, status=500)
+
+
+@api_view(['GET'])
+def get_enhanced_image_data(request, image_id):
+    """Get enhanced image data with improved resolution and density differentiation"""
+    try:
+        print(f"Attempting to get enhanced image data for image_id: {image_id}")
+        image = DicomImage.objects.get(id=image_id)
+        print(f"Found image: {image}, file_path: {image.file_path}")
+        
+        # Get query parameters with enhanced options
+        window_width = request.GET.get('window_width', image.window_width)
+        window_level = request.GET.get('window_level', image.window_center)
+        inverted = request.GET.get('inverted', 'false').lower() == 'true'
+        resolution_factor = float(request.GET.get('resolution_factor', '1.0'))
+        density_enhancement = request.GET.get('density_enhancement', 'false').lower() == 'true'
+        contrast_boost = float(request.GET.get('contrast_boost', '1.0'))
+        
+        # Convert to appropriate types
+        if window_width:
+            try:
+                window_width = float(window_width)
+            except (ValueError, TypeError):
+                window_width = 400
+        if window_level:
+            try:
+                window_level = float(window_level)
+            except (ValueError, TypeError):
+                window_level = 40
+        
+        print(f"Processing enhanced image with WW: {window_width}, WL: {window_level}, resolution_factor: {resolution_factor}")
+        
+        # Get enhanced processed image
+        image_base64 = image.get_enhanced_processed_image_base64(
+            window_width, window_level, inverted, resolution_factor, density_enhancement, contrast_boost
+        )
+        
+        if image_base64:
+            print(f"Successfully processed enhanced image {image_id}")
+            return Response({
+                'image_data': image_base64,
+                'metadata': {
+                    'rows': image.rows,
+                    'columns': image.columns,
+                    'pixel_spacing_x': image.pixel_spacing_x,
+                    'pixel_spacing_y': image.pixel_spacing_y,
+                    'slice_thickness': image.slice_thickness,
+                    'window_width': image.window_width,
+                    'window_center': image.window_center,
+                    'bits_allocated': image.bits_allocated,
+                    'photometric_interpretation': image.photometric_interpretation,
+                    'samples_per_pixel': image.samples_per_pixel,
+                }
+            })
+        else:
+            print(f"Failed to process enhanced image {image_id}")
+            return Response({'error': 'Could not process enhanced image - file may be missing or corrupted'}, status=500)
+            
+    except DicomImage.DoesNotExist:
+        print(f"Image not found: {image_id}")
+        return Response({'error': 'Image not found'}, status=404)
+    except Exception as e:
+        print(f"Unexpected error processing enhanced image {image_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return Response({'error': f'Server error: {str(e)}'}, status=500)
+
+
+@api_view(['GET'])
+def get_series_selector_data(request, study_id):
+    """Get series data for series selector UI"""
+    try:
+        study = DicomStudy.objects.get(id=study_id)
+        series_list = study.series.all().order_by('series_number')
+        
+        series_data = []
+        for series in series_list:
+            # Get first image for series preview
+            first_image = series.images.first()
+            preview_data = None
+            if first_image:
+                try:
+                    # Get a small preview image with enhanced processing
+                    preview_data = first_image.get_enhanced_processed_image_base64(
+                        window_width=400, 
+                        window_level=40, 
+                        inverted=False,
+                        resolution_factor=0.5,  # Smaller preview
+                        density_enhancement=True,
+                        contrast_boost=1.2
+                    )
+                except:
+                    preview_data = None
+            
+            # Get series statistics
+            image_count = series.images.count()
+            modalities = series.images.values_list('photometric_interpretation', flat=True).distinct()
+            
+            series_info = {
+                'id': series.id,
+                'series_number': series.series_number,
+                'series_description': series.series_description,
+                'modality': series.modality,
+                'body_part_examined': series.body_part_examined,
+                'image_count': image_count,
+                'preview_image': preview_data,
+                'created_at': series.created_at.isoformat() if series.created_at else None,
+                'modalities': list(modalities),
+                'has_enhanced_processing': True,
+                'supports_3d': image_count > 10,  # Series with many images can support 3D
+                'supports_mpr': image_count > 5,   # Series with moderate images can support MPR
+            }
+            series_data.append(series_info)
+        
+        return Response({
+            'study': {
+                'id': study.id,
+                'patient_name': study.patient_name,
+                'patient_id': study.patient_id,
+                'study_date': study.study_date,
+                'modality': study.modality,
+                'study_description': study.study_description,
+                'institution_name': study.institution_name,
+                'accession_number': study.accession_number,
+                'series_count': len(series_data),
+                'total_images': sum(s['image_count'] for s in series_data),
+            },
+            'series': series_data,
+            'ui_config': {
+                'series_selector_position': 'bottom',  # Can be 'top', 'bottom', 'side'
+                'show_previews': True,
+                'show_statistics': True,
+                'enable_enhanced_processing': True,
+                'enable_3d_reconstruction': True,
+                'enable_mpr': True,
+            }
+        })
+    except DicomStudy.DoesNotExist:
+        return Response({'error': 'Study not found'}, status=404)
+    except Exception as e:
+        return Response({'error': f'Server error: {str(e)}'}, status=500)
+
+
+@api_view(['GET'])
+def get_enhanced_series_images(request, series_id):
+    """Get enhanced series images with improved processing"""
+    try:
+        series = DicomSeries.objects.get(id=series_id)
+        images = series.images.all().order_by('instance_number')
+        
+        images_data = []
+        for image in images:
+            # Get enhanced image data
+            enhanced_preview = None
+            try:
+                enhanced_preview = image.get_enhanced_processed_image_base64(
+                    window_width=400,
+                    window_level=40,
+                    inverted=False,
+                    resolution_factor=0.3,  # Small preview
+                    density_enhancement=True,
+                    contrast_boost=1.1
+                )
+            except:
+                pass
+            
+            image_data = {
+                'id': image.id,
+                'instance_number': int(image.instance_number) if image.instance_number is not None else None,
+                'rows': int(image.rows) if image.rows is not None else None,
+                'columns': int(image.columns) if image.columns is not None else None,
+                'pixel_spacing_x': float(image.pixel_spacing_x) if image.pixel_spacing_x is not None else None,
+                'pixel_spacing_y': float(image.pixel_spacing_y) if image.pixel_spacing_y is not None else None,
+                'slice_thickness': float(image.slice_thickness) if image.slice_thickness is not None else None,
+                'window_width': float(image.window_width) if image.window_width is not None else None,
+                'window_center': float(image.window_center) if image.window_center is not None else None,
+                'bits_allocated': int(image.bits_allocated) if image.bits_allocated is not None else None,
+                'photometric_interpretation': image.photometric_interpretation,
+                'samples_per_pixel': int(image.samples_per_pixel) if image.samples_per_pixel is not None else None,
+                'enhanced_preview': enhanced_preview,
+                'supports_enhanced_processing': True,
+            }
+            images_data.append(image_data)
+        
+        return Response({
+            'series': {
+                'id': series.id,
+                'series_number': series.series_number,
+                'series_description': series.series_description,
+                'modality': series.modality,
+                'body_part_examined': series.body_part_examined,
+                'image_count': len(images_data),
+            },
+            'images': images_data,
+            'enhanced_features': {
+                'density_differentiation': True,
+                'high_resolution_processing': True,
+                'contrast_enhancement': True,
+                'multi_scale_processing': True,
+            }
         })
     except DicomSeries.DoesNotExist:
         return Response({'error': 'Series not found'}, status=404)

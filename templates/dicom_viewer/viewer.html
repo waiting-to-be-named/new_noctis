@@ -3,10 +3,293 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Noctis - DICOM Viewer</title>
+    <title>Noctis - Enhanced DICOM Viewer</title>
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/dicom_viewer.css' %}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* Enhanced Series Selector Styles */
+        .series-selector {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 15px;
+            z-index: 1000;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+        
+        .series-selector.show {
+            display: block;
+        }
+        
+        .series-selector-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .series-selector-title {
+            font-size: 16px;
+            font-weight: bold;
+        }
+        
+        .series-selector-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        
+        .series-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        
+        .series-item {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            padding: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .series-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: #007bff;
+        }
+        
+        .series-item.active {
+            background: #007bff;
+            border-color: #007bff;
+        }
+        
+        .series-preview {
+            width: 100%;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 3px;
+            margin-bottom: 5px;
+        }
+        
+        .series-info {
+            font-size: 11px;
+            line-height: 1.2;
+        }
+        
+        .series-number {
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .series-description {
+            color: #ccc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .series-count {
+            color: #888;
+            font-size: 10px;
+        }
+        
+        /* Enhanced Upload Interface */
+        .enhanced-upload-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            z-index: 2000;
+            max-width: 500px;
+            width: 90%;
+            display: none;
+        }
+        
+        .enhanced-upload-container.show {
+            display: block;
+        }
+        
+        .upload-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .upload-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .upload-subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .upload-drop-zone {
+            border: 2px dashed #007bff;
+            border-radius: 10px;
+            padding: 40px 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .upload-drop-zone:hover {
+            border-color: #0056b3;
+            background: rgba(0, 123, 255, 0.05);
+        }
+        
+        .upload-drop-zone.dragover {
+            border-color: #28a745;
+            background: rgba(40, 167, 69, 0.1);
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            color: #007bff;
+            margin-bottom: 15px;
+        }
+        
+        .upload-text {
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .upload-hint {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .upload-progress {
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #0056b3);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .progress-text {
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+        }
+        
+        .upload-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .stat-item {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .stat-label {
+            font-size: 11px;
+            color: #666;
+            margin-top: 2px;
+        }
+        
+        /* Enhanced Controls */
+        .enhanced-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .control-label {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .control-toggle {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        
+        .control-toggle.active {
+            background: #28a745;
+        }
+        
+        /* Series Selector Position Controls */
+        .series-position-controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1001;
+        }
+        
+        .position-btn {
+            background: none;
+            border: 1px solid #666;
+            color: white;
+            padding: 5px 10px;
+            margin: 2px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        
+        .position-btn.active {
+            background: #007bff;
+            border-color: #007bff;
+        }
+    </style>
 </head>
 <body>
     <div id="dicom-viewer" class="dicom-viewer">
@@ -115,9 +398,13 @@
                         <i class="fas fa-list"></i>
                         Worklist
                     </button>
-                    <button id="load-dicom-btn" class="primary-btn">
+                    <button id="enhanced-upload-btn" class="primary-btn">
                         <i class="fas fa-upload"></i>
-                        Load DICOM Files
+                        Enhanced Upload
+                    </button>
+                    <button id="series-selector-btn" class="secondary-btn" title="Series Selector">
+                        <i class="fas fa-th-large"></i>
+                        Series
                     </button>
                     <button id="logout-btn" class="logout-btn" onclick="window.location.href='/accounts/logout/'">
                         <i class="fas fa-sign-out-alt"></i>
@@ -169,6 +456,25 @@
         <!-- Right Panel -->
         <div class="right-panel">
             <div class="panel-content">
+                <!-- Enhanced Controls -->
+                <div class="panel-section">
+                    <h3 class="section-title">Enhanced Processing</h3>
+                    <div class="enhanced-controls">
+                        <div class="control-group">
+                            <label class="control-label">Density</label>
+                            <button class="control-toggle" id="density-toggle">Off</button>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">High Res</label>
+                            <button class="control-toggle" id="resolution-toggle">Off</button>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">Contrast</label>
+                            <button class="control-toggle" id="contrast-toggle">Off</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Window/Level Section -->
                 <div class="panel-section">
                     <h3 class="section-title">Window/Level</h3>
@@ -199,179 +505,413 @@
 
                 <!-- Navigation Section -->
                 <div class="panel-section">
-                    <h3 class="section-title">Image Navigation</h3>
+                    <h3 class="section-title">Navigation</h3>
                     
                     <div class="control-group">
                         <div class="control-header">
                             <label>Slice</label>
-                            <span id="slice-value">1</span>
+                            <span id="slice-info">1/1</span>
                         </div>
-                        <input type="range" id="slice-slider" min="0" max="0" value="0" class="slider">
+                        <input type="range" id="slice-slider" min="1" max="1" value="1" class="slider">
                     </div>
-                </div>
-
-                <!-- Transform Section -->
-                <div class="panel-section">
-                    <h3 class="section-title">Transform</h3>
                     
-                    <div class="control-group">
-                        <div class="control-header">
-                            <label>Zoom</label>
-                            <span id="zoom-value">100%</span>
-                        </div>
-                        <input type="range" id="zoom-slider" min="25" max="500" value="100" class="slider">
-                    </div>
-                </div>
-
-                <!-- Image Info Section -->
-                <div class="panel-section">
-                    <h3 class="section-title">Image Info</h3>
-                    <div class="info-list">
-                        <div class="info-item">
-                            <label>Dimensions:</label>
-                            <span id="info-dimensions">-</span>
-                        </div>
-                        <div class="info-item">
-                            <label>Pixel Spacing:</label>
-                            <span id="info-pixel-spacing">-</span>
-                        </div>
-                        <div class="info-item">
-                            <label>Series:</label>
-                            <span id="info-series">-</span>
-                        </div>
-                        <div class="info-item">
-                            <label>Institution:</label>
-                            <span id="info-institution">-</span>
-                        </div>
+                    <div class="navigation-buttons">
+                        <button class="nav-btn" id="prev-slice">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <button class="nav-btn" id="next-slice">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
                     </div>
                 </div>
 
                 <!-- Measurements Section -->
                 <div class="panel-section">
                     <h3 class="section-title">Measurements</h3>
-                    <div class="control-group" style="margin-bottom:8px;">
-                        <label for="measurement-unit">Unit:</label>
-                        <select id="measurement-unit" class="form-select small" style="width:80px;">
-                            <option value="mm">mm</option>
-                            <option value="cm">cm</option>
-                        </select>
+                    <div id="measurements-list">
+                        <p class="no-data">No measurements</p>
                     </div>
-                    <button id="clear-measurements" class="secondary-btn">Clear All</button>
-                    <div id="measurements-list" class="measurements-list"></div>
+                    <button class="clear-btn" id="clear-measurements">
+                        <i class="fas fa-trash"></i> Clear All
+                    </button>
                 </div>
 
-            </div>
-        </div>
-    </div>
-
-    <!-- File Upload Modal -->
-    <div id="upload-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Upload DICOM Files</h3>
-                <button class="modal-close">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="upload-area" id="upload-area">
-                    <i class="fas fa-cloud-upload-alt"></i>
-                    <p>Drag and drop DICOM files here or click to select</p>
-                    <input type="file" id="file-input" multiple accept=".dcm,.dicom">
-                </div>
-                <div class="upload-progress" id="upload-progress" style="display: none;">
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progress-fill"></div>
+                <!-- Annotations Section -->
+                <div class="panel-section">
+                    <h3 class="section-title">Annotations</h3>
+                    <div id="annotations-list">
+                        <p class="no-data">No annotations</p>
                     </div>
-                    <p id="progress-text">Uploading...</p>
+                    <button class="clear-btn" id="clear-annotations">
+                        <i class="fas fa-trash"></i> Clear All
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Hidden file input for DICOM upload -->
-    <input type="file" id="hidden-file-input" multiple accept=".dcm,.dicom" style="display: none;">
-
-    <script>
-        // Set initial study ID if provided by the backend
-        {% if initial_study_id %}
-            window.initialStudyId = {{ initial_study_id }};
-            console.log('Initial study ID set from backend:', window.initialStudyId);
-        {% endif %}
+    <!-- Enhanced Upload Container -->
+    <div class="enhanced-upload-container" id="enhanced-upload-container">
+        <div class="upload-header">
+            <div class="upload-title">Enhanced Bulk Upload</div>
+            <div class="upload-subtitle">Upload large DICOM files with multiple folders</div>
+        </div>
         
-        {% if initial_study_error %}
-            // Show error if study not found
-            setTimeout(() => {
-                alert('{{ initial_study_error }}');
-            }, 100);
-        {% endif %}
+        <div class="upload-drop-zone" id="upload-drop-zone">
+            <div class="upload-icon">
+                <i class="fas fa-cloud-upload-alt"></i>
+            </div>
+            <div class="upload-text">Drag & Drop files here or click to browse</div>
+            <div class="upload-hint">Supports ZIP, TAR, TAR.GZ archives and individual DICOM files (max 2GB)</div>
+            <input type="file" id="file-input" accept=".zip,.tar,.tar.gz,.dcm,.dicom,.img,.ima" style="display: none;">
+        </div>
         
-        // Clinical Information functionality
-        function toggleClinicalInfo() {
-            const content = document.getElementById('clinical-info-content');
-            const toggleBtn = document.querySelector('.btn-toggle i');
-            const section = document.getElementById('clinical-info-section');
+        <div class="upload-progress" id="upload-progress">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <div class="progress-text" id="progress-text">Processing...</div>
             
-            if (content.classList.contains('collapsed')) {
-                content.classList.remove('collapsed');
-                toggleBtn.className = 'fas fa-chevron-up';
-                section.classList.add('expanded');
-            } else {
-                content.classList.add('collapsed');
-                toggleBtn.className = 'fas fa-chevron-down';
-                section.classList.remove('expanded');
+            <div class="upload-stats" id="upload-stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="processed-files">0</div>
+                    <div class="stat-label">Files Processed</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="successful-files">0</div>
+                    <div class="stat-label">Successful</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="studies-created">0</div>
+                    <div class="stat-label">Studies Created</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="series-created">0</div>
+                    <div class="stat-label">Series Created</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="upload-actions">
+            <button class="secondary-btn" onclick="closeEnhancedUpload()">Cancel</button>
+            <button class="primary-btn" id="start-upload-btn" onclick="startEnhancedUpload()">Start Upload</button>
+        </div>
+    </div>
+
+    <!-- Series Selector -->
+    <div class="series-selector" id="series-selector">
+        <div class="series-selector-header">
+            <div class="series-selector-title">Series Selector</div>
+            <button class="series-selector-close" onclick="toggleSeriesSelector()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="series-grid" id="series-grid">
+            <!-- Series items will be populated here -->
+        </div>
+    </div>
+
+    <!-- Series Position Controls -->
+    <div class="series-position-controls">
+        <div style="color: white; font-size: 10px; margin-bottom: 5px;">Series Position:</div>
+        <button class="position-btn active" data-position="bottom">Bottom</button>
+        <button class="position-btn" data-position="top">Top</button>
+        <button class="position-btn" data-position="side">Side</button>
+    </div>
+
+    <script src="{% static 'js/dicom_viewer.js' %}"></script>
+    <script>
+        // Enhanced upload functionality
+        let currentUploadId = null;
+        let uploadProgressInterval = null;
+        
+        // Series selector functionality
+        let currentStudyId = null;
+        let seriesData = [];
+        let currentSeriesId = null;
+        
+        // Enhanced controls
+        let densityEnhancement = false;
+        let highResolution = false;
+        let contrastBoost = false;
+        
+        // Initialize enhanced features
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeEnhancedUpload();
+            initializeSeriesSelector();
+            initializeEnhancedControls();
+        });
+        
+        function initializeEnhancedUpload() {
+            const dropZone = document.getElementById('upload-drop-zone');
+            const fileInput = document.getElementById('file-input');
+            
+            // Drag and drop functionality
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+            
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('dragover');
+            });
+            
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFileSelection(files[0]);
+                }
+            });
+            
+            dropZone.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFileSelection(e.target.files[0]);
+                }
+            });
+        }
+        
+        function handleFileSelection(file) {
+            // Show upload progress
+            document.getElementById('upload-progress').style.display = 'block';
+            document.getElementById('start-upload-btn').disabled = false;
+            
+            // Store file for upload
+            window.selectedFile = file;
+        }
+        
+        function startEnhancedUpload() {
+            if (!window.selectedFile) {
+                alert('Please select a file first');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', window.selectedFile);
+            
+            // Disable start button
+            document.getElementById('start-upload-btn').disabled = true;
+            
+            fetch('/viewer/api/enhanced-bulk-upload/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.upload_id) {
+                    currentUploadId = data.upload_id;
+                    startProgressPolling();
+                } else {
+                    alert('Upload failed: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Upload error:', error);
+                alert('Upload failed: ' + error.message);
+            });
+        }
+        
+        function startProgressPolling() {
+            if (uploadProgressInterval) {
+                clearInterval(uploadProgressInterval);
+            }
+            
+            uploadProgressInterval = setInterval(() => {
+                fetch(`/viewer/api/enhanced-upload-progress/${currentUploadId}/`)
+                    .then(response => response.json())
+                    .then(data => {
+                        updateUploadProgress(data);
+                        
+                        if (data.status === 'completed' || data.status === 'failed') {
+                            clearInterval(uploadProgressInterval);
+                            handleUploadComplete(data);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Progress polling error:', error);
+                    });
+            }, 1000);
+        }
+        
+        function updateUploadProgress(data) {
+            const progressFill = document.getElementById('progress-fill');
+            const progressText = document.getElementById('progress-text');
+            
+            if (data.total_files > 0) {
+                const percentage = (data.processed_files / data.total_files) * 100;
+                progressFill.style.width = percentage + '%';
+                
+                progressText.textContent = `Processing: ${data.processed_files}/${data.total_files} files`;
+                
+                // Update stats
+                document.getElementById('processed-files').textContent = data.processed_files;
+                document.getElementById('successful-files').textContent = data.successful_files;
+                document.getElementById('studies-created').textContent = data.studies_created || 0;
+                document.getElementById('series-created').textContent = data.series_created || 0;
             }
         }
         
-        // Function to load and display clinical information
-        function loadClinicalInfo(studyId) {
-            fetch(`/viewer/api/study/${studyId}/clinical-info/`)
+        function handleUploadComplete(data) {
+            if (data.status === 'completed') {
+                alert(`Upload completed successfully!\nFiles processed: ${data.successful_files}\nStudies created: ${data.studies_created}`);
+                closeEnhancedUpload();
+                // Refresh the viewer if needed
+                if (window.viewer && window.viewer.loadStudies) {
+                    window.viewer.loadStudies();
+                }
+            } else {
+                alert('Upload failed: ' + (data.error || 'Unknown error'));
+            }
+        }
+        
+        function closeEnhancedUpload() {
+            document.getElementById('enhanced-upload-container').classList.remove('show');
+            document.getElementById('upload-progress').style.display = 'none';
+            document.getElementById('start-upload-btn').disabled = false;
+            window.selectedFile = null;
+            
+            if (uploadProgressInterval) {
+                clearInterval(uploadProgressInterval);
+            }
+        }
+        
+        // Series selector functionality
+        function initializeSeriesSelector() {
+            document.getElementById('series-selector-btn').addEventListener('click', toggleSeriesSelector);
+            
+            // Position controls
+            document.querySelectorAll('.position-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const position = e.target.dataset.position;
+                    setSeriesSelectorPosition(position);
+                    
+                    // Update active button
+                    document.querySelectorAll('.position-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                });
+            });
+        }
+        
+        function toggleSeriesSelector() {
+            const selector = document.getElementById('series-selector');
+            selector.classList.toggle('show');
+            
+            if (selector.classList.contains('show') && currentStudyId) {
+                loadSeriesData(currentStudyId);
+            }
+        }
+        
+        function setSeriesSelectorPosition(position) {
+            const selector = document.getElementById('series-selector');
+            selector.className = 'series-selector';
+            selector.classList.add(position);
+        }
+        
+        function loadSeriesData(studyId) {
+            fetch(`/viewer/api/studies/${studyId}/series-selector/`)
                 .then(response => response.json())
                 .then(data => {
-                    const section = document.getElementById('clinical-info-section');
-                    const textElement = document.getElementById('clinical-info-text');
-                    
-                    if (data.clinical_info && data.clinical_info.trim()) {
-                        textElement.textContent = data.clinical_info;
-                        section.style.display = 'block';
-                    } else {
-                        textElement.textContent = 'No clinical information available';
-                        section.style.display = 'none';
-                    }
+                    seriesData = data.series;
+                    renderSeriesGrid(data.series);
                 })
                 .catch(error => {
-                    console.error('Error loading clinical info:', error);
-                    document.getElementById('clinical-info-section').style.display = 'none';
+                    console.error('Error loading series data:', error);
                 });
         }
         
-        // Initialize viewer with initial study ID
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM loaded, initializing viewer...');
+        function renderSeriesGrid(series) {
+            const grid = document.getElementById('series-grid');
+            grid.innerHTML = '';
             
-            // Wait a bit for the main dicom_viewer.js to load
-            setTimeout(() => {
-                // Initialize the viewer with the initial study ID
-                if (typeof DicomViewer !== 'undefined') {
-                    // Check if viewer is already initialized
-                    if (!window.viewer) {
-                        window.viewer = new DicomViewer(window.initialStudyId);
-                        console.log('Viewer initialized with study ID:', window.initialStudyId);
-                    } else {
-                        console.log('Viewer already initialized, ensuring study is loaded');
-                        if (window.initialStudyId && !window.viewer.currentStudy) {
-                            window.viewer.loadStudy(window.initialStudyId);
-                        }
-                    }
-                } else {
-                    console.error('DicomViewer class not found');
-                }
+            series.forEach(seriesItem => {
+                const seriesElement = document.createElement('div');
+                seriesElement.className = 'series-item';
+                seriesElement.onclick = () => selectSeries(seriesItem.id);
                 
-                // Load clinical info for initial study if present
-                if (window.initialStudyId) {
-                    loadClinicalInfo(window.initialStudyId);
-                }
-            }, 100);
+                seriesElement.innerHTML = `
+                    <img class="series-preview" src="${seriesItem.preview_image || ''}" alt="Series ${seriesItem.series_number}">
+                    <div class="series-info">
+                        <div class="series-number">${seriesItem.series_number}</div>
+                        <div class="series-description">${seriesItem.series_description || 'No description'}</div>
+                        <div class="series-count">${seriesItem.image_count} images</div>
+                    </div>
+                `;
+                
+                grid.appendChild(seriesElement);
+            });
+        }
+        
+        function selectSeries(seriesId) {
+            currentSeriesId = seriesId;
+            
+            // Update active series
+            document.querySelectorAll('.series-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.closest('.series-item').classList.add('active');
+            
+            // Load series images
+            if (window.viewer && window.viewer.loadSeriesImages) {
+                window.viewer.loadSeriesImages(seriesId);
+            }
+        }
+        
+        // Enhanced controls
+        function initializeEnhancedControls() {
+            document.getElementById('density-toggle').addEventListener('click', toggleDensityEnhancement);
+            document.getElementById('resolution-toggle').addEventListener('click', toggleHighResolution);
+            document.getElementById('contrast-toggle').addEventListener('click', toggleContrastBoost);
+        }
+        
+        function toggleDensityEnhancement() {
+            densityEnhancement = !densityEnhancement;
+            const btn = document.getElementById('density-toggle');
+            btn.textContent = densityEnhancement ? 'On' : 'Off';
+            btn.classList.toggle('active', densityEnhancement);
+            
+            if (window.viewer && window.viewer.refreshImage) {
+                window.viewer.refreshImage();
+            }
+        }
+        
+        function toggleHighResolution() {
+            highResolution = !highResolution;
+            const btn = document.getElementById('resolution-toggle');
+            btn.textContent = highResolution ? 'On' : 'Off';
+            btn.classList.toggle('active', highResolution);
+            
+            if (window.viewer && window.viewer.refreshImage) {
+                window.viewer.refreshImage();
+            }
+        }
+        
+        function toggleContrastBoost() {
+            contrastBoost = !contrastBoost;
+            const btn = document.getElementById('contrast-toggle');
+            btn.textContent = contrastBoost ? 'On' : 'Off';
+            btn.classList.toggle('active', contrastBoost);
+            
+            if (window.viewer && window.viewer.refreshImage) {
+                window.viewer.refreshImage();
+            }
+        }
+        
+        // Enhanced upload button
+        document.getElementById('enhanced-upload-btn').addEventListener('click', () => {
+            document.getElementById('enhanced-upload-container').classList.add('show');
+        });
+        
+        // Close upload on escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeEnhancedUpload();
+            }
         });
     </script>
-    <script src="{% static 'js/dicom_viewer_fixed.js' %}"></script>
 </body>
 </html>
