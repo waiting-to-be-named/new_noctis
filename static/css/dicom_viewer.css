@@ -304,7 +304,7 @@ body {
 /* Improved dropdown positioning and z-index management */
 .dropdown-menu {
     position: absolute;
-    left: 70px;
+    left: 80px;
     top: 0;
     background: #1a1a1a;
     border: 2px solid #00ff00;
@@ -341,7 +341,7 @@ body {
 
 /* Ensure dropdown stays in viewport horizontally */
 .toolbar .dropdown-tool:nth-last-child(-n+2) .dropdown-menu {
-    left: -180px; /* Move to left side for bottom tools */
+    left: -170px; /* Move to left side for bottom tools */
     right: auto;
 }
 
