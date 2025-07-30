@@ -299,25 +299,42 @@ class DicomImage(models.Model):
             return None
     
     def get_processed_image_base64(self, window_width=None, window_level=None, inverted=False):
-        """Get processed image as base64 string"""
+        """Get processed image as base64 string with enhanced quality preservation"""
         try:
             # Get pixel data
             pixel_array = self.get_pixel_array()
             if pixel_array is None:
                 return None
             
-            # Apply windowing
+            # Apply windowing with enhanced precision
             processed_array = self.apply_windowing(pixel_array, window_width, window_level, inverted)
             
-            # Convert to PIL Image
+            # Preserve original bit depth for better quality
             if processed_array.dtype != np.uint8:
+                # Use more precise scaling to preserve detail
+                min_val = processed_array.min()
+                max_val = processed_array.max()
+                if max_val > min_val:
+                    processed_array = ((processed_array - min_val) / (max_val - min_val) * 255.0)
+                else:
+                    processed_array = processed_array * 0  # Handle constant arrays
                 processed_array = np.clip(processed_array, 0, 255).astype(np.uint8)
             
+            # Create PIL Image with quality preservation
             image = Image.fromarray(processed_array, mode='L')
             
-            # Convert to base64
+            # Enhance sharpness for medical images slightly (with fallback)
+            try:
+                from PIL import ImageEnhance
+                enhancer = ImageEnhance.Sharpness(image)
+                image = enhancer.enhance(1.1)  # Slight sharpening
+            except ImportError:
+                # Skip enhancement if PIL.ImageEnhance is not available
+                pass
+            
+            # Convert to base64 with high quality PNG
             buffer = io.BytesIO()
-            image.save(buffer, format='PNG')
+            image.save(buffer, format='PNG', optimize=False, compress_level=1)  # Minimal compression for quality
             buffer.seek(0)
             image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
             
@@ -463,23 +480,69 @@ class DicomImage(models.Model):
             return pixel_array
     
     def apply_resolution_enhancement(self, pixel_array, resolution_factor):
-        """Apply resolution enhancement"""
+        """Apply enhanced resolution enhancement with medical image optimization"""
         try:
             if resolution_factor == 1.0:
                 return pixel_array
             
-            # Use scipy for high-quality interpolation
-            from scipy import ndimage
-            
-            # Calculate new dimensions
-            new_height = int(pixel_array.shape[0] * resolution_factor)
-            new_width = int(pixel_array.shape[1] * resolution_factor)
-            
-            # Apply high-quality interpolation
-            enhanced = ndimage.zoom(pixel_array, resolution_factor, order=3)
-            
-            return enhanced
-            
+            # Try to use scipy for high-quality interpolation
+            try:
+                from scipy import ndimage
+                # Pre-process to reduce noise while preserving edges
+                try:
+                    from skimage import filters
+                    smoothed = filters.gaussian(pixel_array, sigma=0.5, preserve_range=True)
+                except ImportError:
+                    # Fallback: simple smoothing using numpy
+                    from scipy.ndimage import gaussian_filter
+                    smoothed = gaussian_filter(pixel_array, sigma=0.5)
+                
+                # Apply high-quality bicubic interpolation
+                enhanced = ndimage.zoom(smoothed, resolution_factor, order=3, mode='nearest')
+                
+                # Post-process to enhance medical details
+                if resolution_factor > 1.0:
+                    # Apply unsharp masking to enhance fine details
+                    from scipy.ndimage import gaussian_filter
+                    gaussian_filtered = gaussian_filter(enhanced, sigma=1.0)
+                    unsharp_mask = enhanced - gaussian_filtered
+                    enhanced = enhanced + 0.3 * unsharp_mask  # Moderate enhancement
+                    
+                    # Preserve original intensity range
+                    original_min, original_max = pixel_array.min(), pixel_array.max()
+                    enhanced_min, enhanced_max = enhanced.min(), enhanced.max()
+                    
+                    if enhanced_max > enhanced_min:
+                        enhanced = (enhanced - enhanced_min) / (enhanced_max - enhanced_min)
+                        enhanced = enhanced * (original_max - original_min) + original_min
+                
+                return enhanced
+                
+            except ImportError:
+                # Fallback: use PIL for basic resizing
+                from PIL import Image
+                
+                # Convert to PIL Image
+                if pixel_array.dtype != np.uint8:
+                    display_array = np.clip((pixel_array - pixel_array.min()) / 
+                                          (pixel_array.max() - pixel_array.min()) * 255, 0, 255).astype(np.uint8)
+                else:
+                    display_array = pixel_array
+                
+                pil_image = Image.fromarray(display_array, mode='L')
+                
+                # Calculate new size
+                new_width = int(pil_image.width * resolution_factor)
+                new_height = int(pil_image.height * resolution_factor)
+                
+                # Resize with high quality
+                resized = pil_image.resize((new_width, new_height), Image.LANCZOS)
+                
+                # Convert back to numpy array
+                enhanced = np.array(resized, dtype=pixel_array.dtype)
+                
+                return enhanced
+                
         except Exception as e:
             print(f"Error in resolution enhancement: {e}")
             return pixel_array

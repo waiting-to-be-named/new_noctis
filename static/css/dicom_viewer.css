@@ -15,24 +15,28 @@ body {
     width: 100vw;
 }
 
-/* Layout */
+/* Enhanced Layout and Organization */
 .dicom-viewer {
     display: flex;
     height: 100vh;
     width: 100vw;
     position: relative;
+    overflow: hidden; /* Prevent layout issues */
 }
 
 .toolbar {
     width: 80px;
+    min-width: 80px; /* Prevent shrinking */
     background: #0d0d0d;
-    padding: 10px;
+    padding: 10px 5px;
     display: flex;
     flex-direction: column;
     align-items: center;
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
     position: relative;
-    z-index: 100;
+    z-index: 1000;
+    overflow-y: auto; /* Allow scrolling if needed */
+    max-height: 100vh;
 }
 
 .main-content {
@@ -40,31 +44,39 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 0; /* Fix flex overflow */
+    min-width: 0; /* Prevent horizontal overflow */
+    position: relative;
 }
 
 .top-bar {
     background: #252525;
-    padding: 15px;
+    padding: 12px 15px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     flex-wrap: wrap;
-    min-height: auto;
-    max-height: 120px; /* Prevent excessive height */
+    min-height: 60px;
+    max-height: 120px;
+    z-index: 900;
+    position: relative;
 }
 
+/* Improved top controls layout */
 .top-controls {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
     flex-wrap: wrap;
+    min-width: 0;
 }
 
 .study-info {
     flex: 1;
-    margin-left: 20px;
-    min-width: 300px;
+    margin-left: 15px;
+    min-width: 250px;
+    max-width: 400px;
+    overflow: hidden; /* Prevent text overflow */
 }
 
 .patient-info {
@@ -72,6 +84,90 @@ body {
     font-size: 14px;
     margin-bottom: 5px;
     color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Enhanced viewport layout */
+.viewer-content {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    position: relative;
+    background: #000;
+    isolation: isolate; /* Create new stacking context */
+}
+
+.viewport {
+    flex: 1;
+    position: relative;
+    background: #000;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at center, #111 0%, #000 100%);
+}
+
+#dicom-canvas {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: calc(100% - 20px);
+    max-height: calc(100% - 20px);
+    border: 1px solid rgba(0, 255, 0, 0.1);
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.1);
+    background: #000;
+    cursor: crosshair;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated; /* Preserve sharp medical image quality */
+}
+
+/* Improved right panel */
+.right-panel {
+    width: 300px;
+    min-width: 280px;
+    max-width: 350px;
+    background: #1a1a1a;
+    border-left: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+    z-index: 800;
+    position: relative;
+    overflow: hidden;
+}
+
+.panel-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+    max-height: 100%;
+}
+
+.panel-section {
+    border-bottom: 1px solid #333;
+    padding: 15px;
+    background: #1a1a1a;
+}
+
+.panel-section:last-child {
+    border-bottom: none;
+}
+
+.section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #00ff00;
+    margin: 0 0 15px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid rgba(0, 255, 0, 0.3);
+    padding-bottom: 8px;
 }
 
 /* Responsive Design */
@@ -150,22 +246,6 @@ body {
     }
 }
 
-.viewport {
-    flex: 1;
-    position: relative;
-    background: #000;
-    overflow: hidden;
-    min-height: 0; /* Ensure proper flex sizing */
-}
-
-.right-panel {
-    width: 300px;
-    background: #252525;
-    padding: 20px;
-    overflow-y: auto;
-    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
-}
-
 /* Tool Buttons */
 .tool-btn {
     width: 60px;
@@ -221,6 +301,7 @@ body {
     opacity: 0.7;
 }
 
+/* Improved dropdown positioning and z-index management */
 .dropdown-menu {
     position: absolute;
     left: 70px;
@@ -229,10 +310,39 @@ body {
     border: 2px solid #00ff00;
     border-radius: 8px;
     min-width: 250px;
+    max-width: 350px;
     display: none;
-    z-index: 1000;
+    z-index: 10000; /* Increased z-index to ensure visibility */
     box-shadow: 0 4px 20px rgba(0, 255, 0, 0.2);
     pointer-events: none;
+    /* Prevent dropdown from going outside viewport */
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+}
+
+/* Dynamic positioning based on viewport space */
+.dropdown-tool:last-child .dropdown-menu,
+.dropdown-tool.bottom-aligned .dropdown-menu {
+    top: auto;
+    bottom: 0;
+}
+
+/* Responsive dropdown positioning */
+@media (max-height: 600px) {
+    .dropdown-menu {
+        max-height: calc(100vh - 80px);
+        font-size: 12px;
+    }
+    
+    .dropdown-item {
+        padding: 8px 15px;
+    }
+}
+
+/* Ensure dropdown stays in viewport horizontally */
+.toolbar .dropdown-tool:nth-last-child(-n+2) .dropdown-menu {
+    left: -180px; /* Move to left side for bottom tools */
+    right: auto;
 }
 
 .dropdown-tool:hover .dropdown-menu,
@@ -240,6 +350,19 @@ body {
 .dropdown-tool.active .dropdown-menu {
     display: block;
     pointer-events: auto;
+    /* Add animation for smooth appearance */
+    animation: dropdownFadeIn 0.2s ease-out;
+}
+
+@keyframes dropdownFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .dropdown-menu h4 {
@@ -250,6 +373,10 @@ body {
     font-size: 14px;
     text-transform: uppercase;
     letter-spacing: 1px;
+    position: sticky;
+    top: 0;
+    background: #1a1a1a;
+    z-index: 1;
 }
 
 .dropdown-item {
@@ -319,13 +446,6 @@ body {
     margin: 0;
 }
 
-/* Canvas */
-.dicom-canvas {
-    width: 100%;
-    height: 100%;
-    cursor: crosshair;
-}
-
 /* Overlay Labels */
 .overlay-labels {
     position: absolute;
@@ -384,29 +504,31 @@ body {
 
 .slider {
     width: 100%;
-    height: 4px;
-    -webkit-appearance: none;
-    background: #444;
-    border-radius: 2px;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
     outline: none;
+    cursor: pointer;
 }
 
 .slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
+    appearance: none;
     width: 16px;
     height: 16px;
-    background: #0099ff;
+    background: #00ff00;
     border-radius: 50%;
     cursor: pointer;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
 }
 
 .slider::-moz-range-thumb {
     width: 16px;
     height: 16px;
-    background: #0099ff;
+    background: #00ff00;
     border-radius: 50%;
     cursor: pointer;
     border: none;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
 }
 
 /* Buttons */
@@ -469,19 +591,26 @@ body {
 }
 
 .preset-btn {
-    padding: 8px;
-    background: #444;
-    border: 1px solid #666;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 8px 12px;
     border-radius: 4px;
-    color: #fff;
     cursor: pointer;
-    font-size: 12px;
     transition: all 0.3s ease;
+    font-size: 12px;
 }
 
 .preset-btn:hover {
-    background: #555;
-    border-color: #777;
+    background: rgba(0, 255, 0, 0.1);
+    border-color: #00ff00;
+    color: #00ff00;
+}
+
+.preset-btn.active {
+    background: rgba(0, 255, 0, 0.2);
+    border-color: #00ff00;
+    color: #00ff00;
 }
 
 /* Modal */
@@ -657,7 +786,7 @@ body {
     border-left: 2px solid #00ff00;
     box-shadow: -5px 0 15px rgba(0, 0, 0, 0.5);
     display: none;
-    z-index: 999;
+    z-index: 1100;
     overflow-y: auto;
 }
 
@@ -1265,4 +1394,296 @@ body {
 .clinical-info.expanded {
     background: #1a3a1a;
     border-color: #00ff00;
+}
+
+/* Dynamic positioning classes for dropdowns */
+.dropdown-tool.bottom-aligned .dropdown-menu {
+    top: auto;
+    bottom: 100%;
+    margin-bottom: 5px;
+}
+
+.dropdown-tool.left-aligned .dropdown-menu {
+    left: auto;
+    right: 100%;
+    margin-right: 5px;
+}
+
+.dropdown-tool.bottom-aligned.left-aligned .dropdown-menu {
+    top: auto;
+    bottom: 100%;
+    left: auto;
+    right: 100%;
+    margin-bottom: 5px;
+    margin-right: 5px;
+}
+
+/* Improved responsive dropdown behavior */
+@media (max-width: 768px) {
+    .dropdown-menu {
+        min-width: 200px;
+        max-width: calc(100vw - 100px);
+        font-size: 13px;
+    }
+    
+    .dropdown-item {
+        padding: 10px 15px;
+    }
+    
+    .dropdown-menu h4 {
+        padding: 12px 15px;
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 480px) {
+    .dropdown-menu {
+        min-width: 180px;
+        max-width: calc(100vw - 50px);
+        left: -150px !important; /* Force positioning for small screens */
+    }
+    
+    .dropdown-tool.left-aligned .dropdown-menu {
+        left: -150px !important;
+        right: auto;
+    }
+}
+
+/* Enhanced Z-Index Management */
+.toolbar { z-index: 1000; }
+.top-bar { z-index: 900; }
+.right-panel { z-index: 800; }
+.dropdown-menu { z-index: 10000; }
+.series-selector { z-index: 10001; }
+.reconstruction-progress { z-index: 9999; }
+.ai-panel { z-index: 1100; }
+.error-message { z-index: 11000; }
+
+/* Improved Viewport and Canvas Optimization */
+.viewer-content {
+    position: relative;
+    isolation: isolate; /* Create new stacking context */
+}
+
+.viewport {
+    position: relative;
+    overflow: hidden;
+    background: radial-gradient(circle at center, #111 0%, #000 100%);
+}
+
+#dicom-canvas {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: calc(100% - 20px);
+    max-height: calc(100% - 20px);
+    border: 1px solid rgba(0, 255, 0, 0.1);
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.1);
+    background: #000;
+    cursor: crosshair;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated; /* Preserve sharp medical image quality */
+}
+
+/* Enhanced Control Sections */
+.enhanced-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.control-toggle {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 12px;
+}
+
+.control-toggle:hover {
+    background: rgba(0, 255, 0, 0.1);
+    border-color: #00ff00;
+}
+
+.control-toggle.active {
+    background: rgba(0, 255, 0, 0.2);
+    border-color: #00ff00;
+    color: #00ff00;
+}
+
+/* Better slider styling */
+.slider {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+
+.slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #00ff00;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+}
+
+.slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #00ff00;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+}
+
+/* Preset buttons styling */
+.preset-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.preset-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 12px;
+}
+
+.preset-btn:hover {
+    background: rgba(0, 255, 0, 0.1);
+    border-color: #00ff00;
+    color: #00ff00;
+}
+
+.preset-btn.active {
+    background: rgba(0, 255, 0, 0.2);
+    border-color: #00ff00;
+    color: #00ff00;
+}
+
+/* Navigation buttons */
+.navigation-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+.nav-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-btn:hover {
+    background: rgba(0, 255, 0, 0.1);
+    border-color: #00ff00;
+    color: #00ff00;
+    transform: scale(1.1);
+}
+
+/* Clear buttons */
+.clear-btn {
+    background: rgba(255, 0, 0, 0.1);
+    border: 1px solid rgba(255, 0, 0, 0.3);
+    color: #ff6b6b;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 12px;
+    width: 100%;
+    margin-top: 10px;
+}
+
+.clear-btn:hover {
+    background: rgba(255, 0, 0, 0.2);
+    border-color: #ff0000;
+    color: #ff0000;
+}
+
+/* Loading and error states */
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1200;
+}
+
+.loading-spinner {
+    border: 3px solid rgba(0, 255, 0, 0.3);
+    border-top: 3px solid #00ff00;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.error-message {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(255, 0, 0, 0.9);
+    color: white;
+    padding: 15px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    max-width: 400px;
+    z-index: 11000;
+}
+
+.error-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.error-content button {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    margin-left: auto;
 }
