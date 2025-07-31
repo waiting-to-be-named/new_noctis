@@ -1,0 +1,35 @@
+# VirtualBox VMX Root Mode Error Fix Guide
+
+## Problem
+VirtualBox encounters VERR_VMX_IN_VMX_ROOT_MODE error due to KVM conflict.
+
+## Immediate Solution
+Configure VirtualBox for software virtualization:
+
+1. Create VirtualBox config directory:
+   mkdir -p ~/.config/VirtualBox
+
+2. Disable hardware virtualization in config:
+   echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<VirtualBox xmlns=\"http://www.virtualbox.org/\" version=\"1.12-linux\">
+  <Global>
+    <ExtraData>
+      <ExtraDataItem name=\"VBoxInternal/HWVIRTEX\" value=\"0\"/>
+      <ExtraDataItem name=\"VBoxInternal/EnableNestedPaging\" value=\"0\"/>
+    </ExtraData>
+  </Global>
+</VirtualBox>" > ~/.config/VirtualBox/VirtualBox.xml
+
+3. For existing VMs:
+   - VM Settings → System → Acceleration
+   - Uncheck "Enable VT-x/AMD-V"
+   - Uncheck "Enable Nested Paging"
+
+## Status
+✓ KVM modules already blacklisted
+✓ VirtualBox installed
+✓ Running in virtualized environment (nested)
+⚠ Performance will be limited - consider Docker/containers instead
+
+## Verification
+After reboot: lsmod | grep kvm (should be empty)
