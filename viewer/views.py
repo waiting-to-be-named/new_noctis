@@ -753,9 +753,9 @@ def upload_dicom_files(request):
                 file_name = file.name.lower()
                 file_size = file.size
                 
-                # Check file size (100MB limit)
-                if file_size > 100 * 1024 * 1024:  # 100MB
-                    errors.append(f"File {file.name} is too large (max 100MB)")
+                # Check file size - increased limit for large CT files with multiple series
+                if file_size > 500 * 1024 * 1024:  # 500MB per file (increased for CT scans)
+                    errors.append(f"File {file.name} is too large (max 500MB per file)")
                     continue
                 
                 # More permissive DICOM file detection
@@ -1100,9 +1100,9 @@ def upload_dicom_folder(request):
                 file_name = file.name.lower()
                 file_size = file.size
                 
-                # Check file size (100MB limit)
-                if file_size > 100 * 1024 * 1024:  # 100MB
-                    errors.append(f"File {file.name} is too large (max 100MB)")
+                # Check file size - increased limit for large CT files with multiple series
+                if file_size > 500 * 1024 * 1024:  # 500MB per file (increased for CT scans)
+                    errors.append(f"File {file.name} is too large (max 500MB per file)")
                     continue
                 
                 # Accept any file that might be DICOM (more permissive)

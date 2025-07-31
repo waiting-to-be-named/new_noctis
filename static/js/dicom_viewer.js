@@ -176,39 +176,35 @@ class DicomViewer {
     resizeCanvas() {
         const viewport = document.querySelector('.viewport');
         if (viewport) {
-            // Enhanced pixel ratio handling for medical imaging
-            const basePixelRatio = window.devicePixelRatio || 1;
-            // Apply additional scaling for medical image clarity
-            const medicalImageScaling = 1.25; // 25% additional resolution for medical imaging
-            const effectivePixelRatio = basePixelRatio * medicalImageScaling;
+            // Get the actual available viewport dimensions
+            const viewportRect = viewport.getBoundingClientRect();
+            const displayWidth = viewportRect.width;
+            const displayHeight = viewportRect.height;
             
-            const displayWidth = viewport.clientWidth;
-            const displayHeight = viewport.clientHeight;
+            // Use device pixel ratio for sharp rendering on high-DPI screens
+            const devicePixelRatio = window.devicePixelRatio || 1;
             
-            // Set actual canvas dimensions with enhanced resolution
-            this.canvas.width = Math.round(displayWidth * effectivePixelRatio);
-            this.canvas.height = Math.round(displayHeight * effectivePixelRatio);
+            // Set canvas internal resolution to match device pixels for crisp rendering
+            this.canvas.width = Math.round(displayWidth * devicePixelRatio);
+            this.canvas.height = Math.round(displayHeight * devicePixelRatio);
             
-            // Set CSS dimensions for display
+            // Set CSS size to match viewport exactly
             this.canvas.style.width = displayWidth + 'px';
             this.canvas.style.height = displayHeight + 'px';
             
-            // Reset the context and apply enhanced scaling
+            // Scale the drawing context to match device pixel ratio
             this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-            this.ctx.scale(effectivePixelRatio, effectivePixelRatio);
+            this.ctx.scale(devicePixelRatio, devicePixelRatio);
             
-            // Apply enhanced rendering settings for medical images
-            this.applyEnhancedRenderingSettings();
+            // Apply medical imaging rendering settings
+            this.ctx.imageSmoothingEnabled = false; // Preserve pixel-perfect medical images
+            this.ctx.imageSmoothingQuality = 'high';
             
-            // Store effective scaling for use in image rendering
-            this.effectivePixelRatio = effectivePixelRatio;
-            this.displayDimensions = { width: displayWidth, height: displayHeight };
+            console.log(`Canvas resized: ${displayWidth}x${displayHeight} CSS, ${this.canvas.width}x${this.canvas.height} internal, DPR: ${devicePixelRatio}`);
             
-            console.log(`Canvas resized with enhanced medical imaging: ${displayWidth}x${displayHeight} (display) / ${this.canvas.width}x${this.canvas.height} (actual), ratio: ${effectivePixelRatio.toFixed(2)}`);
-            
-            // Force redraw if image is loaded
+            // Redraw current image if available
             if (this.currentImage) {
-                this.redraw();
+                this.updateDisplay();
             }
         }
     }
@@ -1394,22 +1390,19 @@ class DicomViewer {
         this.showLoadingState('Loading image...');
         
         try {
-            // Use high quality parameters for optimal medical image display
+            // Use optimized parameters for faster loading
             const params = new URLSearchParams({
                 window_width: this.windowWidth,
                 window_level: this.windowLevel,
                 inverted: this.inverted,
-                // Enable high quality processing for medical images
-                high_quality: 'true', 
-                preserve_aspect: 'true',
-                density_enhancement: 'true', // Enable density enhancement for better tissue differentiation
-                contrast_optimization: 'medical', // Use medical contrast optimization
-                resolution_factor: 1.0, // Full resolution
-                contrast_boost: '1.15' // Apply contrast boost for better visualization
+                // Use standard quality for faster loading, enhance afterwards
+                high_quality: 'false', 
+                preserve_aspect: 'true'
             });
             
             const startTime = performance.now();
-            const response = await fetch(`/viewer/api/images/${imageData.id}/enhanced-data/?${params}`);
+            // Use regular data endpoint for faster loading
+            const response = await fetch(`/viewer/api/images/${imageData.id}/data/?${params}`);
             
             if (!response.ok) {
                 throw new Error(`Failed to load image: HTTP ${response.status} - ${response.statusText}`);
@@ -1430,13 +1423,13 @@ class DicomViewer {
             const imageLoadPromise = new Promise((resolve, reject) => {
                 const timeout = setTimeout(() => {
                     reject(new Error('Image loading timeout'));
-                }, 10000); // 10 second timeout
+                }, 5000); // Reduced timeout for faster response
                 
                 img.onload = () => {
                     clearTimeout(timeout);
                     console.log(`Image rendered: ${img.width}x${img.height} in ${(performance.now() - startTime).toFixed(2)}ms total`);
                     
-                    // Store image with enhanced metadata
+                    // Store image with metadata
                     this.currentImage = {
                         image: img,
                         metadata: data.metadata,
@@ -1463,8 +1456,8 @@ class DicomViewer {
                     }
                     this.imageCache.set(cacheKey, this.currentImage);
                     
-                    // Limit cache size to prevent memory issues
-                    if (this.imageCache.size > 50) {
+                    // Limit cache size to prevent memory issues - increased for better performance
+                    if (this.imageCache.size > 100) {
                         const firstKey = this.imageCache.keys().next().value;
                         this.imageCache.delete(firstKey);
                     }
@@ -1481,6 +1474,7 @@ class DicomViewer {
             
             // Set image source with optimized loading
             img.decoding = 'async'; // Use async decoding for better performance
+            img.crossOrigin = 'anonymous'; // Enable cross-origin for better caching
             img.src = data.image_data;
             
             // Wait for image to load
@@ -1772,19 +1766,43 @@ class DicomViewer {
         if (!this.currentImages.length) return;
         
         const sliceSlider = document.getElementById('slice-slider');
-        sliceSlider.max = this.currentImages.length - 1;
-        sliceSlider.value = this.currentImageIndex;
-        
-        // Update initial window/level from first image
-        const firstImage = this.currentImages[0];
-        if (firstImage.window_width && firstImage.window_center) {
-            this.windowWidth = firstImage.window_width;
-            this.windowLevel = firstImage.window_center;
+        if (sliceSlider) {
+            // Set proper range for the slider
+            sliceSlider.min = 0;
+            sliceSlider.max = Math.max(0, this.currentImages.length - 1);
+            sliceSlider.value = Math.min(this.currentImageIndex, this.currentImages.length - 1);
             
-            document.getElementById('ww-slider').value = this.windowWidth;
-            document.getElementById('wl-slider').value = this.windowLevel;
-            document.getElementById('ww-value').textContent = this.windowWidth;
-            document.getElementById('wl-value').textContent = this.windowLevel;
+            // Update slice info display
+            const sliceInfo = document.getElementById('slice-info');
+            if (sliceInfo) {
+                sliceInfo.textContent = `${this.currentImageIndex + 1}/${this.currentImages.length}`;
+            }
+            
+            // Update WL info display
+            const wlInfo = document.getElementById('wl-info');
+            if (wlInfo) {
+                wlInfo.innerHTML = `WW: ${this.windowWidth}<br>WL: ${this.windowLevel}<br>Slice: ${this.currentImageIndex + 1}/${this.currentImages.length}`;
+            }
+        }
+        
+        // Update window/level sliders from current image or defaults
+        const wwSlider = document.getElementById('ww-slider');
+        const wlSlider = document.getElementById('wl-slider');
+        const wwValue = document.getElementById('ww-value');
+        const wlValue = document.getElementById('wl-value');
+        
+        if (wwSlider && wlSlider && wwValue && wlValue) {
+            // Use image metadata if available, otherwise use current values
+            const firstImage = this.currentImages[0];
+            if (firstImage && firstImage.window_width && firstImage.window_center) {
+                this.windowWidth = firstImage.window_width;
+                this.windowLevel = firstImage.window_center;
+            }
+            
+            wwSlider.value = this.windowWidth;
+            wlSlider.value = this.windowLevel;
+            wwValue.textContent = this.windowWidth;
+            wlValue.textContent = this.windowLevel;
         }
     }
     
@@ -1794,103 +1812,81 @@ class DicomViewer {
             return;
         }
         
-        // Set high-quality rendering properties for medical imaging
-        this.setupHighQualityRendering();
-        
-        // Clear the entire canvas with optimized clearing
-        this.ctx.save();
-        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+        // Clear the canvas with black background
         this.ctx.fillStyle = '#000';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        this.ctx.restore();
-        
-        // Get canvas display dimensions with pixel ratio consideration
-        const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
-        const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        this.ctx.fillRect(0, 0, this.canvas.width / (window.devicePixelRatio || 1), this.canvas.height / (window.devicePixelRatio || 1));
         
         if (!this.currentImage) {
-            // Show enhanced "No image loaded" state
-            this.ctx.save();
-            this.ctx.fillStyle = '#666';
-            this.ctx.font = '18px Arial';
+            // Show "no image" message
+            this.ctx.fillStyle = '#888';
+            this.ctx.font = '16px Arial';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
-            this.ctx.fillText('No image loaded', displayWidth / 2, displayHeight / 2);
-            this.ctx.font = '14px Arial';
-            this.ctx.fillStyle = '#999';
-            this.ctx.fillText('Select a study or load DICOM files', displayWidth / 2, displayHeight / 2 + 25);
-            this.ctx.restore();
+            const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+            const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+            this.ctx.fillText('No DICOM image loaded', displayWidth / 2, displayHeight / 2);
             return;
         }
         
         const img = this.currentImage.image;
-        if (!img || !img.complete) {
-            this.showLoadingState('Rendering image...');
+        if (!img || !img.width || !img.height) {
+            console.error('Invalid image data');
             return;
         }
         
-        // Calculate optimal scaling with sub-pixel precision
-        const scale = this.getOptimalScale();
+        // Get display dimensions
+        const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        
+        // Calculate scale to fit image while maintaining aspect ratio
+        const scaleX = displayWidth / img.width;
+        const scaleY = displayHeight / img.height;
+        let scale = Math.min(scaleX, scaleY) * this.zoomFactor;
+        
+        // For medical images, prefer integer scaling when close to avoid interpolation artifacts
+        if (Math.abs(scale - 1.0) < 0.1) {
+            scale = 1.0;
+        } else if (Math.abs(scale - 2.0) < 0.1) {
+            scale = 2.0;
+        } else if (Math.abs(scale - 0.5) < 0.05) {
+            scale = 0.5;
+        }
+        
+        // Calculate centered position
         const scaledWidth = img.width * scale;
         const scaledHeight = img.height * scale;
+        const x = (displayWidth - scaledWidth) / 2 + this.panX;
+        const y = (displayHeight - scaledHeight) / 2 + this.panY;
         
-        // Center the image with pan offset and pixel-perfect alignment
-        const x = Math.round((displayWidth - scaledWidth) / 2 + this.panX);
-        const y = Math.round((displayHeight - scaledHeight) / 2 + this.panY);
+        // Set rendering properties for optimal medical image display
+        this.ctx.imageSmoothingEnabled = scale < 1.0; // Only smooth when scaling down
+        this.ctx.imageSmoothingQuality = 'high';
         
-        // Apply medical imaging optimizations
+        // Save context state
         this.ctx.save();
         
-        // Set optimal rendering context for medical images
-        this.applyMedicalImagingOptimizations();
+        // Draw the medical image with optimal settings
+        this.ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
         
-        // Apply advanced window/level and enhancement filters
-        const enhancementFilters = this.buildMedicalEnhancementFilters();
-        if (enhancementFilters) {
-            this.ctx.filter = enhancementFilters;
-        }
-        
-        // Apply inversion if needed
-        if (this.inverted && !this.ctx.filter.includes('invert')) {
-            this.ctx.filter = (this.ctx.filter === 'none' ? '' : this.ctx.filter + ' ') + 'invert(1)';
-        }
-        
-        try {
-            // High-quality image rendering with medical imaging optimizations
-            if (this.effectivePixelRatio && this.effectivePixelRatio > 1) {
-                // High-DPI rendering for crisp medical images
-                const pixelAlignedX = Math.round(x * this.effectivePixelRatio) / this.effectivePixelRatio;
-                const pixelAlignedY = Math.round(y * this.effectivePixelRatio) / this.effectivePixelRatio;
-                const pixelAlignedWidth = Math.round(scaledWidth * this.effectivePixelRatio) / this.effectivePixelRatio;
-                const pixelAlignedHeight = Math.round(scaledHeight * this.effectivePixelRatio) / this.effectivePixelRatio;
-                
-                this.ctx.drawImage(img, pixelAlignedX, pixelAlignedY, pixelAlignedWidth, pixelAlignedHeight);
-            } else {
-                // Standard rendering with pixel alignment
-                this.ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
-            }
-            
-            console.log(`Enhanced medical image rendered: ${scaledWidth.toFixed(1)}x${scaledHeight.toFixed(1)} at (${x.toFixed(1)}, ${y.toFixed(1)}), scale: ${scale.toFixed(3)}`);
-        } catch (error) {
-            console.error('Error drawing enhanced medical image:', error);
-            // Fallback to basic rendering
-            this.ctx.filter = 'none';
-            this.ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
-        }
-        
+        // Restore context state
         this.ctx.restore();
         
-        // Apply post-processing enhancements for medical visualization
-        this.applyPostProcessingEnhancements();
+        // Draw overlays
+        this.drawMeasurements();
+        this.drawAnnotations();
+        this.drawCrosshair();
         
-        // Draw medical imaging overlays
-        this.drawMedicalOverlays();
+        // Update zoom info
+        const zoomInfo = document.getElementById('zoom-info');
+        if (zoomInfo) {
+            zoomInfo.textContent = `Zoom: ${Math.round(this.zoomFactor * 100)}%`;
+        }
         
-        // Update overlay labels with enhanced information
-        this.updateEnhancedOverlayLabels();
-        
-        // Update canvas quality indicator
-        this.updateQualityIndicator();
+        // Update slice info in overlay
+        const wlInfo = document.getElementById('wl-info');
+        if (wlInfo) {
+            wlInfo.innerHTML = `WW: ${this.windowWidth}<br>WL: ${this.windowLevel}<br>Slice: ${this.currentImageIndex + 1}/${this.currentImages.length}`;
+        }
     }
     
     setupHighQualityRendering() {
