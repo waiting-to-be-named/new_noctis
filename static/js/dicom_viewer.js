@@ -1166,6 +1166,15 @@ class DicomViewer {
             this.currentImages = data.images;
             this.currentImageIndex = 0;
             
+            // NEW: auto-apply anatomy preset based on study/patient info
+            const autoPreset = this.detectAnatomyPreset && this.detectAnatomyPreset();
+            if (autoPreset && this.windowPresets[autoPreset]) {
+                const presetVals = this.windowPresets[autoPreset];
+                this.windowWidth = presetVals.ww;
+                this.windowLevel = presetVals.wl;
+                console.log(`Applied auto preset '${autoPreset}' (WW=${presetVals.ww}, WL=${presetVals.wl})`);
+            }
+            
             // Clear any existing measurements for new study
             this.measurements = [];
             this.annotations = [];
@@ -4560,6 +4569,51 @@ Pixel Count: ${data.pixel_count}`;
         } else {
             seriesGrid.innerHTML = '<div class="no-series">No series available</div>';
         }
+    }
+
+    // --- NEW: Text-based anatomy detection (leverages patient / study info & on-screen text) ---
+    detectAnatomyPreset() {
+        // Define anatomy keyword presets mapped to existing windowPresets keys
+        const anatomyPresets = {
+            chest: { preset: 'lung', keywords: ['lung', 'chest', 'thorax', 'pulmonary'] },
+            bone: { preset: 'bone', keywords: ['bone', 'spine', 'vertebr', 'fracture', 'skeletal'] },
+            brain: { preset: 'brain', keywords: ['brain', 'head', 'cranial', 'cerebr', 'neuro'] },
+            abdomen: { preset: 'abdomen', keywords: ['abdomen', 'liver', 'kidney', 'pancrea', 'spleen'] },
+            cardiac: { preset: 'cardiac', keywords: ['heart', 'cardiac', 'coronary', 'aorta'] },
+            soft: { preset: 'soft', keywords: ['soft', 'tissue', 'muscle'] }
+        };
+
+        // Aggregate text from study metadata if available
+        let searchText = '';
+        if (this.currentStudy) {
+            const { description, body_part_examined, patient_name, study_description } = this.currentStudy;
+            if (description)          searchText += description.toLowerCase();
+            if (body_part_examined)   searchText += body_part_examined.toLowerCase();
+            if (patient_name)         searchText += patient_name.toLowerCase();
+            if (study_description)    searchText += study_description.toLowerCase();
+        }
+
+        // Also incorporate any visible patient / study info already rendered in DOM
+        try {
+            const patientInfoEl = document.querySelector('.patient-info, #patient-info, [class*="patient"]');
+            const studyInfoEl   = document.querySelector('.study-info,   #study-info,   [class*="study"]');
+            if (patientInfoEl) searchText += patientInfoEl.textContent.toLowerCase();
+            if (studyInfoEl)   searchText += studyInfoEl.textContent.toLowerCase();
+            searchText += document.body.textContent.toLowerCase();
+        } catch (err) {
+            // DOM may not be ready – ignore
+        }
+
+        // Determine best matching preset
+        for (const key in anatomyPresets) {
+            const { preset, keywords } = anatomyPresets[key];
+            if (keywords.some(kw => searchText.includes(kw))) {
+                console.log(`Auto-detected anatomy preset: ${preset}`);
+                return preset;
+            }
+        }
+        console.log('No anatomy preset detected, defaulting to soft tissue');
+        return 'soft';
     }
 }
 
