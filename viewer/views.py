@@ -250,9 +250,9 @@ class EnhancedBulkUploadManager:
                 file_path = file_info['path']
                 file_size = file_info['size']
                 
-                # Check file size (500MB limit for individual files)
-                if file_size > 500 * 1024 * 1024:
-                    batch_results['failed'].append(f"File {file_info['name']} is too large (max 500MB)")
+                        # Check file size (5GB limit for individual files)
+        if file_size > 5 * 1024 * 1024 * 1024:
+                    batch_results['failed'].append(f"File {file_info['name']} is too large (max 5GB)")
                     continue
                 
                 # Read DICOM data with multiple fallback methods
@@ -754,8 +754,8 @@ def upload_dicom_files(request):
                 file_size = file.size
                 
                 # Check file size - increased limit for large CT files with multiple series
-                if file_size > 500 * 1024 * 1024:  # 500MB per file (increased for CT scans)
-                    errors.append(f"File {file.name} is too large (max 500MB per file)")
+                if file_size > 5 * 1024 * 1024 * 1024:  # 5GB per file (increased for CT scans)
+                    errors.append(f"File {file.name} is too large (max 5GB per file)")
                     continue
                 
                 # More permissive DICOM file detection
@@ -1101,8 +1101,8 @@ def upload_dicom_folder(request):
                 file_size = file.size
                 
                 # Check file size - increased limit for large CT files with multiple series
-                if file_size > 500 * 1024 * 1024:  # 500MB per file (increased for CT scans)
-                    errors.append(f"File {file.name} is too large (max 500MB per file)")
+                if file_size > 5 * 1024 * 1024 * 1024:  # 5GB per file (increased for CT scans)
+                    errors.append(f"File {file.name} is too large (max 5GB per file)")
                     continue
                 
                 # Accept any file that might be DICOM (more permissive)
@@ -2946,9 +2946,9 @@ def enhanced_bulk_upload_dicom_folder(request):
         if not uploaded_file:
             return JsonResponse({'error': 'No file provided'}, status=400)
         
-        # Check file size (2GB limit for bulk uploads)
-        if uploaded_file.size > 2 * 1024 * 1024 * 1024:
-            return JsonResponse({'error': 'File too large (max 2GB)'}, status=400)
+        # Check file size (5GB limit for bulk uploads)
+        if uploaded_file.size > 5 * 1024 * 1024 * 1024:
+            return JsonResponse({'error': 'File too large (max 5GB)'}, status=400)
         
         # Create enhanced upload manager
         upload_manager = EnhancedBulkUploadManager(
