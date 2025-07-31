@@ -22,8 +22,9 @@ class DicomViewer {
         this.currentImage = null;
         
         // Display parameters optimized for medical imaging
-        this.windowWidth = 1500;  // Wider window for better tissue differentiation
-        this.windowLevel = -600;  // Lung window setting for better contrast
+        // Set default window/level for soft-tissue viewing to avoid over-bright display
+        this.windowWidth = 400;   // Soft-tissue window width
+        this.windowLevel = 40;    // Soft-tissue window level
         this.zoomFactor = 1.0;
         this.panX = 0;
         this.panY = 0;
@@ -161,11 +162,12 @@ class DicomViewer {
         // Initialize enhanced rendering parameters for optimal medical imaging
         this.renderingOptions = {
             preserveSharpness: true,
-            enhanceDensityContrast: true,
+            // Disable density contrast filter by default – it was over-brightening images
+            enhanceDensityContrast: false,
             antialiasing: false, // Disable for pixel-perfect medical imaging
             subpixelRendering: true,
             highQualityMode: true,
-            densityEnhancement: true,
+            densityEnhancement: false,
             contrastOptimization: 'medical',
             imageSmoothingEnabled: false // Preserve medical image sharpness
         };

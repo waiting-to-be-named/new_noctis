@@ -2293,3 +2293,13 @@ body {
     box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
 }
 
+/* Hide removed tools and panels */
+button.tool-btn[data-tool="folder"],
+button.tool-btn[data-tool="navigator"],
+button.tool-btn[data-tool="enhance"],
+#image-navigator,
+#enhancement-panel,
+#density-processing-section {
+    display: none !important;
+}
+
