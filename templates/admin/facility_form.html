@@ -196,6 +196,19 @@
             margin-top: 5px;
         }
         
+        .ae-title-group {
+            display: flex;
+            align-items: center;
+        }
+        
+        .ae-title-group .form-control {
+            flex: 1;
+        }
+        
+        .ae-title-group .btn {
+            flex-shrink: 0;
+        }
+        
         .messages {
             margin-bottom: 20px;
         }
@@ -294,6 +307,31 @@
                 </div>
                 
                 <div class="form-group">
+                    <label for="{{ form.ae_title.id_for_label }}" class="required">DICOM AE Title</label>
+                    {{ form.ae_title.errors }}
+                    <div class="ae-title-group">
+                        <input type="text" 
+                               name="{{ form.ae_title.name }}" 
+                               id="{{ form.ae_title.id_for_label }}"
+                               class="form-control" 
+                               placeholder="Auto-generated from facility name"
+                               value="{{ form.ae_title.value|default:'' }}"
+                               maxlength="16"
+                               pattern="[A-Z0-9]{1,16}"
+                               title="AE Title must be 1-16 uppercase letters and numbers"
+                               required>
+                        <button type="button" id="generate-ae-title" class="btn btn-secondary" style="margin-left: 10px;">
+                            <i class="fas fa-magic"></i> Auto-Generate
+                        </button>
+                    </div>
+                    <div class="helptext">
+                        <i class="fas fa-info-circle"></i> 
+                        DICOM AE Title is used by modalities (CT, MRI, etc.) to send studies to this PACS. 
+                        Must be 1-16 uppercase letters and numbers. Auto-generate based on facility name or enter manually.
+                    </div>
+                </div>
+                
+                <div class="form-group">
                     <label for="{{ form.letterhead_logo.id_for_label }}">Letterhead Logo</label>
                     {{ form.letterhead_logo.errors }}
                     <div class="file-input-group">
@@ -369,6 +407,52 @@
                 label.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Choose Logo File';
                 label.style.borderColor = '#666';
                 label.style.background = '#333';
+            }
+        });
+        
+        // AE Title auto-generation
+        document.getElementById('generate-ae-title').addEventListener('click', function() {
+            const facilityNameInput = document.getElementById('{{ form.name.id_for_label }}');
+            const aeTitleInput = document.getElementById('{{ form.ae_title.id_for_label }}');
+            
+            if (facilityNameInput.value.trim() === '') {
+                alert('Please enter a facility name first to auto-generate the AE Title.');
+                facilityNameInput.focus();
+                return;
+            }
+            
+            // Generate AE title based on facility name
+            let cleanName = facilityNameInput.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            let baseTitle = cleanName.substring(0, 8);
+            
+            if (baseTitle.length < 3) {
+                baseTitle = "FACILITY";
+            }
+            
+            // Add timestamp suffix to ensure uniqueness
+            const timestamp = new Date().getTime().toString().slice(-3);
+            const aeTitle = baseTitle.substring(0, 5) + timestamp;
+            
+            aeTitleInput.value = aeTitle;
+            aeTitleInput.style.borderColor = '#00ff00';
+            aeTitleInput.style.background = 'rgba(0, 255, 0, 0.1)';
+            
+            // Reset styling after 2 seconds
+            setTimeout(() => {
+                aeTitleInput.style.borderColor = '';
+                aeTitleInput.style.background = '';
+            }, 2000);
+        });
+        
+        // Auto-generate AE title when facility name changes (if AE title is empty)
+        document.getElementById('{{ form.name.id_for_label }}').addEventListener('input', function() {
+            const aeTitleInput = document.getElementById('{{ form.ae_title.id_for_label }}');
+            if (aeTitleInput.value.trim() === '') {
+                // Auto-generate after a short delay
+                clearTimeout(window.aeTitleTimeout);
+                window.aeTitleTimeout = setTimeout(() => {
+                    document.getElementById('generate-ae-title').click();
+                }, 1000);
             }
         });
     </script>

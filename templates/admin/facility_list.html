@@ -241,6 +241,7 @@
                     <tr>
                         <th>Logo</th>
                         <th>Name</th>
+                        <th>AE Title</th>
                         <th>Address</th>
                         <th>Phone</th>
                         <th>Email</th>
@@ -261,6 +262,11 @@
                             {% endif %}
                         </td>
                         <td><strong>{{ facility.name }}</strong></td>
+                        <td>
+                            <code style="background: #333; padding: 2px 6px; border-radius: 4px; font-family: monospace; color: #00ff00;">
+                                {{ facility.ae_title|default:"Not set" }}
+                            </code>
+                        </td>
                         <td>{{ facility.address|truncatechars:50 }}</td>
                         <td>{{ facility.phone }}</td>
                         <td>{{ facility.email }}</td>
