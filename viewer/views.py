@@ -250,8 +250,8 @@ class EnhancedBulkUploadManager:
                 file_path = file_info['path']
                 file_size = file_info['size']
                 
-                        # Check file size (5GB limit for individual files)
-        if file_size > 5 * 1024 * 1024 * 1024:
+                # Check file size (5GB limit for individual files)
+                if file_size > 5 * 1024 * 1024 * 1024:
                     batch_results['failed'].append(f"File {file_info['name']} is too large (max 5GB)")
                     continue
                 
