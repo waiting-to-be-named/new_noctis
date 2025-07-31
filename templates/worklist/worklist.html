@@ -135,10 +135,14 @@
                                     </button>
                                     {% endif %}
                                     {% endif %}
-                                    {% if entry.study.reports.exists %}
-                                    <button class="btn btn-print" onclick="printReport({{ entry.study.reports.first.id }})">
-                                        <i class="fas fa-print"></i> Print
-                                    </button>
+                                    {% if entry.study and entry.study.reports.exists %}
+                                        {% with report=entry.study.reports.first %}
+                                            {% if report.status == 'finalized' or report.status == 'printed' %}
+                                                <button class="btn btn-print" onclick="printReport({{ report.id }})">
+                                                    <i class="fas fa-print"></i> Print
+                                                </button>
+                                            {% endif %}
+                                        {% endwith %}
                                     {% endif %}
                                     {% if is_admin %}
                                     <button class="btn btn-delete" onclick="deleteEntry({{ entry.id }}, '{{ entry.patient_name }}', '{{ entry.accession_number }}')">
