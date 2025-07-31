@@ -110,19 +110,28 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # DICOM specific settings
 DICOM_UPLOAD_PATH = 'dicom_files/'
-MAX_DICOM_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+MAX_DICOM_FILE_SIZE = 5 * 1024 * 1024 * 1024  # 5GB
 
-# File upload settings
+# File upload settings - optimized for large files
 FILE_UPLOAD_HANDLERS = [
-    'django.core.files.uploadhandler.MemoryFileUploadHandler',
-    'django.core.files.uploadhandler.TemporaryFileUploadHandler',
+    'django.core.files.uploadhandler.TemporaryFileUploadHandler',  # Use temp files for large uploads
+    'django.core.files.uploadhandler.MemoryFileUploadHandler',     # Fallback for small files
 ]
 
-# Maximum file upload size (100MB)
-DATA_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024
-FILE_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024
+# Maximum file upload size (5GB)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024 * 1024  # 5GB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024       # Keep memory uploads at 100MB to avoid RAM issues
 DATA_UPLOAD_MAX_NUMBER_FIELDS = None  # Allow unlimited number of POST fields
 DATA_UPLOAD_MAX_NUMBER_FILES = None  # Allow unlimited number of uploaded files
+
+# File upload timeout settings for large files
+FILE_UPLOAD_TEMP_DIR = None  # Use system temp directory
+FILE_UPLOAD_PERMISSIONS = 0o644
+
+# Upload processing settings for large files
+BULK_UPLOAD_TIMEOUT = 3600  # 1 hour timeout for bulk uploads
+UPLOAD_PROGRESS_CACHE_TIMEOUT = 7200  # 2 hours cache timeout for upload progress
+LARGE_FILE_CHUNK_SIZE = 1024 * 1024  # 1MB chunks for processing large files
 
 # Ensure media directories are created
 import os
