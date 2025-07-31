@@ -22,8 +22,8 @@ class DicomViewer {
         this.currentImage = null;
         
         // Display parameters optimized for medical imaging
-        this.windowWidth = 1500;  // Wider window for better tissue differentiation
-        this.windowLevel = -600;  // Lung window setting for better contrast
+        this.windowWidth = 400;   // Standard window width for general medical imaging
+        this.windowLevel = 40;    // Standard window level for balanced contrast
         this.zoomFactor = 1.0;
         this.panX = 0;
         this.panY = 0;
@@ -60,18 +60,18 @@ class DicomViewer {
         this.reconstructionType = 'mpr';
         this.is3DEnabled = false;
         
-        // Enhanced Window presets for optimal tissue differentiation
+        // Optimized Window presets for high diagnostic value
         this.windowPresets = {
-            'lung': { ww: 1500, wl: -600, description: 'Lung/Air - Enhanced contrast for air vs soft tissue' },
-            'bone': { ww: 2000, wl: 300, description: 'Bone - High contrast for bone vs soft tissue' },
-            'soft': { ww: 400, wl: 40, description: 'Soft Tissue - Optimized for organ differentiation' },
-            'brain': { ww: 100, wl: 50, description: 'Brain - Fine detail in neural tissue' },
-            'abdomen': { ww: 350, wl: 50, description: 'Abdomen - Organ and vessel contrast' },
-            'mediastinum': { ww: 400, wl: 20, description: 'Mediastinum - Vessel and tissue contrast' },
-            'liver': { ww: 150, wl: 60, description: 'Liver - Hepatic lesion detection' },
-            'cardiac': { ww: 600, wl: 200, description: 'Cardiac - Heart muscle and vessels' },
-            'spine': { ww: 1000, wl: 400, description: 'Spine - Bone and disc contrast' },
-            'angio': { ww: 700, wl: 150, description: 'Angiographic - Vessel enhancement' }
+            'lung': { ww: 1500, wl: -600, description: 'Lung/Air - Optimal for pulmonary assessment' },
+            'bone': { ww: 2000, wl: 300, description: 'Bone - High contrast for skeletal structures' },
+            'soft': { ww: 400, wl: 40, description: 'Soft Tissue - Standard for general imaging' },
+            'brain': { ww: 100, wl: 50, description: 'Brain - Fine detail for neurological imaging' },
+            'abdomen': { ww: 350, wl: 50, description: 'Abdomen - Organ and vessel assessment' },
+            'mediastinum': { ww: 400, wl: 20, description: 'Mediastinum - Cardiovascular structures' },
+            'liver': { ww: 150, wl: 60, description: 'Liver - Hepatic pathology detection' },
+            'cardiac': { ww: 600, wl: 200, description: 'Cardiac - Heart and great vessels' },
+            'spine': { ww: 1000, wl: 400, description: 'Spine - Vertebral and disc assessment' },
+            'angio': { ww: 700, wl: 150, description: 'Angiographic - Vascular enhancement' }
         };
         
         // Notifications
