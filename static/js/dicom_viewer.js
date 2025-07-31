@@ -667,7 +667,15 @@ class DicomViewer {
             });
         }
         
-
+        // Series selector button
+        const seriesSelectorBtn = document.getElementById('series-selector-btn');
+        if (seriesSelectorBtn && !seriesSelectorBtn.hasAttribute('data-listener-added')) {
+            seriesSelectorBtn.setAttribute('data-listener-added', 'true');
+            seriesSelectorBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.toggleSeriesSelector();
+            });
+        }
         
         // Clear measurements - only add event listener if it doesn't already exist
         const clearMeasurementsBtn = document.getElementById('clear-measurements');
@@ -687,6 +695,16 @@ class DicomViewer {
         
         // Upload modal events
         this.setupUploadModal();
+        
+        // Series selector button
+        const seriesSelectorBtn = document.getElementById('series-selector-btn');
+        if (seriesSelectorBtn && !seriesSelectorBtn.hasAttribute('data-listener-added')) {
+            seriesSelectorBtn.setAttribute('data-listener-added', 'true');
+            seriesSelectorBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.toggleSeriesSelector();
+            });
+        }
     }
     
     // Add loading state method with improved display
@@ -2485,6 +2503,18 @@ class DicomViewer {
                 this.canvas.style.cursor = 'crosshair';
                 this.startVolumeCalculation();
                 break;
+            case 'enhance':
+                this.toggleEnhancementPanel();
+                break;
+            case 'navigator':
+                this.toggleImageNavigator();
+                break;
+            case 'folder-upload':
+                this.triggerFolderUpload();
+                break;
+            case 'high-quality':
+                this.toggleHighQuality();
+                break;
             case 'ai':
                 // Dropdown handled by onclick in HTML
                 break;
@@ -4251,6 +4281,286 @@ Pixel Count: ${data.pixel_count}`;
         
         console.log('Enhanced DICOM viewer initialized with optimizations');
     }
+
+    // Missing tool functions
+    toggleEnhancementPanel() {
+        const panel = document.getElementById('enhancement-panel');
+        if (panel) {
+            const isVisible = panel.classList.contains('show');
+            if (isVisible) {
+                panel.classList.remove('show');
+            } else {
+                panel.classList.add('show');
+            }
+        }
+    }
+
+    toggleImageNavigator() {
+        const navigator = document.querySelector('.image-navigator');
+        if (navigator) {
+            const isVisible = navigator.classList.contains('show');
+            if (isVisible) {
+                navigator.classList.remove('show');
+            } else {
+                navigator.classList.add('show');
+                this.updateImageNavigator();
+            }
+        }
+    }
+
+    updateImageNavigator() {
+        const navigatorContent = document.querySelector('.navigator-thumbnails');
+        if (!navigatorContent || !this.currentImages || this.currentImages.length === 0) {
+            return;
+        }
+
+        navigatorContent.innerHTML = '';
+        
+        this.currentImages.forEach((image, index) => {
+            const thumbnail = document.createElement('div');
+            thumbnail.className = 'navigator-thumbnail';
+            if (index === this.currentImageIndex) {
+                thumbnail.classList.add('active');
+            }
+            
+            thumbnail.innerHTML = `
+                <div style="width: 30px; height: 30px; background: #333; border-radius: 2px; margin-right: 8px;"></div>
+                <span>Image ${index + 1}</span>
+            `;
+            
+            thumbnail.addEventListener('click', () => {
+                this.currentImageIndex = index;
+                this.loadCurrentImage();
+                this.updateImageNavigator();
+            });
+            
+            navigatorContent.appendChild(thumbnail);
+        });
+    }
+
+    triggerFolderUpload() {
+        const folderInput = document.getElementById('folder-input');
+        if (folderInput) {
+            folderInput.click();
+        } else {
+            // Create a temporary folder input if it doesn't exist
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.webkitdirectory = true;
+            input.multiple = true;
+            input.style.display = 'none';
+            
+            input.addEventListener('change', (e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                    this.uploadFolder(e.target.files);
+                }
+                document.body.removeChild(input);
+            });
+            
+            document.body.appendChild(input);
+            input.click();
+        }
+    }
+
+    toggleHighQuality() {
+        this.highQualityMode = !this.highQualityMode;
+        
+        // Update button state
+        const btn = document.querySelector('[data-tool="high-quality"]');
+        if (btn) {
+            if (this.highQualityMode) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+        
+        // Update canvas rendering
+        this.setupHighQualityRendering();
+        this.updateDisplay();
+        
+        // Show notification
+        const message = this.highQualityMode ? 'High Quality Mode Enabled' : 'High Quality Mode Disabled';
+        this.showNotification(message, 'info');
+    }
+
+    toggleSeriesSelector() {
+        const seriesSelector = document.getElementById('series-selector');
+        if (seriesSelector) {
+            const isVisible = seriesSelector.classList.contains('show');
+            if (isVisible) {
+                seriesSelector.classList.remove('show');
+                document.querySelector('.dicom-viewer').classList.remove('series-selector-open');
+            } else {
+                seriesSelector.classList.add('show');
+                document.querySelector('.dicom-viewer').classList.add('series-selector-open');
+                this.loadSeriesSelector();
+            }
+        }
+    }
+
+    loadSeriesSelector() {
+        const seriesGrid = document.getElementById('series-grid');
+        if (!seriesGrid || !this.currentStudy) {
+            return;
+        }
+
+        // Clear existing content
+        seriesGrid.innerHTML = '';
+        
+        if (this.currentStudy.series && this.currentStudy.series.length > 0) {
+            this.currentStudy.series.forEach((series, index) => {
+                const seriesItem = document.createElement('div');
+                seriesItem.className = 'series-item';
+                if (this.currentSeries && this.currentSeries.id === series.id) {
+                    seriesItem.classList.add('active');
+                }
+                
+                const imageCount = series.images ? series.images.length : 0;
+                
+                seriesItem.innerHTML = `
+                    <div class="series-thumbnail">
+                        <i class="fas fa-images"></i>
+                    </div>
+                    <div class="series-info">
+                        <div class="series-title">${series.description || `Series ${index + 1}`}</div>
+                        <div class="series-details">
+                            <span>${imageCount} images</span>
+                            <span>${series.modality || 'Unknown'}</span>
+                        </div>
+                    </div>
+                `;
+                
+                seriesItem.addEventListener('click', () => {
+                    this.loadSeries(series);
+                    this.toggleSeriesSelector(); // Close after selection
+                });
+                
+                seriesGrid.appendChild(seriesItem);
+            });
+        } else {
+            seriesGrid.innerHTML = '<div class="no-series">No series available</div>';
+        }
+    }
+
+    setupHighQualityRendering() {
+        if (!this.canvas || !this.ctx) return;
+        
+        if (this.highQualityMode) {
+            // Enable high quality rendering
+            this.ctx.imageSmoothingEnabled = true;
+            this.ctx.imageSmoothingQuality = 'high';
+            this.canvas.style.imageRendering = 'auto';
+        } else {
+            // Disable smoothing for crisp pixels
+            this.ctx.imageSmoothingEnabled = false;
+            this.canvas.style.imageRendering = 'pixelated';
+        }
+    }
+
+    showNotification(message, type = 'info') {
+        // Create notification element if it doesn't exist
+        let notification = document.getElementById('viewer-notification');
+        if (!notification) {
+            notification = document.createElement('div');
+            notification.id = 'viewer-notification';
+            notification.style.cssText = `
+                position: fixed;
+                top: 80px;
+                right: 20px;
+                background: rgba(0, 0, 0, 0.9);
+                color: white;
+                padding: 12px 20px;
+                border-radius: 5px;
+                border-left: 4px solid #00ff00;
+                z-index: 10000;
+                font-size: 14px;
+                max-width: 300px;
+                transform: translateX(100%);
+                transition: transform 0.3s ease;
+                backdrop-filter: blur(10px);
+            `;
+            document.body.appendChild(notification);
+        }
+        
+        // Set message and type
+        notification.textContent = message;
+        
+        if (type === 'error') {
+            notification.style.borderLeftColor = '#ff4444';
+        } else if (type === 'warning') {
+            notification.style.borderLeftColor = '#ffaa00';
+        } else {
+            notification.style.borderLeftColor = '#00ff00';
+        }
+        
+        // Show notification
+        notification.style.transform = 'translateX(0)';
+        
+        // Hide after 3 seconds
+        setTimeout(() => {
+            notification.style.transform = 'translateX(100%)';
+        }, 3000);
+    }
+
+    toggleSeriesSelector() {
+        const seriesSelector = document.getElementById('series-selector');
+        if (seriesSelector) {
+            const isVisible = seriesSelector.classList.contains('show');
+            if (isVisible) {
+                seriesSelector.classList.remove('show');
+                document.querySelector('.dicom-viewer').classList.remove('series-selector-open');
+            } else {
+                seriesSelector.classList.add('show');
+                document.querySelector('.dicom-viewer').classList.add('series-selector-open');
+                this.loadSeriesSelector();
+            }
+        }
+    }
+
+    loadSeriesSelector() {
+        const seriesGrid = document.getElementById('series-grid');
+        if (!seriesGrid || !this.currentStudy) {
+            return;
+        }
+
+        // Clear existing content
+        seriesGrid.innerHTML = '';
+        
+        if (this.currentStudy.series && this.currentStudy.series.length > 0) {
+            this.currentStudy.series.forEach((series, index) => {
+                const seriesItem = document.createElement('div');
+                seriesItem.className = 'series-item';
+                if (this.currentSeries && this.currentSeries.id === series.id) {
+                    seriesItem.classList.add('active');
+                }
+                
+                const imageCount = series.images ? series.images.length : 0;
+                
+                seriesItem.innerHTML = `
+                    <div class="series-thumbnail">
+                        <i class="fas fa-images"></i>
+                    </div>
+                    <div class="series-info">
+                        <div class="series-title">${series.description || `Series ${index + 1}`}</div>
+                        <div class="series-details">
+                            <span>${imageCount} images</span>
+                            <span>${series.modality || 'Unknown'}</span>
+                        </div>
+                    </div>
+                `;
+                
+                seriesItem.addEventListener('click', () => {
+                    this.loadSeries(series);
+                    this.toggleSeriesSelector(); // Close after selection
+                });
+                
+                seriesGrid.appendChild(seriesItem);
+            });
+        } else {
+            seriesGrid.innerHTML = '<div class="no-series">No series available</div>';
+        }
+    }
 }
 
 // Initialize the viewer when the page loads
@@ -4262,3 +4572,94 @@ document.addEventListener('DOMContentLoaded', () => {
     window.viewer = viewer; // Make viewer globally accessible
     console.log('DICOM Viewer initialized');
 });
+// Enhanced upload interface functions
+function switchUploadTab(tabName) {
+    // Remove active class from all tabs
+    document.querySelectorAll('.upload-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Remove active class from all tab contents
+    document.querySelectorAll('.upload-tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    // Add active class to clicked tab
+    event.target.classList.add('active');
+    
+    // Show corresponding tab content
+    const tabContent = document.getElementById(tabName + '-tab');
+    if (tabContent) {
+        tabContent.classList.add('active');
+    }
+}
+
+function selectDrive(driveType) {
+    console.log('Selecting drive type:', driveType);
+    
+    switch(driveType) {
+        case 'cd':
+        case 'usb':
+        case 'external':
+            selectFolder();
+            break;
+    }
+    
+    if (window.viewer) {
+        window.viewer.showNotification(`Please select the ${driveType.toUpperCase()} drive folder containing DICOM files`, 'info');
+    }
+}
+
+function connectToPACS() {
+    const server = document.getElementById('pacs-server').value;
+    const port = document.getElementById('pacs-port').value || '104';
+    const aeTitle = document.getElementById('pacs-ae-title').value;
+    
+    if (!server || !aeTitle) {
+        alert('Please provide PACS server details');
+        return;
+    }
+    
+    if (window.viewer) {
+        window.viewer.showNotification('PACS integration coming soon. Please use file upload for now.', 'info');
+    }
+}
+
+function connectToCloud(provider) {
+    if (window.viewer) {
+        window.viewer.showNotification(`${provider} integration coming soon. Please use file upload for now.`, 'info');
+    }
+}
+
+function closeUploadModal() {
+    const modal = document.getElementById('upload-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+function selectFiles() {
+    const fileInput = document.getElementById('file-input');
+    if (fileInput) {
+        fileInput.click();
+    }
+}
+
+function selectFolder() {
+    const folderInput = document.getElementById('folder-input');
+    if (folderInput) {
+        folderInput.click();
+    }
+}
+
+function toggleSeriesSelector() {
+    if (window.viewer) {
+        window.viewer.toggleSeriesSelector();
+    }
+}
+
+function toggleEnhancementPanel() {
+    if (window.viewer) {
+        window.viewer.toggleEnhancementPanel();
+    }
+}
