@@ -21,9 +21,9 @@ class DicomViewer {
         this.currentImageIndex = 0;
         this.currentImage = null;
         
-        // Display parameters
-        this.windowWidth = 400;
-        this.windowLevel = 40;
+        // Display parameters optimized for medical imaging
+        this.windowWidth = 1500;  // Wider window for better tissue differentiation
+        this.windowLevel = -600;  // Lung window setting for better contrast
         this.zoomFactor = 1.0;
         this.panX = 0;
         this.panY = 0;
@@ -80,12 +80,13 @@ class DicomViewer {
         // Store initial study ID
         this.initialStudyId = initialStudyId;
         
-        // Manual enhancement controls
+        // Manual enhancement controls - optimized for medical imaging
         this.manualBrightness = null; // When null, use auto calculation
         this.manualContrast = null;   // When null, use auto calculation  
         this.manualGamma = null;      // When null, use auto calculation
-        this.densityMultiplier = 1.2; // Default density enhancement
-        this.contrastBoostMultiplier = 1.15; // Default contrast boost
+        this.densityMultiplier = 1.3; // Enhanced density enhancement for better tissue visualization
+        this.contrastBoostMultiplier = 1.25; // Increased contrast boost for medical images
+        this.highQualityMode = true;  // Enable high quality mode by default
         
         this.init();
     }
@@ -157,12 +158,16 @@ class DicomViewer {
         this.enhancedRendering = true;
         this.pixelDensityScale = window.devicePixelRatio || 1;
         
-        // Initialize enhanced rendering parameters
+        // Initialize enhanced rendering parameters for optimal medical imaging
         this.renderingOptions = {
             preserveSharpness: true,
             enhanceDensityContrast: true,
             antialiasing: false, // Disable for pixel-perfect medical imaging
-            subpixelRendering: true
+            subpixelRendering: true,
+            highQualityMode: true,
+            densityEnhancement: true,
+            contrastOptimization: 'medical',
+            imageSmoothingEnabled: false // Preserve medical image sharpness
         };
         
         console.log(`Canvas initialized with enhanced rendering, pixel density scale: ${this.pixelDensityScale}`);
@@ -1389,18 +1394,18 @@ class DicomViewer {
         this.showLoadingState('Loading image...');
         
         try {
-            // Use optimized parameters for faster loading
+            // Use high quality parameters for optimal medical image display
             const params = new URLSearchParams({
                 window_width: this.windowWidth,
                 window_level: this.windowLevel,
                 inverted: this.inverted,
-                // Reduced quality for initial load, enhanced later
-                high_quality: 'false', 
+                // Enable high quality processing for medical images
+                high_quality: 'true', 
                 preserve_aspect: 'true',
-                fast_load: 'true', // Request fast loading mode
-                resolution_factor: 1.0, // Start with normal resolution
-                format: 'jpeg', // Use JPEG for faster transfer
-                quality: 85 // Good quality but smaller file size
+                density_enhancement: 'true', // Enable density enhancement for better tissue differentiation
+                contrast_optimization: 'medical', // Use medical contrast optimization
+                resolution_factor: 1.0, // Full resolution
+                contrast_boost: '1.15' // Apply contrast boost for better visualization
             });
             
             const startTime = performance.now();
@@ -1946,27 +1951,27 @@ class DicomViewer {
         // Auto-detect optimal tissue contrast enhancement
         const tissueType = this.autoDetectTissueType();
         
-        // Apply tissue-specific enhancement
+        // Apply enhanced tissue-specific processing for better visualization
         switch (tissueType) {
             case 'bone':
-                filters.push('contrast(1.3)');
-                filters.push('brightness(1.1)');
+                filters.push('contrast(1.4)');
+                filters.push('brightness(1.15)');
                 break;
             case 'lung':
-                filters.push('contrast(1.4)');
-                filters.push('brightness(0.9)');
+                filters.push('contrast(1.6)');  // Increased for better air-tissue contrast
+                filters.push('brightness(0.85)');
                 break;
             case 'soft':
-                filters.push('contrast(1.2)');
-                filters.push('brightness(1.05)');
+                filters.push('contrast(1.35)');  // Enhanced soft tissue contrast
+                filters.push('brightness(1.1)');
                 break;
             case 'brain':
-                filters.push('contrast(1.25)');
-                filters.push('brightness(1.0)');
+                filters.push('contrast(1.3)');
+                filters.push('brightness(1.05)');
                 break;
             default:
-                filters.push('contrast(1.15)');
-                filters.push('brightness(1.02)');
+                filters.push('contrast(1.25)');  // Higher baseline contrast
+                filters.push('brightness(1.05)'); // Slightly brighter baseline
         }
         
         // Apply manual adjustments if set
@@ -3096,7 +3101,10 @@ class DicomViewer {
     }
     
     redraw() {
-        // Force a complete redraw of the canvas
+        // Setup high-quality rendering before each redraw
+        this.setupHighQualityRendering();
+        
+        // Force a complete redraw of the canvas with enhanced quality
         this.updateDisplay();
     }
 
