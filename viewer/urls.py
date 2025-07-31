@@ -37,9 +37,18 @@ urlpatterns = [
     # Enhanced image processing
     path('api/images/<int:image_id>/enhanced-data/', views.get_enhanced_image_data, name='get_enhanced_image_data'),
     
-    # Series selector functionality
+    # Enhanced X-ray and MRI processing
+    path('api/images/<int:image_id>/enhance-xray/', views.enhance_xray_image_api, name='enhance_xray_image'),
+    path('api/images/<int:image_id>/reconstruct-mri/', views.reconstruct_mri_image_api, name='reconstruct_mri_image'),
+    path('api/images/<int:image_id>/enhance-mri/', views.enhance_mri_image_api, name='enhance_mri_image'),
+    
+    # Series selector functionality with enhanced scrolling
     path('api/studies/<int:study_id>/series-selector/', views.get_series_selector_data, name='get_series_selector_data'),
     path('api/series/<int:series_id>/enhanced-images/', views.get_enhanced_series_images, name='get_enhanced_series_images'),
+    path('api/series/<int:series_id>/images-scrollable/', views.get_series_images_with_scrolling, name='get_series_images_scrollable'),
+    
+    # Bulk image data for efficient loading
+    path('api/images/bulk-data/', views.get_bulk_image_data, name='get_bulk_image_data'),
     
     # Measurements and annotations
     path('api/measurements/save/', views.save_measurement, name='save_measurement'),
@@ -49,15 +58,15 @@ urlpatterns = [
     path('api/images/<int:image_id>/clear-measurements/', views.clear_measurements, name='clear_measurements'),
     path('api/measurements/hu/', views.measure_hu, name='measure_hu'),
     
-    # Volume calculation
-    path('api/volume/calculate/', views.calculate_volume, name='calculate_volume'),
-    
     # AI Analysis
-    path('api/images/<int:image_id>/ai-analysis/', views.perform_ai_analysis, name='ai_analysis'),
+    path('api/images/<int:image_id>/ai-analysis/', views.ai_analysis, name='ai_analysis'),
     
-    # 3D Reconstruction
-    path('api/series/<int:series_id>/3d-reconstruction/', views.get_3d_reconstruction, name='3d_reconstruction'),
+    # Reports
+    path('api/images/<int:image_id>/generate-report/', views.generate_report, name='generate_report'),
+    path('api/reports/<int:report_id>/', views.get_report, name='get_report'),
     
-    # Clinical Information
-    path('api/study/<int:study_id>/clinical-info/', views.api_study_clinical_info, name='api_study_clinical_info'),
+    # Worklist functionality
+    path('api/worklist/', views.get_worklist, name='get_worklist'),
+    path('api/worklist/create/', views.create_worklist_entry, name='create_worklist_entry'),
+    path('api/worklist/<int:entry_id>/update/', views.update_worklist_entry, name='update_worklist_entry'),
 ]
