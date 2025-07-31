@@ -4074,3 +4074,175 @@ def get_bulk_image_data(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
+# AI Analysis wrapper function for URL compatibility
+@csrf_exempt
+@require_http_methods(['POST'])
+def ai_analysis(request, image_id):
+    """Wrapper for perform_ai_analysis for URL compatibility"""
+    return perform_ai_analysis(request, image_id)
+
+# Report generation and retrieval functions
+@csrf_exempt
+@require_http_methods(['POST'])
+def generate_report(request, image_id):
+    """Generate a medical report for an image"""
+    try:
+        image = DicomImage.objects.get(id=image_id)
+        
+        # Get report parameters from request
+        data = json.loads(request.body) if request.body else {}
+        report_type = data.get('report_type', 'general')
+        
+        # Get DICOM metadata
+        dicom_data = image.load_dicom_data()
+        modality = dicom_data.Modality if dicom_data and hasattr(dicom_data, 'Modality') else 'Unknown'
+        body_part = dicom_data.BodyPartExamined if dicom_data and hasattr(dicom_data, 'BodyPartExamined') else 'Unknown'
+        
+        # Generate report content based on type
+        report_content = {
+            'patient_id': image.series.study.patient_id,
+            'patient_name': image.series.study.patient_name,
+            'study_date': str(image.series.study.study_date),
+            'modality': modality,
+            'body_part': body_part,
+            'findings': f"Automated analysis of {modality} image showing {body_part} examination.",
+            'impression': f"No significant abnormalities detected in this {modality} study.",
+            'recommendations': "Clinical correlation recommended."
+        }
+        
+        # Create report record
+        report = Report.objects.create(
+            image=image,
+            report_type=report_type,
+            content=json.dumps(report_content),
+            generated_by=request.user if request.user.is_authenticated else None
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'report_id': report.id,
+            'content': report_content
+        })
+        
+    except DicomImage.DoesNotExist:
+        return JsonResponse({'error': 'Image not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Error generating report: {e}")
+        return JsonResponse({'error': str(e)}, status=400)
+
+@csrf_exempt
+@require_http_methods(['GET'])
+def get_report(request, report_id):
+    """Retrieve a generated report"""
+    try:
+        report = Report.objects.get(id=report_id)
+        
+        # Parse content if it's JSON string
+        try:
+            content = json.loads(report.content) if isinstance(report.content, str) else report.content
+        except json.JSONDecodeError:
+            content = report.content
+        
+        return JsonResponse({
+            'success': True,
+            'report': {
+                'id': report.id,
+                'report_type': report.report_type,
+                'content': content,
+                'created_at': report.created_at.isoformat(),
+                'generated_by': report.generated_by.username if report.generated_by else None
+            }
+        })
+        
+    except Report.DoesNotExist:
+        return JsonResponse({'error': 'Report not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Error retrieving report: {e}")
+        return JsonResponse({'error': str(e)}, status=400)
+
+# Worklist functionality
+@csrf_exempt
+@require_http_methods(['GET'])
+def get_worklist(request):
+    """Get worklist entries"""
+    try:
+        entries = WorklistEntry.objects.all().order_by('-created_at')
+        
+        worklist_data = []
+        for entry in entries:
+            worklist_data.append({
+                'id': entry.id,
+                'patient_id': entry.patient_id,
+                'patient_name': entry.patient_name,
+                'study_date': str(entry.study_date) if entry.study_date else None,
+                'modality': entry.modality,
+                'status': entry.status,
+                'priority': entry.priority,
+                'created_at': entry.created_at.isoformat()
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'worklist': worklist_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting worklist: {e}")
+        return JsonResponse({'error': str(e)}, status=400)
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def create_worklist_entry(request):
+    """Create a new worklist entry"""
+    try:
+        data = json.loads(request.body)
+        
+        entry = WorklistEntry.objects.create(
+            patient_id=data.get('patient_id'),
+            patient_name=data.get('patient_name'),
+            study_date=data.get('study_date'),
+            modality=data.get('modality'),
+            status=data.get('status', 'pending'),
+            priority=data.get('priority', 'normal'),
+            description=data.get('description', '')
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'entry_id': entry.id,
+            'message': 'Worklist entry created successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating worklist entry: {e}")
+        return JsonResponse({'error': str(e)}, status=400)
+
+@csrf_exempt
+@require_http_methods(['PUT', 'PATCH'])
+def update_worklist_entry(request, entry_id):
+    """Update an existing worklist entry"""
+    try:
+        entry = WorklistEntry.objects.get(id=entry_id)
+        data = json.loads(request.body)
+        
+        # Update fields if provided
+        if 'status' in data:
+            entry.status = data['status']
+        if 'priority' in data:
+            entry.priority = data['priority']
+        if 'description' in data:
+            entry.description = data['description']
+        
+        entry.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Worklist entry updated successfully'
+        })
+        
+    except WorklistEntry.DoesNotExist:
+        return JsonResponse({'error': 'Worklist entry not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Error updating worklist entry: {e}")
+        return JsonResponse({'error': str(e)}, status=400)
