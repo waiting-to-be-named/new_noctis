@@ -843,7 +843,7 @@ class DicomViewer {
                 preserve_aspect: 'true'
             });
             
-            const response = await fetch(`/viewer/api/images/${imageData.id}/data/?${params}`);
+            const response = await fetch(`/viewer/api/images/${imageData.id}/enhanced-data/?${params}`);
             
             if (!response.ok) {
                 throw new Error(`Failed to load image: HTTP ${response.status} - ${response.statusText}`);
