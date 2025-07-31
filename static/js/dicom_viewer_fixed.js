@@ -20,6 +20,7 @@ class DicomViewer {
         this.panY = 0;
         this.inverted = false;
         this.crosshair = false;
+        this.highQualityMode = true;  // Default to high quality
         
         // Tools
         this.activeTool = 'windowing';
@@ -48,12 +49,15 @@ class DicomViewer {
         this.reconstructionType = 'mpr';
         this.is3DEnabled = false;
         
-        // Window presets
+        // Window presets optimized for better density differentiation
         this.windowPresets = {
             'lung': { ww: 1500, wl: -600 },
             'bone': { ww: 2000, wl: 300 },
-            'soft': { ww: 400, wl: 40 },
-            'brain': { ww: 100, wl: 50 }
+            'soft': { ww: 350, wl: 50 },  // Narrower window for better soft tissue contrast
+            'brain': { ww: 80, wl: 40 },   // Optimized for brain tissue
+            'liver': { ww: 150, wl: 60 },  // Added liver preset
+            'mediastinum': { ww: 350, wl: 40 }, // Added mediastinum preset
+            'abdomen': { ww: 400, wl: 50 }     // Added abdomen preset
         };
         
         // Notifications
@@ -96,6 +100,13 @@ class DicomViewer {
     }
     
     setupCanvas() {
+        // Enable high-quality rendering
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.imageSmoothingQuality = 'high';
+        
+        // Support for high-DPI displays
+        this.devicePixelRatio = window.devicePixelRatio || 1;
+        
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
     }
@@ -104,10 +115,24 @@ class DicomViewer {
         const container = this.canvas.parentElement;
         if (container) {
             const rect = container.getBoundingClientRect();
-            this.canvas.width = rect.width;
-            this.canvas.height = rect.height;
+            
+            // Support high-DPI displays for better clarity
+            const dpr = this.devicePixelRatio || 1;
+            
+            // Set display size (CSS pixels)
             this.canvas.style.width = rect.width + 'px';
             this.canvas.style.height = rect.height + 'px';
+            
+            // Set actual size in memory (scaled for high-DPI)
+            this.canvas.width = rect.width * dpr;
+            this.canvas.height = rect.height * dpr;
+            
+            // Scale the drawing context to match device pixel ratio
+            this.ctx.scale(dpr, dpr);
+            
+            // Re-enable high-quality rendering after resize
+            this.ctx.imageSmoothingEnabled = true;
+            this.ctx.imageSmoothingQuality = 'high';
         }
     }
     
@@ -117,11 +142,17 @@ class DicomViewer {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
                 const tool = btn.getAttribute('data-tool');
-                this.handleToolClick(tool);
+                this.handleToolClick(tool, btn);
                 
-                // Update active state
-                document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
+                // Update active state (except for toggles like high-quality)
+                if (tool !== 'high-quality' && tool !== 'crosshair' && tool !== 'invert') {
+                    document.querySelectorAll('.tool-btn').forEach(b => {
+                        if (b.getAttribute('data-tool') !== 'high-quality') {
+                            b.classList.remove('active');
+                        }
+                    });
+                    btn.classList.add('active');
+                }
             });
         });
         
@@ -419,7 +450,11 @@ class DicomViewer {
             const params = new URLSearchParams({
                 window_width: this.windowWidth,
                 window_level: this.windowLevel,
-                inverted: this.inverted
+                inverted: this.inverted,
+                high_quality: this.highQualityMode ? 'true' : 'false',
+                resolution_factor: this.highQualityMode ? '2.0' : '1.0',
+                density_enhancement: this.highQualityMode ? 'true' : 'false',
+                contrast_boost: this.highQualityMode ? '1.2' : '1.0'
             });
             
             const response = await fetch(`/viewer/api/images/${imageData.id}/data/?${params}`);
@@ -546,9 +581,13 @@ class DicomViewer {
     updateDisplay() {
         if (!this.currentImage) return;
         
-        // Clear canvas with black background
+        // Save the current context state
+        this.ctx.save();
+        
+        // Clear canvas with black background (accounting for device pixel ratio)
+        const dpr = this.devicePixelRatio || 1;
         this.ctx.fillStyle = '#000';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.fillRect(0, 0, this.canvas.width / dpr, this.canvas.height / dpr);
         
         // Calculate display parameters
         const img = this.currentImage.image;
@@ -556,12 +595,16 @@ class DicomViewer {
         
         const displayWidth = img.width * scale;
         const displayHeight = img.height * scale;
-        const canvasDisplayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
-        const canvasDisplayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        const canvasDisplayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width / dpr;
+        const canvasDisplayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height / dpr;
         const x = (canvasDisplayWidth - displayWidth) / 2 + this.panX;
         const y = (canvasDisplayHeight - displayHeight) / 2 + this.panY;
         
-        // Draw image
+        // Enable high-quality image rendering
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.imageSmoothingQuality = 'high';
+        
+        // Draw image with high quality
         this.ctx.drawImage(img, x, y, displayWidth, displayHeight);
         
         // Draw measurements after the image
@@ -577,13 +620,17 @@ class DicomViewer {
         
         // Update overlay labels
         this.updateOverlayLabels();
+        
+        // Restore the context state
+        this.ctx.restore();
     }
     
     getScale() {
         if (!this.currentImage) return 1;
         const img = this.currentImage.image;
-        const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
-        const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        const dpr = this.devicePixelRatio || 1;
+        const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width / dpr;
+        const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height / dpr;
         const baseScale = Math.min(displayWidth / img.width, displayHeight / img.height);
         const clampedBase = baseScale > 1 ? 1 : baseScale;
         return this.zoomFactor * clampedBase;
@@ -671,7 +718,7 @@ class DicomViewer {
         }
     }
     
-    handleToolClick(tool) {
+    handleToolClick(tool, btn = null) {
         this.activeTool = tool;
         
         switch (tool) {
@@ -700,6 +747,11 @@ class DicomViewer {
             case 'invert':
                 this.inverted = !this.inverted;
                 this.loadCurrentImage();
+                break;
+            case 'high-quality':
+                this.highQualityMode = !this.highQualityMode;
+                btn.classList.toggle('active', this.highQualityMode);
+                this.loadCurrentImage();  // Reload with new quality setting
                 break;
             case 'reset':
                 this.resetView();
