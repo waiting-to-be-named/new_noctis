@@ -957,19 +957,118 @@
                 <button class="close-btn" onclick="closeUploadModal()">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="upload-options">
-                    <button class="upload-option-btn" onclick="selectFiles()">
-                        <i class="fas fa-file-medical"></i>
-                        <span>Select DICOM Files</span>
-                        <small>Choose individual DICOM files</small>
+                <div class="upload-tabs">
+                    <button class="upload-tab active" onclick="switchUploadTab('files')">
+                        <i class="fas fa-file-medical"></i> Files
                     </button>
-                    <button class="upload-option-btn" onclick="selectFolder()">
-                        <i class="fas fa-folder"></i>
-                        <span>Select Folder</span>
-                        <small>Choose folder containing DICOM files</small>
+                    <button class="upload-tab" onclick="switchUploadTab('folder')">
+                        <i class="fas fa-folder"></i> Folder
+                    </button>
+                    <button class="upload-tab" onclick="switchUploadTab('drive')">
+                        <i class="fas fa-hdd"></i> Drive/Disc
+                    </button>
+                    <button class="upload-tab" onclick="switchUploadTab('network')">
+                        <i class="fas fa-network-wired"></i> Network
                     </button>
                 </div>
-                <input type="file" id="file-input" multiple accept=".dcm,.dicom,.img,.ima" style="display: none;">
+                
+                <div class="upload-content">
+                    <!-- Files Tab -->
+                    <div class="upload-tab-content active" id="files-tab">
+                        <div class="upload-drop-area" id="files-drop-area" onclick="selectFiles()">
+                            <div class="upload-icon">
+                                <i class="fas fa-file-medical"></i>
+                            </div>
+                            <h4>Select DICOM Files</h4>
+                            <p>Choose individual DICOM files (.dcm, .dicom, .img, .ima, .raw)</p>
+                            <div class="upload-formats">
+                                <span class="format-tag">DCM</span>
+                                <span class="format-tag">DICOM</span>
+                                <span class="format-tag">IMG</span>
+                                <span class="format-tag">IMA</span>
+                                <span class="format-tag">RAW</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Folder Tab -->
+                    <div class="upload-tab-content" id="folder-tab">
+                        <div class="upload-drop-area" onclick="selectFolder()">
+                            <div class="upload-icon">
+                                <i class="fas fa-folder-open"></i>
+                            </div>
+                            <h4>Select DICOM Folder</h4>
+                            <p>Choose entire folders containing DICOM studies and series</p>
+                            <div class="upload-note">
+                                <i class="fas fa-info-circle"></i>
+                                Supports nested folders and multiple series
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Drive/Disc Tab -->
+                    <div class="upload-tab-content" id="drive-tab">
+                        <div class="upload-drive-options">
+                            <div class="drive-option" onclick="selectDrive('cd')">
+                                <i class="fas fa-compact-disc"></i>
+                                <h5>CD/DVD</h5>
+                                <p>Import from medical imaging CD or DVD</p>
+                            </div>
+                            <div class="drive-option" onclick="selectDrive('usb')">
+                                <i class="fas fa-usb"></i>
+                                <h5>USB Drive</h5>
+                                <p>Import from USB flash drive or external drive</p>
+                            </div>
+                            <div class="drive-option" onclick="selectDrive('external')">
+                                <i class="fas fa-hdd"></i>
+                                <h5>External Drive</h5>
+                                <p>Import from external hard drive or SSD</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Network Tab -->
+                    <div class="upload-tab-content" id="network-tab">
+                        <div class="network-options">
+                            <div class="network-option">
+                                <h5><i class="fas fa-server"></i> DICOM Server (PACS)</h5>
+                                <div class="network-form">
+                                    <input type="text" placeholder="Server IP/Hostname" id="pacs-server">
+                                    <input type="text" placeholder="Port (default: 104)" id="pacs-port" value="104">
+                                    <input type="text" placeholder="AE Title" id="pacs-ae-title">
+                                    <button class="network-connect-btn" onclick="connectToPACS()">
+                                        <i class="fas fa-plug"></i> Connect
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="network-option">
+                                <h5><i class="fas fa-cloud"></i> Cloud Storage</h5>
+                                <div class="cloud-providers">
+                                    <button class="cloud-btn" onclick="connectToCloud('drive')">
+                                        <i class="fab fa-google-drive"></i> Google Drive
+                                    </button>
+                                    <button class="cloud-btn" onclick="connectToCloud('dropbox')">
+                                        <i class="fab fa-dropbox"></i> Dropbox
+                                    </button>
+                                    <button class="cloud-btn" onclick="connectToCloud('onedrive')">
+                                        <i class="fab fa-microsoft"></i> OneDrive
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Progress Bar -->
+                <div class="upload-progress" id="upload-progress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <div class="progress-text" id="progress-text">Uploading...</div>
+                </div>
+                
+                <!-- Hidden file inputs -->
+                <input type="file" id="file-input" multiple accept=".dcm,.dicom,.img,.ima,.raw,.dat,.bin" style="display: none;">
                 <input type="file" id="folder-input" webkitdirectory style="display: none;">
             </div>
         </div>
