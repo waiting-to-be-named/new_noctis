@@ -60,12 +60,18 @@ class DicomViewer {
         this.reconstructionType = 'mpr';
         this.is3DEnabled = false;
         
-        // Window presets
+        // Enhanced Window presets for optimal tissue differentiation
         this.windowPresets = {
-            'lung': { ww: 1500, wl: -600 },
-            'bone': { ww: 2000, wl: 300 },
-            'soft': { ww: 400, wl: 40 },
-            'brain': { ww: 100, wl: 50 }
+            'lung': { ww: 1500, wl: -600, description: 'Lung/Air - Enhanced contrast for air vs soft tissue' },
+            'bone': { ww: 2000, wl: 300, description: 'Bone - High contrast for bone vs soft tissue' },
+            'soft': { ww: 400, wl: 40, description: 'Soft Tissue - Optimized for organ differentiation' },
+            'brain': { ww: 100, wl: 50, description: 'Brain - Fine detail in neural tissue' },
+            'abdomen': { ww: 350, wl: 50, description: 'Abdomen - Organ and vessel contrast' },
+            'mediastinum': { ww: 400, wl: 20, description: 'Mediastinum - Vessel and tissue contrast' },
+            'liver': { ww: 150, wl: 60, description: 'Liver - Hepatic lesion detection' },
+            'cardiac': { ww: 600, wl: 200, description: 'Cardiac - Heart muscle and vessels' },
+            'spine': { ww: 1000, wl: 400, description: 'Spine - Bone and disc contrast' },
+            'angio': { ww: 700, wl: 150, description: 'Angiographic - Vessel enhancement' }
         };
         
         // Notifications
@@ -73,6 +79,13 @@ class DicomViewer {
         
         // Store initial study ID
         this.initialStudyId = initialStudyId;
+        
+        // Manual enhancement controls
+        this.manualBrightness = null; // When null, use auto calculation
+        this.manualContrast = null;   // When null, use auto calculation  
+        this.manualGamma = null;      // When null, use auto calculation
+        this.densityMultiplier = 1.2; // Default density enhancement
+        this.contrastBoostMultiplier = 1.15; // Default contrast boost
         
         this.init();
     }
@@ -231,21 +244,37 @@ class DicomViewer {
         const filters = [];
         
         if (this.renderingOptions.enhanceDensityContrast) {
-            // Enhance contrast for better tissue differentiation
+            // Enhanced contrast for better tissue differentiation
             const contrastLevel = this.calculateOptimalContrast();
             filters.push(`contrast(${contrastLevel}%)`);
             
-            // Slight brightness adjustment for better visibility
+            // Advanced brightness adjustment with tissue-specific optimization
             const brightnessLevel = this.calculateOptimalBrightness();
             filters.push(`brightness(${brightnessLevel}%)`);
             
-            // Apply slight saturation for grayscale enhancement (helps with density perception)
-            filters.push('saturate(105%)');
+            // Adaptive gamma correction for better mid-tone contrast
+            const gamma = this.calculateGammaCorrection();
+            if (gamma !== 1.0) {
+                // Simulate gamma using a combination of filters
+                const gammaContrast = Math.round(100 + (gamma - 1) * 30);
+                const gammaBrightness = Math.round(100 + (1 - gamma) * 15);
+                filters.push(`contrast(${gammaContrast}%) brightness(${gammaBrightness}%)`);
+            }
             
-            // Enhance sharpness for clearer tissue boundaries
+            // Apply controlled saturation for grayscale enhancement (helps with density perception)
+            const saturationLevel = this.calculateOptimalSaturation();
+            filters.push(`saturate(${saturationLevel}%)`);
+            
+            // Enhanced sharpness for clearer tissue boundaries with zoom adaptation
             if (this.zoomFactor > 1.0) {
-                const sharpnessLevel = Math.min(200, 100 + (this.zoomFactor - 1) * 20);
-                filters.push(`sepia(0%) hue-rotate(0deg) saturate(100%) brightness(100%) contrast(${sharpnessLevel}%)`);
+                const sharpnessLevel = this.calculateAdaptiveSharpness();
+                filters.push(`contrast(${sharpnessLevel}%)`);
+            }
+            
+            // Tissue-specific enhancement based on current window level
+            const tissueEnhancement = this.getTissueSpecificEnhancement();
+            if (tissueEnhancement) {
+                filters.push(tissueEnhancement);
             }
         }
         
@@ -253,32 +282,202 @@ class DicomViewer {
     }
     
     calculateOptimalContrast() {
-        // Calculate optimal contrast based on window width and level
+        // Use manual contrast if set, otherwise calculate automatically
+        if (this.manualContrast !== null) {
+            return this.manualContrast;
+        }
+        
+        // Enhanced contrast calculation based on window parameters and tissue characteristics
         const baseContrast = 100;
         
-        // Adjust contrast based on window width (wider window = lower contrast enhancement needed)
-        const windowFactor = Math.max(0.5, Math.min(2.0, 1000 / Math.max(100, this.windowWidth)));
+        // Advanced window width factor with tissue-specific optimization
+        let windowFactor = Math.max(0.5, Math.min(2.0, 1000 / Math.max(100, this.windowWidth)));
         
-        // Adjust for zoom level (higher zoom = slightly more contrast for detail visibility)
-        const zoomFactor = Math.min(1.3, 1.0 + (this.zoomFactor - 1) * 0.1);
+        // Tissue-specific contrast adjustments
+        if (this.windowLevel < -500) {
+            // Lung/Air tissue - enhance contrast for air-tissue boundaries
+            windowFactor *= 1.15;
+        } else if (this.windowLevel >= -200 && this.windowLevel <= 200) {
+            // Soft tissue - moderate contrast enhancement for organ differentiation
+            windowFactor *= 1.08;
+        } else if (this.windowLevel > 200) {
+            // Bone tissue - higher contrast for bone-soft tissue boundaries
+            windowFactor *= 1.12;
+        }
         
-        const optimalContrast = baseContrast * windowFactor * zoomFactor;
+        // Enhanced zoom factor for better detail visibility
+        const zoomFactor = Math.min(1.4, 1.0 + (this.zoomFactor - 1) * 0.15);
         
-        return Math.round(Math.max(90, Math.min(150, optimalContrast)));
+        // Adaptive factor based on current density enhancement settings
+        const densityFactor = this.renderingOptions.enhanceDensityContrast ? 1.05 : 1.0;
+        
+        const optimalContrast = baseContrast * windowFactor * zoomFactor * densityFactor;
+        
+        return Math.round(Math.max(85, Math.min(165, optimalContrast)));
     }
     
     calculateOptimalBrightness() {
-        // Calculate optimal brightness based on window level and image characteristics
+        // Use manual brightness if set, otherwise calculate automatically
+        if (this.manualBrightness !== null) {
+            return this.manualBrightness;
+        }
+        
+        // Enhanced brightness calculation based on window level and tissue characteristics
         const baseBrightness = 100;
         
-        // Adjust brightness based on window level
-        const levelFactor = this.windowLevel < 0 ? 
-            Math.max(0.9, 1.0 + this.windowLevel / 1000) : 
-            Math.min(1.1, 1.0 + this.windowLevel / 2000);
+        // Advanced level factor calculation with tissue-specific optimization
+        let levelFactor = 1.0;
         
-        const optimalBrightness = baseBrightness * levelFactor;
+        if (this.windowLevel < -500) {
+            // Lung/Air range - increase brightness for better air-tissue contrast
+            levelFactor = Math.max(1.1, 1.0 + Math.abs(this.windowLevel + 500) / 2000);
+        } else if (this.windowLevel < 0) {
+            // Soft tissue below zero - moderate brightness adjustment
+            levelFactor = Math.max(0.95, 1.0 + this.windowLevel / 1000);
+        } else if (this.windowLevel <= 100) {
+            // Normal soft tissue range - fine brightness control
+            levelFactor = 1.0 + this.windowLevel / 2000;
+        } else {
+            // Bone range - reduce brightness for better bone detail
+            levelFactor = Math.max(0.9, 1.0 - (this.windowLevel - 100) / 3000);
+        }
         
-        return Math.round(Math.max(85, Math.min(115, optimalBrightness)));
+        // Additional factors
+        const contrastFactor = Math.max(0.95, Math.min(1.05, 2000 / Math.max(100, this.windowWidth)));
+        const zoomFactor = Math.max(0.98, Math.min(1.02, 1.0 + (this.zoomFactor - 1) * 0.02));
+        
+        const optimalBrightness = baseBrightness * levelFactor * contrastFactor * zoomFactor;
+        
+        return Math.round(Math.max(80, Math.min(125, optimalBrightness)));
+    }
+    
+    calculateGammaCorrection() {
+        // Use manual gamma if set, otherwise calculate automatically
+        if (this.manualGamma !== null) {
+            return this.manualGamma;
+        }
+        
+        // Calculate optimal gamma correction for better mid-tone contrast
+        const baseGamma = 1.0;
+        
+        // Adjust gamma based on tissue type (window level)
+        if (this.windowLevel < -500) {
+            // Lung tissue - enhance low-density contrast
+            return Math.max(0.8, baseGamma - 0.2);
+        } else if (this.windowLevel >= -200 && this.windowLevel <= 200) {
+            // Soft tissue - slight gamma adjustment for better organ contrast
+            return baseGamma + 0.1;
+        } else if (this.windowLevel > 200) {
+            // Bone tissue - reduce gamma for better high-density detail
+            return Math.min(1.3, baseGamma + 0.2);
+        }
+        
+        return baseGamma;
+    }
+    
+    calculateOptimalSaturation() {
+        // Calculate optimal saturation for grayscale enhancement
+        const baseSaturation = 105; // Slightly above 100% for better perception
+        
+        // Adjust based on window width (wider windows may benefit from less saturation)
+        const widthFactor = Math.max(0.98, Math.min(1.05, 1000 / Math.max(200, this.windowWidth)));
+        
+        // Adjust based on zoom (higher zoom may benefit from more saturation for detail)
+        const zoomFactor = Math.max(1.0, Math.min(1.08, 1.0 + (this.zoomFactor - 1) * 0.03));
+        
+        return Math.round(baseSaturation * widthFactor * zoomFactor);
+    }
+    
+    calculateAdaptiveSharpness() {
+        // Calculate adaptive sharpness based on zoom level and tissue type
+        const baseSharpness = 100;
+        
+        // Zoom-based sharpness enhancement
+        const zoomEnhancement = Math.min(50, (this.zoomFactor - 1) * 25);
+        
+        // Tissue-specific sharpness adjustment
+        let tissueSharpness = 0;
+        if (this.windowLevel > 200) {
+            // Bone tissue - moderate sharpness to avoid noise
+            tissueSharpness = 15;
+        } else if (this.windowLevel >= -200 && this.windowLevel <= 200) {
+            // Soft tissue - enhanced sharpness for organ boundaries
+            tissueSharpness = 20;
+        } else {
+            // Lung tissue - high sharpness for air-tissue boundaries
+            tissueSharpness = 25;
+        }
+        
+        return Math.round(Math.min(180, baseSharpness + zoomEnhancement + tissueSharpness));
+    }
+    
+    getTissueSpecificEnhancement() {
+        // Apply tissue-specific enhancement filters
+        const currentLevel = this.windowLevel;
+        
+        if (currentLevel < -500) {
+            // Lung/Air enhancement - improve air-tissue contrast
+            return 'contrast(110%) brightness(105%)';
+        } else if (currentLevel >= -200 && currentLevel <= 200) {
+            // Soft tissue enhancement - balanced contrast for organs
+            return 'contrast(108%) brightness(102%)';
+        } else if (currentLevel > 200 && currentLevel <= 1000) {
+            // Bone enhancement - preserve detail while enhancing contrast
+            return 'contrast(115%) brightness(98%)';
+        }
+        
+        return null; // No specific enhancement for other ranges
+    }
+    
+    autoDetectTissueType() {
+        // Automatically detect tissue type based on current window/level settings
+        const ww = this.windowWidth;
+        const wl = this.windowLevel;
+        
+        // Define tissue type ranges with confidence scoring
+        const tissueTypes = [
+            { name: 'lung', confidence: this.calculateTissueConfidence(ww, wl, 1500, -600) },
+            { name: 'bone', confidence: this.calculateTissueConfidence(ww, wl, 2000, 300) },
+            { name: 'soft', confidence: this.calculateTissueConfidence(ww, wl, 400, 40) },
+            { name: 'brain', confidence: this.calculateTissueConfidence(ww, wl, 100, 50) },
+            { name: 'liver', confidence: this.calculateTissueConfidence(ww, wl, 150, 60) },
+            { name: 'cardiac', confidence: this.calculateTissueConfidence(ww, wl, 600, 200) },
+            { name: 'abdomen', confidence: this.calculateTissueConfidence(ww, wl, 350, 50) }
+        ];
+        
+        // Return the tissue type with highest confidence
+        const bestMatch = tissueTypes.reduce((prev, current) => 
+            current.confidence > prev.confidence ? current : prev
+        );
+        
+        return bestMatch.confidence > 0.7 ? bestMatch.name : 'unknown';
+    }
+    
+    calculateTissueConfidence(currentWW, currentWL, targetWW, targetWL) {
+        // Calculate how well current settings match a tissue type
+        const wwDiff = Math.abs(currentWW - targetWW) / targetWW;
+        const wlDiff = Math.abs(currentWL - targetWL) / Math.max(Math.abs(targetWL), 50);
+        
+        const wwScore = Math.max(0, 1 - wwDiff);
+        const wlScore = Math.max(0, 1 - wlDiff);
+        
+        return (wwScore + wlScore) / 2;
+    }
+    
+    getAdaptiveBrightnessForTissue(tissueType) {
+        // Return optimal brightness for detected tissue type
+        const tissueSettings = {
+            'lung': { brightness: 115, reason: 'Enhanced for air-tissue contrast' },
+            'bone': { brightness: 95, reason: 'Reduced for bone detail preservation' },
+            'soft': { brightness: 102, reason: 'Balanced for organ visualization' },
+            'brain': { brightness: 105, reason: 'Enhanced for neural tissue detail' },
+            'liver': { brightness: 100, reason: 'Standard for hepatic imaging' },
+            'cardiac': { brightness: 108, reason: 'Enhanced for cardiac structures' },
+            'abdomen': { brightness: 103, reason: 'Optimized for abdominal organs' },
+            'unknown': { brightness: 100, reason: 'Standard enhancement' }
+        };
+        
+        return tissueSettings[tissueType] || tissueSettings['unknown'];
     }
     
     calculateWindowingSensitivity() {
@@ -301,22 +500,32 @@ class DicomViewer {
     }
     
     getDensityControlFactor() {
-        // Provide finer control in critical density ranges for better tissue differentiation
+        // Enhanced density control for better tissue differentiation across all HU ranges
         const currentLevel = this.windowLevel;
+        const currentWidth = this.windowWidth;
         
-        // Critical HU ranges for different tissues
-        if (currentLevel >= -200 && currentLevel <= 200) {
-            // Soft tissue range - finer control needed
-            return 0.7;
-        } else if (currentLevel >= -1000 && currentLevel <= -500) {
-            // Lung tissue range - moderate control
-            return 0.8;
-        } else if (currentLevel >= 200 && currentLevel <= 1000) {
-            // Bone tissue range - moderate control
-            return 0.9;
+        // Critical HU ranges for different tissues with enhanced precision
+        if (currentLevel >= -1000 && currentLevel <= -500) {
+            // Lung/Air tissue range - finest control for air-tissue interfaces
+            return Math.max(0.6, 0.8 - (currentWidth / 2000)); // Finer control for narrower windows
+        } else if (currentLevel >= -500 && currentLevel <= -200) {
+            // Low-density soft tissue - very fine control
+            return Math.max(0.65, 0.75 - (currentWidth / 2500));
+        } else if (currentLevel >= -200 && currentLevel <= 200) {
+            // Normal soft tissue range - finest control needed for organ differentiation
+            return Math.max(0.6, 0.7 - (currentWidth / 3000));
+        } else if (currentLevel >= 200 && currentLevel <= 600) {
+            // Enhanced soft tissue to bone transition - fine control
+            return Math.max(0.7, 0.8 - (currentWidth / 2500));
+        } else if (currentLevel >= 600 && currentLevel <= 1000) {
+            // Bone tissue range - moderate control for bone detail
+            return Math.max(0.75, 0.9 - (currentWidth / 3000));
+        } else if (currentLevel > 1000) {
+            // High-density bone/metal - standard control to avoid over-sensitivity
+            return Math.max(0.85, 1.0 - (currentWidth / 4000));
         } else {
-            // Other ranges - standard control
-            return 1.0;
+            // Other ranges - adaptive control based on window width
+            return Math.max(0.8, 1.0 - (currentWidth / 2000));
         }
     }
     
@@ -392,6 +601,52 @@ class DicomViewer {
             document.getElementById('wl-value').textContent = this.windowLevel;
             this.updateDisplay();
         });
+        
+        // Enhanced tissue control sliders
+        const tissueBrightnessSlider = document.getElementById('tissue-brightness');
+        if (tissueBrightnessSlider) {
+            tissueBrightnessSlider.addEventListener('input', (e) => {
+                this.manualBrightness = parseInt(e.target.value);
+                document.getElementById('tissue-brightness-value').textContent = e.target.value + '%';
+                this.updateDisplay();
+            });
+        }
+        
+        const tissueContrastSlider = document.getElementById('tissue-contrast');
+        if (tissueContrastSlider) {
+            tissueContrastSlider.addEventListener('input', (e) => {
+                this.manualContrast = parseInt(e.target.value);
+                document.getElementById('tissue-contrast-value').textContent = e.target.value + '%';
+                this.updateDisplay();
+            });
+        }
+        
+        const gammaCorrectionSlider = document.getElementById('gamma-correction');
+        if (gammaCorrectionSlider) {
+            gammaCorrectionSlider.addEventListener('input', (e) => {
+                this.manualGamma = parseFloat(e.target.value);
+                document.getElementById('gamma-correction-value').textContent = e.target.value;
+                this.updateDisplay();
+            });
+        }
+        
+        const densityLevelSlider = document.getElementById('density-level');
+        if (densityLevelSlider) {
+            densityLevelSlider.addEventListener('input', (e) => {
+                this.densityMultiplier = parseFloat(e.target.value);
+                document.getElementById('density-level-value').textContent = e.target.value + 'x';
+                this.updateDisplay();
+            });
+        }
+        
+        const contrastBoostSlider = document.getElementById('contrast-boost');
+        if (contrastBoostSlider) {
+            contrastBoostSlider.addEventListener('input', (e) => {
+                this.contrastBoostMultiplier = parseFloat(e.target.value);
+                document.getElementById('contrast-boost-value').textContent = e.target.value + 'x';
+                this.updateDisplay();
+            });
+        }
         
         document.getElementById('slice-slider').addEventListener('input', (e) => {
             this.currentImageIndex = parseInt(e.target.value);
@@ -1556,8 +1811,23 @@ class DicomViewer {
         const wlInfo = document.getElementById('wl-info');
         const zoomInfo = document.getElementById('zoom-info');
         
-        wlInfo.innerHTML = `WW: ${Math.round(this.windowWidth)}<br>WL: ${Math.round(this.windowLevel)}<br>Slice: ${this.currentImageIndex + 1}/${this.currentImages.length}`;
-        zoomInfo.textContent = `Zoom: ${Math.round(this.zoomFactor * 100)}%`;
+        // Auto-detect tissue type and update display
+        const detectedTissue = this.autoDetectTissueType();
+        const tissueLabel = detectedTissue.charAt(0).toUpperCase() + detectedTissue.slice(1);
+        
+        // Enhanced overlay with tissue detection and optimization info
+        const brightnessInfo = this.manualBrightness ? `Manual: ${this.manualBrightness}%` : `Auto: ${this.calculateOptimalBrightness()}%`;
+        const contrastInfo = this.manualContrast ? `Manual: ${this.manualContrast}%` : `Auto: ${this.calculateOptimalContrast()}%`;
+        
+        wlInfo.innerHTML = `WW: ${Math.round(this.windowWidth)}<br>WL: ${Math.round(this.windowLevel)}<br>Slice: ${this.currentImageIndex + 1}/${this.currentImages.length}<br><span style="color: #00ff88; font-size: 10px;">Tissue: ${tissueLabel}</span>`;
+        zoomInfo.innerHTML = `Zoom: ${Math.round(this.zoomFactor * 100)}%<br><span style="color: #00ff88; font-size: 9px;">B: ${brightnessInfo}<br>C: ${contrastInfo}</span>`;
+        
+        // Update tissue detection indicator if element exists
+        const tissueIndicator = document.getElementById('detected-tissue-type');
+        if (tissueIndicator) {
+            tissueIndicator.textContent = tissueLabel;
+            tissueIndicator.style.color = detectedTissue === 'unknown' ? '#ffaa00' : '#00ff00';
+        }
     }
     
     // Event Handlers
@@ -3261,44 +3531,6 @@ Pixel Count: ${data.pixel_count}`;
         checkProgress();
     }
     
-    calculateWindowingSensitivity() {
-        // Calculate adaptive windowing sensitivity for better density control
-        const baseSensitivity = { width: 2.0, level: 2.0 };
-        
-        // Adjust sensitivity based on current window width (narrower windows need finer control)
-        const widthFactor = Math.max(0.5, Math.min(3.0, 800 / Math.max(50, this.windowWidth)));
-        
-        // Adjust sensitivity based on zoom level (higher zoom needs finer control)
-        const zoomFactor = Math.max(0.3, Math.min(1.5, 1.0 / Math.max(0.5, this.zoomFactor)));
-        
-        // For density differentiation, provide finer control in critical HU ranges
-        const levelFactor = this.getDensityControlFactor();
-        
-        return {
-            width: baseSensitivity.width * widthFactor * zoomFactor,
-            level: baseSensitivity.level * levelFactor * zoomFactor
-        };
-    }
-    
-    getDensityControlFactor() {
-        // Provide finer control in critical density ranges for better tissue differentiation
-        const currentLevel = this.windowLevel;
-        
-        // Critical HU ranges for different tissues
-        if (currentLevel >= -200 && currentLevel <= 200) {
-            // Soft tissue range - finer control needed
-            return 0.7;
-        } else if (currentLevel >= -1000 && currentLevel <= -500) {
-            // Lung tissue range - moderate control
-            return 0.8;
-        } else if (currentLevel >= 200 && currentLevel <= 1000) {
-            // Bone tissue range - moderate control
-            return 0.9;
-        } else {
-            // Other ranges - standard control
-            return 1.0;
-        }
-    }
 }
 
 // Initialize the viewer when the page loads

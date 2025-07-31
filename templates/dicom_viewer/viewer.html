@@ -573,6 +573,20 @@
                     <h3 class="section-title">Enhanced Density Processing</h3>
                     <div class="enhanced-controls">
                         <div class="control-group">
+                            <label class="control-label">Auto Tissue Detection</label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span id="detected-tissue-type" style="color: #00ff00; font-weight: bold; font-size: 12px;">Unknown</span>
+                                <button class="control-toggle" id="auto-enhance-toggle" style="background-color: #004400; font-size: 10px;">Auto</button>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">Auto Tissue Detection</label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span id="detected-tissue-type" style="color: #00ff00; font-weight: bold; font-size: 12px;">Unknown</span>
+                                <button class="control-toggle" id="auto-enhance-toggle" style="background-color: #004400; font-size: 10px;">Auto</button>
+                            </div>
+                        </div>
+                        <div class="control-group">
                             <label class="control-label">Density Enhancement</label>
                             <button class="control-toggle" id="density-toggle" style="background-color: #004400;">On</button>
                         </div>
@@ -595,6 +609,27 @@
                             <div class="slider-control">
                                 <input type="range" id="density-level" min="0.5" max="2.0" step="0.1" value="1.2">
                                 <span class="value" id="density-level-value">1.2x</span>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">Tissue Brightness</label>
+                            <div class="slider-control">
+                                <input type="range" id="tissue-brightness" min="80" max="125" step="1" value="100">
+                                <span class="value" id="tissue-brightness-value">100%</span>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">Tissue Contrast</label>
+                            <div class="slider-control">
+                                <input type="range" id="tissue-contrast" min="85" max="165" step="1" value="100">
+                                <span class="value" id="tissue-contrast-value">100%</span>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">Gamma Correction</label>
+                            <div class="slider-control">
+                                <input type="range" id="gamma-correction" min="0.5" max="1.5" step="0.05" value="1.0">
+                                <span class="value" id="gamma-correction-value">1.0</span>
                             </div>
                         </div>
                         <div class="control-group">
@@ -641,13 +676,16 @@
                     </div>
                     
                     <div class="preset-buttons">
-                        <button class="preset-btn" data-preset="lung">Lung</button>
-                        <button class="preset-btn" data-preset="bone">Bone</button>
-                        <button class="preset-btn" data-preset="soft">Soft</button>
-                        <button class="preset-btn" data-preset="brain">Brain</button>
-                        <button class="preset-btn" data-preset="liver">Liver</button>
-                        <button class="preset-btn" data-preset="mediastinum">Mediastinum</button>
-                        <button class="preset-btn" data-preset="abdomen">Abdomen</button>
+                        <button class="preset-btn" data-preset="lung" title="WW: 1500, WL: -600 - Enhanced contrast for air vs soft tissue">Lung</button>
+                        <button class="preset-btn" data-preset="bone" title="WW: 2000, WL: 300 - High contrast for bone vs soft tissue">Bone</button>
+                        <button class="preset-btn" data-preset="soft" title="WW: 400, WL: 40 - Optimized for organ differentiation">Soft</button>
+                        <button class="preset-btn" data-preset="brain" title="WW: 100, WL: 50 - Fine detail in neural tissue">Brain</button>
+                        <button class="preset-btn" data-preset="liver" title="WW: 150, WL: 60 - Hepatic lesion detection">Liver</button>
+                        <button class="preset-btn" data-preset="mediastinum" title="WW: 400, WL: 20 - Vessel and tissue contrast">Mediastinum</button>
+                        <button class="preset-btn" data-preset="abdomen" title="WW: 350, WL: 50 - Organ and vessel contrast">Abdomen</button>
+                        <button class="preset-btn" data-preset="cardiac" title="WW: 600, WL: 200 - Heart muscle and vessels">Cardiac</button>
+                        <button class="preset-btn" data-preset="spine" title="WW: 1000, WL: 400 - Bone and disc contrast">Spine</button>
+                        <button class="preset-btn" data-preset="angio" title="WW: 700, WL: 150 - Vessel enhancement">Angio</button>
                     </div>
                 </div>
 
