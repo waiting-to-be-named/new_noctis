@@ -1522,7 +1522,7 @@ def get_study_images(request, study_id):
 
 @api_view(['GET'])
 def get_image_data(request, image_id):
-    """Get processed image data"""
+    """Get processed image data with enhanced quality options"""
     try:
         print(f"Attempting to get image data for image_id: {image_id}")
         image = DicomImage.objects.get(id=image_id)
@@ -1532,6 +1532,10 @@ def get_image_data(request, image_id):
         window_width = request.GET.get('window_width', image.window_width)
         window_level = request.GET.get('window_level', image.window_center)
         inverted = request.GET.get('inverted', 'false').lower() == 'true'
+        high_quality = request.GET.get('high_quality', 'true').lower() == 'true'  # Default to high quality
+        resolution_factor = float(request.GET.get('resolution_factor', '2.0'))  # Higher resolution by default
+        density_enhancement = request.GET.get('density_enhancement', 'true').lower() == 'true'
+        contrast_boost = float(request.GET.get('contrast_boost', '1.2'))  # Slight contrast boost
         
         # Convert to appropriate types
         if window_width:
@@ -1545,10 +1549,18 @@ def get_image_data(request, image_id):
             except (ValueError, TypeError):
                 window_level = 40
         
-        print(f"Processing image with WW: {window_width}, WL: {window_level}, inverted: {inverted}")
+        print(f"Processing image with WW: {window_width}, WL: {window_level}, inverted: {inverted}, high_quality: {high_quality}")
         
-        # Get processed image
-        image_base64 = image.get_processed_image_base64(window_width, window_level, inverted)
+        # Use enhanced processing for better quality
+        if high_quality:
+            image_base64 = image.get_enhanced_processed_image_base64(
+                window_width, window_level, inverted,
+                resolution_factor=resolution_factor,
+                density_enhancement=density_enhancement,
+                contrast_boost=contrast_boost
+            )
+        else:
+            image_base64 = image.get_processed_image_base64(window_width, window_level, inverted)
         
         if image_base64:
             print(f"Successfully processed image {image_id}")
