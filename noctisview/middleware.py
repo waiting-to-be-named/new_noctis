@@ -63,6 +63,11 @@ class CSRFMiddleware(MiddlewareMixin):
     Custom CSRF middleware that returns JSON errors for API endpoints.
     Provides better handling for file uploads and API requests.
     """
+    def __init__(self, get_response):
+        self.get_response = get_response
+        # Create the CSRF middleware instance with proper get_response
+        self.csrf_middleware = CsrfViewMiddleware(get_response)
+        super().__init__(get_response)
     
     def __init__(self, get_response):
         self.get_response = get_response
