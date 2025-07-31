@@ -346,7 +346,7 @@ class DicomImage(models.Model):
     
     def get_enhanced_processed_image_base64(self, window_width=None, window_level=None, inverted=False, 
                                           resolution_factor=1.0, density_enhancement=False, contrast_boost=1.0, thumbnail_size=None):
-        """Get enhanced processed image with improved resolution and density differentiation"""
+        """Get enhanced processed image with superior quality for medical imaging"""
         try:
             # Get pixel data
             pixel_array = self.get_pixel_array()
@@ -367,19 +367,22 @@ class DicomImage(models.Model):
             if density_enhancement:
                 processed_array = self.apply_density_differentiation(processed_array)
             
-            # Convert to PIL Image
+            # Convert to PIL Image with superior quality
             if processed_array.dtype != np.uint8:
                 processed_array = np.clip(processed_array, 0, 255).astype(np.uint8)
             
             image = Image.fromarray(processed_array, mode='L')
             
+            # Apply final quality enhancements
+            image = self.apply_final_quality_enhancement(image)
+            
             # Resize for thumbnail if requested
             if thumbnail_size:
                 image = image.resize(thumbnail_size, Image.Resampling.LANCZOS)
             
-            # Convert to base64
+            # Convert to base64 with maximum quality
             buffer = io.BytesIO()
-            image.save(buffer, format='PNG', optimize=True)
+            image.save(buffer, format='PNG', optimize=False, compress_level=0)  # No compression for maximum quality
             buffer.seek(0)
             image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
             
@@ -526,6 +529,28 @@ class DicomImage(models.Model):
         except Exception as e:
             print(f"Error in final medical enhancement: {e}")
             return pixel_array
+    
+    def apply_final_quality_enhancement(self, image):
+        """Apply final quality enhancements to PIL image for superior medical imaging"""
+        try:
+            from PIL import ImageEnhance
+            
+            # Apply subtle sharpening for medical detail preservation
+            enhancer = ImageEnhance.Sharpness(image)
+            image = enhancer.enhance(1.2)  # Slight sharpening
+            
+            # Apply subtle contrast enhancement
+            enhancer = ImageEnhance.Contrast(image)
+            image = enhancer.enhance(1.1)  # Slight contrast boost
+            
+            # Apply subtle brightness optimization
+            enhancer = ImageEnhance.Brightness(image)
+            image = enhancer.enhance(1.05)  # Slight brightness adjustment
+            
+            return image
+        except Exception as e:
+            print(f"Error in final quality enhancement: {e}")
+            return image
     
     def apply_density_enhancement(self, pixel_array):
         """Apply density enhancement for better tissue differentiation"""

@@ -1679,42 +1679,39 @@ def get_image_data(request, image_id):
         image = DicomImage.objects.get(id=image_id)
         print(f"Found image: {image}, file_path: {image.file_path}")
         
-        # Get query parameters
-        window_width = request.GET.get('window_width', image.window_width)
-        window_level = request.GET.get('window_level', image.window_center)
+        # Get query parameters with optimized defaults for medical imaging
+        window_width = request.GET.get('window_width', image.window_width or 1500)  # Default to lung window
+        window_level = request.GET.get('window_level', image.window_center or -600)  # Default to lung level
         inverted = request.GET.get('inverted', 'false').lower() == 'true'
-        high_quality = request.GET.get('high_quality', 'true').lower() == 'true'  # Default to high quality
+        high_quality = request.GET.get('high_quality', 'true').lower() == 'true'  # Always use high quality
         resolution_factor = float(request.GET.get('resolution_factor', '2.0'))  # Higher resolution by default
-        density_enhancement = request.GET.get('density_enhancement', 'true').lower() == 'true'
-        contrast_boost = float(request.GET.get('contrast_boost', '1.2'))  # Slight contrast boost
+        density_enhancement = request.GET.get('density_enhancement', 'true').lower() == 'true'  # Always enable
+        contrast_boost = float(request.GET.get('contrast_boost', '1.3'))  # Enhanced contrast boost
         
         # Convert to appropriate types
         if window_width:
             try:
                 window_width = float(window_width)
             except (ValueError, TypeError):
-                window_width = 400
+                window_width = 1500  # Default to lung window
         if window_level:
             try:
                 window_level = float(window_level)
             except (ValueError, TypeError):
-                window_level = 40
+                window_level = -600  # Default to lung level
         
         print(f"Processing image with WW: {window_width}, WL: {window_level}, inverted: {inverted}, high_quality: {high_quality}")
         
-        # Use enhanced processing for better quality
-        if high_quality:
-            image_base64 = image.get_enhanced_processed_image_base64(
-                window_width, window_level, inverted,
-                resolution_factor=resolution_factor,
-                density_enhancement=density_enhancement,
-                contrast_boost=contrast_boost
-            )
-        else:
-            image_base64 = image.get_processed_image_base64(window_width, window_level, inverted)
+        # Always use enhanced processing for superior quality
+        image_base64 = image.get_enhanced_processed_image_base64(
+            window_width, window_level, inverted,
+            resolution_factor=resolution_factor,
+            density_enhancement=density_enhancement,
+            contrast_boost=contrast_boost
+        )
         
         if image_base64:
-            print(f"Successfully processed image {image_id}")
+            print(f"Successfully processed image {image_id} with enhanced quality")
             return Response({
                 'image_data': image_base64,
                 'metadata': {
@@ -3200,47 +3197,44 @@ def get_enhanced_image_data(request, image_id):
         print(f"Found image: {image}, file_path: {image.file_path}")
         
         # Get query parameters with enhanced options for density differentiation
-        window_width = request.GET.get('window_width', image.window_width)
-        window_level = request.GET.get('window_level', image.window_center)
+        window_width = request.GET.get('window_width', image.window_width or 1500)  # Default to lung window
+        window_level = request.GET.get('window_level', image.window_center or -600)  # Default to lung level
         inverted = request.GET.get('inverted', 'false').lower() == 'true'
-        high_quality = request.GET.get('high_quality', 'false').lower() == 'true'
+        high_quality = request.GET.get('high_quality', 'true').lower() == 'true'  # Always use high quality
         preserve_aspect = request.GET.get('preserve_aspect', 'true').lower() == 'true'
-        density_enhancement = request.GET.get('density_enhancement', 'false').lower() == 'true'
-        resolution_factor = float(request.GET.get('resolution_factor', 1.0))
-        contrast_optimization = request.GET.get('contrast_optimization', 'standard')
+        density_enhancement = request.GET.get('density_enhancement', 'true').lower() == 'true'  # Always enable
+        resolution_factor = float(request.GET.get('resolution_factor', 2.0))  # Higher resolution by default
+        contrast_optimization = request.GET.get('contrast_optimization', 'medical')  # Default to medical optimization
         
         # Set defaults if None
         if window_width:
             try:
                 window_width = float(window_width)
             except ValueError:
-                window_width = 400
+                window_width = 1500  # Default to lung window
         if window_level:
             try:
                 window_level = float(window_level)
             except ValueError:
-                window_level = 40
+                window_level = -600  # Default to lung level
         
         print(f"Processing image with WW: {window_width}, WL: {window_level}, inverted: {inverted}, high_quality: {high_quality}, density_enhancement: {density_enhancement}")
         
-        # Use enhanced processing for high quality requests with medical optimization
-        if high_quality:
-            # Apply contrast optimization based on request type
-            if contrast_optimization == 'medical':
-                contrast_boost = 1.15  # Enhanced contrast for medical imaging
-                effective_resolution_factor = max(1.0, min(2.0, resolution_factor))  # Clamp resolution factor
-            else:
-                contrast_boost = 1.1
-                effective_resolution_factor = resolution_factor
-            
-            image_base64 = image.get_enhanced_processed_image_base64(
-                window_width, window_level, inverted, 
-                resolution_factor=effective_resolution_factor,
-                density_enhancement=density_enhancement,
-                contrast_boost=contrast_boost
-            )
+        # Always use enhanced processing for superior medical imaging quality
+        # Apply contrast optimization based on request type
+        if contrast_optimization == 'medical':
+            contrast_boost = 1.3  # Enhanced contrast for medical imaging
+            effective_resolution_factor = max(1.0, min(2.5, resolution_factor))  # Allow higher resolution
         else:
-            image_base64 = image.get_processed_image_base64(window_width, window_level, inverted)
+            contrast_boost = 1.2
+            effective_resolution_factor = resolution_factor
+        
+        image_base64 = image.get_enhanced_processed_image_base64(
+            window_width, window_level, inverted, 
+            resolution_factor=effective_resolution_factor,
+            density_enhancement=density_enhancement,
+            contrast_boost=contrast_boost
+        )
         
         if image_base64:
             print(f"Successfully processed enhanced image {image_id}")
