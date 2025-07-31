@@ -363,19 +363,28 @@ class DicomImage(models.Model):
             if resolution_factor != 1.0:
                 processed_array = self.apply_resolution_enhancement(processed_array, resolution_factor)
             
-            # Apply density differentiation if requested
+            # Apply advanced density enhancement for optimal tissue differentiation
             if density_enhancement:
+                processed_array = self.apply_advanced_density_enhancement(processed_array)
+            else:
+                # Apply basic density differentiation if advanced is not requested
                 processed_array = self.apply_density_differentiation(processed_array)
             
-            # Convert to PIL Image
+            # Apply advanced edge enhancement for better density visualization
+            processed_array = self.apply_edge_enhancement(processed_array)
+            
+            # Apply histogram equalization for better contrast
+            processed_array = self.apply_histogram_equalization(processed_array)
+            
+            # Convert to PIL Image with high quality settings
             if processed_array.dtype != np.uint8:
                 processed_array = np.clip(processed_array, 0, 255).astype(np.uint8)
             
             image = Image.fromarray(processed_array, mode='L')
             
-            # Convert to base64
+            # Convert to base64 with high quality
             buffer = io.BytesIO()
-            image.save(buffer, format='PNG', optimize=True)
+            image.save(buffer, format='PNG', optimize=False)  # Disable optimization for better quality
             buffer.seek(0)
             image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
             
@@ -448,13 +457,13 @@ class DicomImage(models.Model):
             return pixel_array
     
     def apply_density_differentiation(self, pixel_array):
-        """Apply density differentiation for better tissue visualization"""
+        """Apply advanced density differentiation for better tissue visualization"""
         try:
-            # Apply multi-scale processing for better density differentiation
             from scipy import ndimage
+            from skimage import filters, morphology
             
-            # Create multiple scales for processing
-            scales = [1.0, 2.0, 4.0]
+            # Apply multi-scale processing for better density differentiation
+            scales = [1.0, 1.5, 2.0]
             processed_scales = []
             
             for scale in scales:
@@ -468,15 +477,167 @@ class DicomImage(models.Model):
             
             # Combine scales for enhanced density differentiation
             enhanced = np.zeros_like(pixel_array)
-            weights = [0.5, 0.3, 0.2]  # Weights for different scales
+            weights = [0.6, 0.3, 0.1]  # Adjusted weights for better balance
             
             for i, scale_data in enumerate(processed_scales):
                 enhanced += weights[i] * scale_data
+            
+            # Apply morphological operations for better tissue separation
+            try:
+                # Convert to uint8 for morphological operations
+                enhanced_uint8 = np.clip(enhanced, 0, 255).astype(np.uint8)
+                
+                # Apply opening to remove small noise
+                kernel = morphology.disk(1)
+                opened = morphology.opening(enhanced_uint8, kernel)
+                
+                # Apply closing to fill small gaps
+                closed = morphology.closing(opened, kernel)
+                
+                # Combine with original for better detail preservation
+                enhanced = 0.7 * enhanced + 0.3 * closed.astype(np.float32)
+                
+            except Exception as morph_error:
+                print(f"Morphological operations failed: {morph_error}")
+            
+            # Apply adaptive thresholding for better density separation
+            try:
+                # Calculate local mean and standard deviation
+                local_mean = ndimage.uniform_filter(enhanced, size=15)
+                local_var = ndimage.uniform_filter(enhanced**2, size=15) - local_mean**2
+                local_std = np.sqrt(np.maximum(local_var, 0))
+                
+                # Apply adaptive enhancement
+                enhanced = enhanced + 0.2 * (enhanced - local_mean) / (local_std + 1e-6)
+                
+            except Exception as adaptive_error:
+                print(f"Adaptive enhancement failed: {adaptive_error}")
+            
+            # Ensure values are within valid range
+            enhanced = np.clip(enhanced, 0, 255)
             
             return enhanced
             
         except Exception as e:
             print(f"Error in density differentiation: {e}")
+            return pixel_array
+    
+    def apply_edge_enhancement(self, pixel_array):
+        """Apply edge enhancement for better density visualization"""
+        try:
+            from scipy import ndimage
+            
+            # Apply Laplacian edge detection
+            laplacian = ndimage.laplace(pixel_array)
+            
+            # Apply Gaussian smoothing to reduce noise
+            smoothed = ndimage.gaussian_filter(pixel_array, sigma=0.5)
+            
+            # Combine original with edge information
+            enhanced = smoothed + 0.3 * laplacian
+            
+            # Ensure values are within valid range
+            enhanced = np.clip(enhanced, 0, 255)
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in edge enhancement: {e}")
+            return pixel_array
+    
+    def apply_histogram_equalization(self, pixel_array):
+        """Apply histogram equalization for better contrast and density differentiation"""
+        try:
+            from skimage import exposure
+            
+            # Convert to uint8 for histogram equalization
+            pixel_array_uint8 = np.clip(pixel_array, 0, 255).astype(np.uint8)
+            
+            # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+            # This is better for medical images as it preserves local details
+            enhanced = exposure.equalize_adapthist(pixel_array_uint8, clip_limit=0.02)
+            
+            # Convert back to 0-255 range
+            enhanced = (enhanced * 255).astype(np.float32)
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in histogram equalization: {e}")
+            return pixel_array
+    
+    def apply_advanced_density_enhancement(self, pixel_array):
+        """Apply advanced density enhancement for optimal tissue differentiation"""
+        try:
+            from scipy import ndimage
+            from skimage import filters, segmentation, measure
+            
+            # Apply multi-scale analysis for better density separation
+            scales = [1.0, 1.5, 2.0, 3.0]
+            scale_weights = [0.4, 0.3, 0.2, 0.1]
+            
+            enhanced = np.zeros_like(pixel_array)
+            
+            for i, scale in enumerate(scales):
+                if scale == 1.0:
+                    scale_data = pixel_array
+                else:
+                    # Apply Gaussian blur at different scales
+                    scale_data = ndimage.gaussian_filter(pixel_array, sigma=scale)
+                
+                # Apply scale-specific enhancement
+                if scale > 1.0:
+                    # Enhance edges at this scale
+                    laplacian = ndimage.laplace(scale_data)
+                    scale_data = scale_data + 0.2 * laplacian
+                
+                enhanced += scale_weights[i] * scale_data
+            
+            # Apply adaptive thresholding for tissue separation
+            try:
+                # Calculate local statistics
+                local_mean = ndimage.uniform_filter(enhanced, size=21)
+                local_std = np.sqrt(ndimage.uniform_filter(enhanced**2, size=21) - local_mean**2)
+                
+                # Apply adaptive enhancement
+                adaptive_enhanced = enhanced + 0.3 * (enhanced - local_mean) / (local_std + 1e-6)
+                enhanced = np.clip(adaptive_enhanced, 0, 255)
+                
+            except Exception as adaptive_error:
+                print(f"Adaptive enhancement failed: {adaptive_error}")
+            
+            # Apply morphological operations for tissue separation
+            try:
+                enhanced_uint8 = np.clip(enhanced, 0, 255).astype(np.uint8)
+                
+                # Apply watershed segmentation for tissue separation
+                from skimage import morphology
+                
+                # Create markers for watershed
+                markers = np.zeros_like(enhanced_uint8)
+                markers[enhanced_uint8 < enhanced_uint8.mean() - enhanced_uint8.std()] = 1
+                markers[enhanced_uint8 > enhanced_uint8.mean() + enhanced_uint8.std()] = 2
+                
+                # Apply watershed
+                labels = segmentation.watershed(enhanced_uint8, markers)
+                
+                # Use watershed boundaries for enhancement
+                boundaries = segmentation.find_boundaries(labels)
+                enhanced = enhanced + 0.1 * boundaries.astype(np.float32) * 255
+                
+            except Exception as watershed_error:
+                print(f"Watershed segmentation failed: {watershed_error}")
+            
+            # Final enhancement with bilateral filtering
+            try:
+                enhanced = filters.bilateral(enhanced, sigma_color=0.1, sigma_spatial=2)
+            except:
+                pass
+            
+            return np.clip(enhanced, 0, 255)
+            
+        except Exception as e:
+            print(f"Error in advanced density enhancement: {e}")
             return pixel_array
     
     def apply_resolution_enhancement(self, pixel_array, resolution_factor):
@@ -488,14 +649,15 @@ class DicomImage(models.Model):
             # Try to use scipy for high-quality interpolation
             try:
                 from scipy import ndimage
+                from skimage import filters, restoration
+                
                 # Pre-process to reduce noise while preserving edges
                 try:
-                    from skimage import filters
+                    # Apply bilateral filtering to preserve edges while reducing noise
+                    smoothed = filters.bilateral(pixel_array, sigma_color=0.1, sigma_spatial=1)
+                except:
+                    # Fallback: simple Gaussian smoothing
                     smoothed = filters.gaussian(pixel_array, sigma=0.5, preserve_range=True)
-                except ImportError:
-                    # Fallback: simple smoothing using numpy
-                    from scipy.ndimage import gaussian_filter
-                    smoothed = gaussian_filter(pixel_array, sigma=0.5)
                 
                 # Apply high-quality bicubic interpolation
                 enhanced = ndimage.zoom(smoothed, resolution_factor, order=3, mode='nearest')
@@ -503,10 +665,15 @@ class DicomImage(models.Model):
                 # Post-process to enhance medical details
                 if resolution_factor > 1.0:
                     # Apply unsharp masking to enhance fine details
-                    from scipy.ndimage import gaussian_filter
-                    gaussian_filtered = gaussian_filter(enhanced, sigma=1.0)
+                    gaussian_filtered = ndimage.gaussian_filter(enhanced, sigma=1.0)
                     unsharp_mask = enhanced - gaussian_filtered
-                    enhanced = enhanced + 0.3 * unsharp_mask  # Moderate enhancement
+                    enhanced = enhanced + 0.4 * unsharp_mask  # Enhanced sharpening
+                    
+                    # Apply edge-preserving smoothing
+                    try:
+                        enhanced = filters.bilateral(enhanced, sigma_color=0.05, sigma_spatial=1)
+                    except:
+                        pass
                     
                     # Preserve original intensity range
                     original_min, original_max = pixel_array.min(), pixel_array.max()
