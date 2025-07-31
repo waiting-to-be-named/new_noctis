@@ -345,7 +345,7 @@ class DicomImage(models.Model):
             return None
     
     def get_enhanced_processed_image_base64(self, window_width=None, window_level=None, inverted=False, 
-                                          resolution_factor=1.0, density_enhancement=False, contrast_boost=1.0):
+                                          resolution_factor=1.0, density_enhancement=False, contrast_boost=1.0, thumbnail_size=None):
         """Get enhanced processed image with improved resolution and density differentiation"""
         try:
             # Get pixel data
@@ -372,6 +372,10 @@ class DicomImage(models.Model):
                 processed_array = np.clip(processed_array, 0, 255).astype(np.uint8)
             
             image = Image.fromarray(processed_array, mode='L')
+            
+            # Resize for thumbnail if requested
+            if thumbnail_size:
+                image = image.resize(thumbnail_size, Image.Resampling.LANCZOS)
             
             # Convert to base64
             buffer = io.BytesIO()

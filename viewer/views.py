@@ -39,6 +39,8 @@ import tempfile
 import shutil
 from pathlib import Path
 import logging
+from PIL import Image
+import base64
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -128,6 +130,155 @@ class EnhancedBulkUploadManager:
         self.temp_dir = None
         self.chunk_size = 50  # Process 50 files at a time
         self.max_workers = 4  # Number of worker threads
+        
+    def process_folder_upload(self, folder_files):
+        """Process folder upload with multiple DICOM files"""
+        try:
+            self.start_time = time.time()
+            self.update_progress(
+                status='processing_folder',
+                total_files=len(folder_files),
+                current_folder='Uploading folder contents'
+            )
+            
+            # Process files in chunks
+            processed_files = []
+            failed_files = []
+            
+            for i, uploaded_file in enumerate(folder_files):
+                try:
+                    # Check file size
+                    if uploaded_file.size > 5 * 1024 * 1024 * 1024:  # 5GB limit
+                        failed_files.append(f"File {uploaded_file.name} is too large (max 5GB)")
+                        continue
+                    
+                    # Try to read as DICOM
+                    file_content = uploaded_file.read()
+                    uploaded_file.seek(0)  # Reset file pointer
+                    
+                    # Check if it's a DICOM file
+                    try:
+                        dicom_data = pydicom.dcmread(io.BytesIO(file_content))
+                        
+                        # Save file temporarily and process
+                        temp_path = default_storage.save(
+                            f'temp/{uploaded_file.name}',
+                            ContentFile(file_content)
+                        )
+                        
+                        # Process DICOM file
+                        result = self.process_single_dicom_file(temp_path, dicom_data)
+                        if result['success']:
+                            processed_files.append(result)
+                        else:
+                            failed_files.append(f"Failed to process {uploaded_file.name}: {result['error']}")
+                        
+                        # Clean up temp file
+                        try:
+                            default_storage.delete(temp_path)
+                        except:
+                            pass
+                            
+                    except Exception as dicom_error:
+                        failed_files.append(f"Not a valid DICOM file: {uploaded_file.name}")
+                        
+                    # Update progress
+                    self.update_progress(
+                        processed_files=i + 1,
+                        successful_files=len(processed_files),
+                        failed_files=len(failed_files)
+                    )
+                    
+                except Exception as file_error:
+                    logger.error(f"Error processing file {uploaded_file.name}: {file_error}")
+                    failed_files.append(f"Error processing {uploaded_file.name}: {str(file_error)}")
+            
+            self.update_progress(
+                status='completed',
+                message=f'Folder upload completed. {len(processed_files)} files processed successfully, {len(failed_files)} failed.'
+            )
+            
+            return {
+                'success': True,
+                'processed_files': len(processed_files),
+                'failed_files': len(failed_files),
+                'total_files': len(folder_files)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in folder upload processing: {e}")
+            self.update_progress(
+                status='failed',
+                errors=self.progress['errors'] + [str(e)]
+            )
+            return {
+                'success': False,
+                'error': str(e)
+            }
+    
+    def process_single_dicom_file(self, file_path, dicom_data):
+        """Process a single DICOM file and create database entries"""
+        try:
+            # Extract metadata
+            study_uid = str(dicom_data.get('StudyInstanceUID', ''))
+            series_uid = str(dicom_data.get('SeriesInstanceUID', ''))
+            instance_uid = str(dicom_data.get('SOPInstanceUID', ''))
+            
+            if not study_uid:
+                study_uid = f"STUDY_{uuid.uuid4()}"
+            if not series_uid:
+                series_uid = f"SERIES_{uuid.uuid4()}"
+            if not instance_uid:
+                instance_uid = f"INSTANCE_{uuid.uuid4()}"
+            
+            # Create or get study
+            study, created = DicomStudy.objects.get_or_create(
+                study_instance_uid=study_uid,
+                defaults={
+                    'patient_name': str(dicom_data.get('PatientName', 'Unknown')),
+                    'patient_id': str(dicom_data.get('PatientID', 'Unknown')),
+                    'study_date': getattr(dicom_data, 'StudyDate', None),
+                    'study_description': str(dicom_data.get('StudyDescription', '')),
+                    'modality': str(dicom_data.get('Modality', 'OT')),
+                    'uploaded_by': self.user,
+                    'facility': self.facility
+                }
+            )
+            
+            # Create or get series
+            series, created = DicomSeries.objects.get_or_create(
+                series_instance_uid=series_uid,
+                study=study,
+                defaults={
+                    'series_number': str(dicom_data.get('SeriesNumber', 1)),
+                    'series_description': str(dicom_data.get('SeriesDescription', '')),
+                    'modality': str(dicom_data.get('Modality', 'OT')),
+                    'body_part': str(dicom_data.get('BodyPartExamined', ''))
+                }
+            )
+            
+            # Create image
+            image = DicomImage.objects.create(
+                series=series,
+                instance_uid=instance_uid,
+                instance_number=int(dicom_data.get('InstanceNumber', 1)),
+                dicom_file=file_path,
+                file_size=os.path.getsize(default_storage.path(file_path))
+            )
+            
+            return {
+                'success': True,
+                'study_id': study.id,
+                'series_id': series.id,
+                'image_id': image.id
+            }
+            
+        except Exception as e:
+            logger.error(f"Error processing single DICOM file: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
         
     def update_progress(self, **kwargs):
         """Thread-safe progress update with enhanced metrics"""
@@ -3259,3 +3410,667 @@ def get_enhanced_series_images(request, series_id):
         return Response({'error': 'Series not found'}, status=404)
     except Exception as e:
         return Response({'error': f'Server error: {str(e)}'}, status=500)
+
+
+# Add enhanced image processing imports
+import cv2
+from scipy.ndimage import gaussian_filter, median_filter, uniform_filter
+from skimage import exposure, filters, segmentation, morphology
+from skimage.restoration import denoise_tv_chambolle, denoise_bilateral
+from skimage.feature import canny
+from scipy.signal import wiener
+import matplotlib.pyplot as plt
+
+# ... existing code ...
+
+class AdvancedImageProcessor:
+    """Advanced image processing for X-ray refinement and MRI reconstruction"""
+    
+    def __init__(self):
+        self.processed_cache = {}
+    
+    def enhance_xray_image(self, pixel_array, enhancement_type='comprehensive'):
+        """
+        Enhanced X-ray image processing with multiple refinement techniques
+        """
+        try:
+            # Normalize input
+            if pixel_array.max() > 1:
+                pixel_array = pixel_array.astype(np.float32) / pixel_array.max()
+            
+            # Apply different enhancement techniques based on type
+            if enhancement_type == 'comprehensive':
+                enhanced = self._apply_comprehensive_xray_enhancement(pixel_array)
+            elif enhancement_type == 'edge_enhancement':
+                enhanced = self._apply_edge_enhancement(pixel_array)
+            elif enhancement_type == 'contrast_enhancement':
+                enhanced = self._apply_contrast_enhancement(pixel_array)
+            elif enhancement_type == 'noise_reduction':
+                enhanced = self._apply_noise_reduction(pixel_array)
+            elif enhancement_type == 'bone_enhancement':
+                enhanced = self._apply_bone_enhancement(pixel_array)
+            elif enhancement_type == 'soft_tissue_enhancement':
+                enhanced = self._apply_soft_tissue_enhancement(pixel_array)
+            else:
+                enhanced = self._apply_comprehensive_xray_enhancement(pixel_array)
+            
+            # Ensure output is in valid range
+            enhanced = np.clip(enhanced, 0, 1)
+            return (enhanced * 255).astype(np.uint8)
+            
+        except Exception as e:
+            logger.error(f"Error in X-ray enhancement: {e}")
+            return pixel_array
+    
+    def _apply_comprehensive_xray_enhancement(self, image):
+        """Apply comprehensive X-ray enhancement pipeline"""
+        # Step 1: Noise reduction
+        denoised = denoise_bilateral(image, sigma_color=0.05, sigma_spatial=15)
+        
+        # Step 2: Contrast enhancement using CLAHE
+        clahe_enhanced = exposure.equalize_adapthist(denoised, clip_limit=0.03, nbins=256)
+        
+        # Step 3: Edge enhancement
+        edges = canny(clahe_enhanced, sigma=1.0, low_threshold=0.1, high_threshold=0.2)
+        edge_enhanced = clahe_enhanced + 0.3 * edges
+        
+        # Step 4: Gamma correction
+        gamma_corrected = exposure.adjust_gamma(edge_enhanced, gamma=0.8)
+        
+        # Step 5: Unsharp masking
+        blurred = gaussian_filter(gamma_corrected, sigma=2.0)
+        unsharp_mask = gamma_corrected + 0.5 * (gamma_corrected - blurred)
+        
+        return np.clip(unsharp_mask, 0, 1)
+    
+    def _apply_edge_enhancement(self, image):
+        """Apply edge enhancement specifically for X-ray images"""
+        # Sobel edge detection
+        sobel_h = filters.sobel_h(image)
+        sobel_v = filters.sobel_v(image)
+        sobel_combined = np.sqrt(sobel_h**2 + sobel_v**2)
+        
+        # Enhance edges
+        enhanced = image + 0.4 * sobel_combined
+        
+        # Apply contrast stretching
+        p2, p98 = np.percentile(enhanced, (2, 98))
+        enhanced = exposure.rescale_intensity(enhanced, in_range=(p2, p98))
+        
+        return enhanced
+    
+    def _apply_contrast_enhancement(self, image):
+        """Apply advanced contrast enhancement"""
+        # Histogram equalization
+        eq_global = exposure.equalize_hist(image)
+        
+        # Local histogram equalization
+        eq_local = exposure.equalize_adapthist(image, clip_limit=0.03)
+        
+        # Combine global and local
+        combined = 0.6 * eq_local + 0.4 * eq_global
+        
+        return combined
+    
+    def _apply_noise_reduction(self, image):
+        """Apply advanced noise reduction"""
+        # Total variation denoising
+        tv_denoised = denoise_tv_chambolle(image, weight=0.1)
+        
+        # Bilateral filtering
+        bilateral_denoised = denoise_bilateral(tv_denoised, sigma_color=0.05, sigma_spatial=15)
+        
+        # Median filtering for impulse noise
+        median_filtered = median_filter(bilateral_denoised, size=3)
+        
+        return median_filtered
+    
+    def _apply_bone_enhancement(self, image):
+        """Enhance bone structures in X-ray images"""
+        # High-pass filtering to enhance bone edges
+        low_pass = gaussian_filter(image, sigma=3)
+        high_pass = image - low_pass
+        
+        # Enhance high-frequency components
+        bone_enhanced = image + 0.6 * high_pass
+        
+        # Apply contrast stretching specifically for bone density range
+        p5, p95 = np.percentile(bone_enhanced, (5, 95))
+        bone_enhanced = exposure.rescale_intensity(bone_enhanced, in_range=(p5, p95))
+        
+        return bone_enhanced
+    
+    def _apply_soft_tissue_enhancement(self, image):
+        """Enhance soft tissue contrast in X-ray images"""
+        # Low-pass filtering to enhance soft tissue
+        soft_tissue = gaussian_filter(image, sigma=1.5)
+        
+        # Adaptive histogram equalization for better soft tissue contrast
+        enhanced = exposure.equalize_adapthist(soft_tissue, clip_limit=0.02, nbins=256)
+        
+        # Gamma correction for soft tissue
+        enhanced = exposure.adjust_gamma(enhanced, gamma=1.2)
+        
+        return enhanced
+    
+    def reconstruct_mri_image(self, pixel_array, reconstruction_type='t1_weighted'):
+        """
+        Advanced MRI reconstruction with different sequence optimizations
+        """
+        try:
+            # Normalize input
+            if pixel_array.max() > 1:
+                pixel_array = pixel_array.astype(np.float32) / pixel_array.max()
+            
+            # Apply reconstruction based on MRI sequence type
+            if reconstruction_type == 't1_weighted':
+                reconstructed = self._reconstruct_t1_weighted(pixel_array)
+            elif reconstruction_type == 't2_weighted':
+                reconstructed = self._reconstruct_t2_weighted(pixel_array)
+            elif reconstruction_type == 'flair':
+                reconstructed = self._reconstruct_flair(pixel_array)
+            elif reconstruction_type == 'dwi':
+                reconstructed = self._reconstruct_dwi(pixel_array)
+            elif reconstruction_type == 'perfusion':
+                reconstructed = self._reconstruct_perfusion(pixel_array)
+            else:
+                reconstructed = self._reconstruct_general_mri(pixel_array)
+            
+            # Ensure output is in valid range
+            reconstructed = np.clip(reconstructed, 0, 1)
+            return (reconstructed * 255).astype(np.uint8)
+            
+        except Exception as e:
+            logger.error(f"Error in MRI reconstruction: {e}")
+            return pixel_array
+    
+    def _reconstruct_t1_weighted(self, image):
+        """Reconstruct T1-weighted MRI with enhanced tissue contrast"""
+        # Noise reduction while preserving edges
+        denoised = denoise_bilateral(image, sigma_color=0.03, sigma_spatial=10)
+        
+        # Enhance white matter/gray matter contrast
+        # T1 images: CSF is dark, white matter is bright, gray matter is intermediate
+        
+        # Apply contrast enhancement
+        enhanced = exposure.equalize_adapthist(denoised, clip_limit=0.02)
+        
+        # Gamma correction optimized for T1
+        gamma_corrected = exposure.adjust_gamma(enhanced, gamma=0.9)
+        
+        # Sharpen for better anatomical detail
+        sharpened = filters.unsharp_mask(gamma_corrected, radius=1, amount=0.5)
+        
+        return sharpened
+    
+    def _reconstruct_t2_weighted(self, image):
+        """Reconstruct T2-weighted MRI with enhanced fluid sensitivity"""
+        # T2 images: CSF is bright, pathology often appears bright
+        
+        # Noise reduction
+        denoised = denoise_tv_chambolle(image, weight=0.05)
+        
+        # Enhance fluid structures
+        enhanced = exposure.equalize_adapthist(denoised, clip_limit=0.025)
+        
+        # Gamma correction for T2
+        gamma_corrected = exposure.adjust_gamma(enhanced, gamma=1.1)
+        
+        # Edge preservation
+        edge_preserved = denoise_bilateral(gamma_corrected, sigma_color=0.02, sigma_spatial=8)
+        
+        return edge_preserved
+    
+    def _reconstruct_flair(self, image):
+        """Reconstruct FLAIR MRI with enhanced lesion detection"""
+        # FLAIR suppresses CSF signal, enhances lesions
+        
+        # Strong noise reduction
+        denoised = denoise_bilateral(image, sigma_color=0.02, sigma_spatial=12)
+        
+        # Enhance lesion contrast
+        enhanced = exposure.equalize_adapthist(denoised, clip_limit=0.015)
+        
+        # Apply specific gamma for FLAIR
+        gamma_corrected = exposure.adjust_gamma(enhanced, gamma=0.85)
+        
+        # Unsharp masking for lesion enhancement
+        unsharp = filters.unsharp_mask(gamma_corrected, radius=2, amount=0.8)
+        
+        return unsharp
+    
+    def _reconstruct_dwi(self, image):
+        """Reconstruct Diffusion-Weighted Imaging with enhanced diffusion contrast"""
+        # DWI is sensitive to water molecule motion
+        
+        # Minimal noise reduction to preserve diffusion information
+        denoised = median_filter(image, size=3)
+        
+        # Enhance diffusion contrast
+        enhanced = exposure.rescale_intensity(denoised, out_range=(0, 1))
+        
+        # Apply contrast stretching
+        p1, p99 = np.percentile(enhanced, (1, 99))
+        stretched = exposure.rescale_intensity(enhanced, in_range=(p1, p99))
+        
+        return stretched
+    
+    def _reconstruct_perfusion(self, image):
+        """Reconstruct perfusion MRI with enhanced vascular information"""
+        # Perfusion imaging shows blood flow
+        
+        # Noise reduction
+        denoised = gaussian_filter(image, sigma=0.8)
+        
+        # Enhance vascular structures
+        enhanced = exposure.equalize_adapthist(denoised, clip_limit=0.03)
+        
+        # Apply gamma correction
+        gamma_corrected = exposure.adjust_gamma(enhanced, gamma=1.2)
+        
+        return gamma_corrected
+    
+    def _reconstruct_general_mri(self, image):
+        """General MRI reconstruction for unknown sequences"""
+        # General purpose MRI enhancement
+        
+        # Noise reduction
+        denoised = denoise_bilateral(image, sigma_color=0.04, sigma_spatial=10)
+        
+        # Contrast enhancement
+        enhanced = exposure.equalize_adapthist(denoised, clip_limit=0.02)
+        
+        # Edge enhancement
+        sharpened = filters.unsharp_mask(enhanced, radius=1.5, amount=0.6)
+        
+        return sharpened
+    
+    def enhance_mri_image(self, pixel_array, enhancement_type='comprehensive'):
+        """
+        Enhanced MRI image processing with multiple enhancement techniques
+        """
+        try:
+            # Normalize input
+            if pixel_array.max() > 1:
+                pixel_array = pixel_array.astype(np.float32) / pixel_array.max()
+            
+            # Apply different enhancement techniques
+            if enhancement_type == 'comprehensive':
+                enhanced = self._apply_comprehensive_mri_enhancement(pixel_array)
+            elif enhancement_type == 'brain_enhancement':
+                enhanced = self._apply_brain_enhancement(pixel_array)
+            elif enhancement_type == 'spine_enhancement':
+                enhanced = self._apply_spine_enhancement(pixel_array)
+            elif enhancement_type == 'vessel_enhancement':
+                enhanced = self._apply_vessel_enhancement(pixel_array)
+            else:
+                enhanced = self._apply_comprehensive_mri_enhancement(pixel_array)
+            
+            # Ensure output is in valid range
+            enhanced = np.clip(enhanced, 0, 1)
+            return (enhanced * 255).astype(np.uint8)
+            
+        except Exception as e:
+            logger.error(f"Error in MRI enhancement: {e}")
+            return pixel_array
+    
+    def _apply_comprehensive_mri_enhancement(self, image):
+        """Apply comprehensive MRI enhancement pipeline"""
+        # Step 1: Noise reduction with edge preservation
+        denoised = denoise_bilateral(image, sigma_color=0.03, sigma_spatial=12)
+        
+        # Step 2: Contrast enhancement
+        contrast_enhanced = exposure.equalize_adapthist(denoised, clip_limit=0.02)
+        
+        # Step 3: Gamma correction
+        gamma_corrected = exposure.adjust_gamma(contrast_enhanced, gamma=0.9)
+        
+        # Step 4: Sharpening
+        sharpened = filters.unsharp_mask(gamma_corrected, radius=1.5, amount=0.7)
+        
+        return sharpened
+    
+    def _apply_brain_enhancement(self, image):
+        """Enhance brain structures in MRI"""
+        # Brain-specific enhancement
+        denoised = denoise_bilateral(image, sigma_color=0.02, sigma_spatial=8)
+        
+        # Enhance gray matter/white matter contrast
+        enhanced = exposure.equalize_adapthist(denoised, clip_limit=0.015)
+        
+        # Apply brain-optimized gamma
+        gamma_corrected = exposure.adjust_gamma(enhanced, gamma=0.85)
+        
+        return gamma_corrected
+    
+    def _apply_spine_enhancement(self, image):
+        """Enhance spinal structures in MRI"""
+        # Spine-specific enhancement
+        denoised = denoise_tv_chambolle(image, weight=0.03)
+        
+        # Enhance bone/soft tissue contrast
+        enhanced = exposure.rescale_intensity(denoised)
+        
+        # Edge enhancement for spinal anatomy
+        edges = canny(enhanced, sigma=1.0)
+        edge_enhanced = enhanced + 0.2 * edges
+        
+        return np.clip(edge_enhanced, 0, 1)
+    
+    def _apply_vessel_enhancement(self, image):
+        """Enhance vascular structures in MRI"""
+        # Vessel enhancement using Frangi vesselness filter
+        from skimage.filters import frangi
+        
+        # Apply Frangi filter for vessel enhancement
+        vessels = frangi(image, sigmas=range(1, 4), beta1=0.5, beta2=15)
+        
+        # Combine original with vessel-enhanced image
+        enhanced = image + 0.3 * vessels
+        
+        # Apply contrast enhancement
+        contrast_enhanced = exposure.equalize_adapthist(enhanced, clip_limit=0.03)
+        
+        return contrast_enhanced
+
+# Initialize the advanced processor
+advanced_processor = AdvancedImageProcessor()
+
+@csrf_exempt
+@api_view(['POST'])
+def enhance_xray_image_api(request, image_id):
+    """
+    API endpoint to enhance X-ray images with advanced algorithms
+    """
+    try:
+        dicom_image = get_object_or_404(DicomImage, id=image_id)
+        enhancement_type = request.data.get('enhancement_type', 'comprehensive')
+        
+        # Load the DICOM image
+        dicom_path = dicom_image.dicom_file.path
+        dicom_data = pydicom.dcmread(dicom_path)
+        pixel_array = dicom_data.pixel_array.astype(np.float32)
+        
+        # Apply X-ray enhancement
+        enhanced_array = advanced_processor.enhance_xray_image(pixel_array, enhancement_type)
+        
+        # Convert to base64 for transmission
+        enhanced_pil = Image.fromarray(enhanced_array)
+        buffer = io.BytesIO()
+        enhanced_pil.save(buffer, format='PNG')
+        enhanced_base64 = base64.b64encode(buffer.getvalue()).decode()
+        
+        return Response({
+            'success': True,
+            'enhanced_image': f"data:image/png;base64,{enhanced_base64}",
+            'enhancement_type': enhancement_type,
+            'message': f'X-ray image enhanced using {enhancement_type} algorithm'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error enhancing X-ray image: {e}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@csrf_exempt
+@api_view(['POST'])
+def reconstruct_mri_image_api(request, image_id):
+    """
+    API endpoint to reconstruct MRI images with advanced algorithms
+    """
+    try:
+        dicom_image = get_object_or_404(DicomImage, id=image_id)
+        reconstruction_type = request.data.get('reconstruction_type', 't1_weighted')
+        
+        # Load the DICOM image
+        dicom_path = dicom_image.dicom_file.path
+        dicom_data = pydicom.dcmread(dicom_path)
+        pixel_array = dicom_data.pixel_array.astype(np.float32)
+        
+        # Apply MRI reconstruction
+        reconstructed_array = advanced_processor.reconstruct_mri_image(pixel_array, reconstruction_type)
+        
+        # Convert to base64 for transmission
+        reconstructed_pil = Image.fromarray(reconstructed_array)
+        buffer = io.BytesIO()
+        reconstructed_pil.save(buffer, format='PNG')
+        reconstructed_base64 = base64.b64encode(buffer.getvalue()).decode()
+        
+        return Response({
+            'success': True,
+            'reconstructed_image': f"data:image/png;base64,{reconstructed_base64}",
+            'reconstruction_type': reconstruction_type,
+            'message': f'MRI image reconstructed using {reconstruction_type} algorithm'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error reconstructing MRI image: {e}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@csrf_exempt
+@api_view(['POST'])
+def enhance_mri_image_api(request, image_id):
+    """
+    API endpoint to enhance MRI images with advanced algorithms
+    """
+    try:
+        dicom_image = get_object_or_404(DicomImage, id=image_id)
+        enhancement_type = request.data.get('enhancement_type', 'comprehensive')
+        
+        # Load the DICOM image
+        dicom_path = dicom_image.dicom_file.path
+        dicom_data = pydicom.dcmread(dicom_path)
+        pixel_array = dicom_data.pixel_array.astype(np.float32)
+        
+        # Apply MRI enhancement
+        enhanced_array = advanced_processor.enhance_mri_image(pixel_array, enhancement_type)
+        
+        # Convert to base64 for transmission
+        enhanced_pil = Image.fromarray(enhanced_array)
+        buffer = io.BytesIO()
+        enhanced_pil.save(buffer, format='PNG')
+        enhanced_base64 = base64.b64encode(buffer.getvalue()).decode()
+        
+        return Response({
+            'success': True,
+            'enhanced_image': f"data:image/png;base64,{enhanced_base64}",
+            'enhancement_type': enhancement_type,
+            'message': f'MRI image enhanced using {enhancement_type} algorithm'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error enhancing MRI image: {e}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@csrf_exempt
+@api_view(['POST'])
+def upload_dicom_folder(request):
+    """
+    Enhanced folder upload functionality for DICOM images from CT and MRI
+    """
+    try:
+        ensure_directories()
+        
+        if 'folder' not in request.FILES:
+            return Response({
+                'success': False,
+                'error': 'No folder provided'
+            }, status=400)
+        
+        folder_files = request.FILES.getlist('folder')
+        facility_id = request.data.get('facility_id')
+        
+        # Get facility if provided
+        facility = None
+        if facility_id:
+            try:
+                facility = Facility.objects.get(id=facility_id)
+            except Facility.DoesNotExist:
+                pass
+        
+        # Initialize bulk upload manager
+        manager = EnhancedBulkUploadManager(request.user, facility)
+        
+        # Process folder upload
+        upload_result = manager.process_folder_upload(folder_files)
+        
+        return Response({
+            'success': True,
+            'upload_id': manager.upload_id,
+            'message': f'Folder upload initiated with {len(folder_files)} files',
+            'initial_progress': manager.progress
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in folder upload: {e}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@csrf_exempt
+@api_view(['GET'])
+def get_series_images_with_scrolling(request, series_id):
+    """
+    Enhanced API to get all images in a series with scrolling support
+    """
+    try:
+        series = get_object_or_404(DicomSeries, id=series_id)
+        images = DicomImage.objects.filter(series=series).order_by('instance_number')
+        
+        page = int(request.GET.get('page', 1))
+        per_page = int(request.GET.get('per_page', 20))
+        
+        # Calculate pagination
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        paginated_images = images[start_idx:end_idx]
+        
+        # Prepare image data with thumbnails and metadata
+        images_data = []
+        for image in paginated_images:
+            try:
+                # Get thumbnail image data
+                thumbnail_data = image.get_enhanced_processed_image_base64(
+                    window_width=400, 
+                    window_level=40,
+                    thumbnail_size=(150, 150)
+                )
+                
+                images_data.append({
+                    'id': image.id,
+                    'instance_number': image.instance_number,
+                    'image_position': getattr(image, 'image_position', [0, 0, 0]),
+                    'slice_thickness': getattr(image, 'slice_thickness', 1.0),
+                    'thumbnail': thumbnail_data,
+                    'file_size': image.file_size,
+                    'acquisition_time': str(image.acquisition_time) if image.acquisition_time else None,
+                    'pixel_spacing': getattr(image, 'pixel_spacing', [1.0, 1.0])
+                })
+            except Exception as img_error:
+                logger.error(f"Error processing image {image.id}: {img_error}")
+                images_data.append({
+                    'id': image.id,
+                    'instance_number': image.instance_number,
+                    'error': 'Could not process image'
+                })
+        
+        return Response({
+            'success': True,
+            'images': images_data,
+            'pagination': {
+                'current_page': page,
+                'per_page': per_page,
+                'total_images': images.count(),
+                'total_pages': (images.count() + per_page - 1) // per_page,
+                'has_next': end_idx < images.count(),
+                'has_previous': page > 1
+            },
+            'series_info': {
+                'id': series.id,
+                'series_description': series.series_description,
+                'modality': series.modality,
+                'series_number': series.series_number,
+                'total_images': images.count()
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting series images: {e}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@csrf_exempt
+@api_view(['GET'])
+def get_bulk_image_data(request):
+    """
+    Get multiple images at once for efficient viewer loading
+    """
+    try:
+        image_ids = request.GET.get('image_ids', '').split(',')
+        if not image_ids or image_ids == ['']:
+            return Response({
+                'success': False,
+                'error': 'No image IDs provided'
+            }, status=400)
+        
+        # Limit to reasonable number of images
+        image_ids = image_ids[:50]  # Max 50 images at once
+        
+        images_data = {}
+        for image_id in image_ids:
+            try:
+                image = DicomImage.objects.get(id=int(image_id))
+                
+                # Get processed image data
+                processed_data = image.get_enhanced_processed_image_base64(
+                    window_width=request.GET.get('window_width', 400),
+                    window_level=request.GET.get('window_level', 40)
+                )
+                
+                images_data[image_id] = {
+                    'success': True,
+                    'image_data': processed_data,
+                    'metadata': {
+                        'instance_number': image.instance_number,
+                        'acquisition_time': str(image.acquisition_time) if image.acquisition_time else None,
+                        'pixel_spacing': getattr(image, 'pixel_spacing', [1.0, 1.0]),
+                        'slice_thickness': getattr(image, 'slice_thickness', 1.0)
+                    }
+                }
+                
+            except DicomImage.DoesNotExist:
+                images_data[image_id] = {
+                    'success': False,
+                    'error': 'Image not found'
+                }
+            except Exception as img_error:
+                logger.error(f"Error processing image {image_id}: {img_error}")
+                images_data[image_id] = {
+                    'success': False,
+                    'error': str(img_error)
+                }
+        
+        return Response({
+            'success': True,
+            'images': images_data,
+            'total_requested': len(image_ids),
+            'total_processed': len([img for img in images_data.values() if img.get('success')])
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in bulk image data: {e}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=500)

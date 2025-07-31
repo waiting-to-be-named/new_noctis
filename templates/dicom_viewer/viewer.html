@@ -379,6 +379,207 @@
             background: #28a745;
         }
         
+        /* Enhanced Image Processing Controls */
+        .image-enhancement-panel {
+            position: fixed;
+            top: 120px;
+            right: 20px;
+            width: 280px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid rgba(0, 255, 0, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            z-index: 1500;
+            display: none;
+            backdrop-filter: blur(10px);
+        }
+        
+        .image-enhancement-panel.show {
+            display: block;
+            animation: slideInRight 0.3s ease-out;
+        }
+        
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        .enhancement-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(0, 255, 0, 0.2);
+        }
+        
+        .enhancement-title {
+            color: #00ff00;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .enhancement-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0;
+        }
+        
+        .enhancement-close:hover {
+            color: #ff0000;
+        }
+        
+        .enhancement-section {
+            margin-bottom: 15px;
+        }
+        
+        .enhancement-section-title {
+            color: #00ff00;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .enhancement-options {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .enhancement-btn {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.3s ease;
+        }
+        
+        .enhancement-btn:hover {
+            border-color: #00ff00;
+            background: #0a2a0a;
+        }
+        
+        .enhancement-btn.processing {
+            background: #006600;
+            color: #ccffcc;
+        }
+        
+        /* Scrollable Image Navigator */
+        .image-navigator {
+            position: fixed;
+            bottom: 200px;
+            left: 20px;
+            width: 200px;
+            height: 150px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid rgba(0, 255, 0, 0.3);
+            border-radius: 8px;
+            z-index: 1500;
+            display: none;
+            backdrop-filter: blur(10px);
+        }
+        
+        .image-navigator.show {
+            display: block;
+            animation: slideInLeft 0.3s ease-out;
+        }
+        
+        @keyframes slideInLeft {
+            from {
+                opacity: 0;
+                transform: translateX(-100%);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        .navigator-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid rgba(0, 255, 0, 0.2);
+        }
+        
+        .navigator-title {
+            color: #00ff00;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .navigator-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 0;
+        }
+        
+        .navigator-close:hover {
+            color: #ff0000;
+        }
+        
+        .navigator-content {
+            padding: 10px;
+            height: calc(100% - 45px);
+            overflow-y: auto;
+        }
+        
+        .navigator-thumbnails {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .navigator-thumbnail {
+            width: 100%;
+            height: 40px;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 3px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            padding: 5px;
+            font-size: 10px;
+            color: #ccc;
+            transition: all 0.3s ease;
+        }
+        
+        .navigator-thumbnail:hover {
+            border-color: #00ff00;
+            background: #0a2a0a;
+        }
+        
+        .navigator-thumbnail.active {
+            border-color: #00ff00;
+            background: #006600;
+            color: white;
+        }
+        
+        .navigator-thumbnail img {
+            width: 30px;
+            height: 30px;
+            object-fit: cover;
+            margin-right: 8px;
+            border-radius: 2px;
+        }
+        
         /* Series Selector Position Controls - Fixed positioning */
         /* Removed as series selector is always at bottom */
         
@@ -447,6 +648,18 @@
                 <button class="tool-btn" data-tool="volume" title="Volume Calculation">
                     <i class="fas fa-calculator"></i>
                     <span>Volume</span>
+                </button>
+                <button class="tool-btn" data-tool="enhance" title="Image Enhancement">
+                    <i class="fas fa-magic"></i>
+                    <span>Enhance</span>
+                </button>
+                <button class="tool-btn" data-tool="navigator" title="Image Navigator">
+                    <i class="fas fa-images"></i>
+                    <span>Navigator</span>
+                </button>
+                <button class="tool-btn" data-tool="folder-upload" title="Upload Folder">
+                    <i class="fas fa-folder-plus"></i>
+                    <span>Folder</span>
                 </button>
                 <div class="dropdown-tool">
                     <button class="tool-btn dropdown-toggle" data-tool="ai" title="AI Analysis">
@@ -775,6 +988,67 @@
         </div>
     </div>
 
+    <!-- Image Enhancement Panel -->
+    <div class="image-enhancement-panel" id="enhancement-panel">
+        <div class="enhancement-header">
+            <div class="enhancement-title">Image Enhancement</div>
+            <button class="enhancement-close" onclick="toggleEnhancementPanel()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <!-- X-ray Enhancement Section -->
+        <div class="enhancement-section">
+            <div class="enhancement-section-title">X-ray Enhancement</div>
+            <div class="enhancement-options">
+                <button class="enhancement-btn" onclick="enhanceXray('comprehensive')">Comprehensive Enhancement</button>
+                <button class="enhancement-btn" onclick="enhanceXray('edge_enhancement')">Edge Enhancement</button>
+                <button class="enhancement-btn" onclick="enhanceXray('contrast_enhancement')">Contrast Enhancement</button>
+                <button class="enhancement-btn" onclick="enhanceXray('noise_reduction')">Noise Reduction</button>
+                <button class="enhancement-btn" onclick="enhanceXray('bone_enhancement')">Bone Enhancement</button>
+                <button class="enhancement-btn" onclick="enhanceXray('soft_tissue_enhancement')">Soft Tissue Enhancement</button>
+            </div>
+        </div>
+        
+        <!-- MRI Enhancement Section -->
+        <div class="enhancement-section">
+            <div class="enhancement-section-title">MRI Enhancement</div>
+            <div class="enhancement-options">
+                <button class="enhancement-btn" onclick="enhanceMri('comprehensive')">Comprehensive Enhancement</button>
+                <button class="enhancement-btn" onclick="enhanceMri('brain_enhancement')">Brain Enhancement</button>
+                <button class="enhancement-btn" onclick="enhanceMri('spine_enhancement')">Spine Enhancement</button>
+                <button class="enhancement-btn" onclick="enhanceMri('vessel_enhancement')">Vessel Enhancement</button>
+            </div>
+        </div>
+        
+        <!-- MRI Reconstruction Section -->
+        <div class="enhancement-section">
+            <div class="enhancement-section-title">MRI Reconstruction</div>
+            <div class="enhancement-options">
+                <button class="enhancement-btn" onclick="reconstructMri('t1_weighted')">T1-Weighted</button>
+                <button class="enhancement-btn" onclick="reconstructMri('t2_weighted')">T2-Weighted</button>
+                <button class="enhancement-btn" onclick="reconstructMri('flair')">FLAIR</button>
+                <button class="enhancement-btn" onclick="reconstructMri('dwi')">Diffusion-Weighted</button>
+                <button class="enhancement-btn" onclick="reconstructMri('perfusion')">Perfusion</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Navigator Panel -->
+    <div class="image-navigator" id="image-navigator">
+        <div class="navigator-header">
+            <div class="navigator-title">Image Navigator</div>
+            <button class="navigator-close" onclick="toggleImageNavigator()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="navigator-content">
+            <div class="navigator-thumbnails" id="navigator-thumbnails">
+                <!-- Thumbnails will be populated here -->
+            </div>
+        </div>
+    </div>
+
     <!-- Series Position Controls -->
     <!-- Removed as series selector is always at bottom -->
     {% comment %}Expose initial study ID for JS initialization{% endcomment %}
@@ -804,7 +1078,338 @@
         document.addEventListener('DOMContentLoaded', function() {
             initializeSeriesSelector();
             initializeEnhancedControls();
+            initializeEnhancementFeatures();
         });
+        
+        // Enhancement panel functionality
+        function initializeEnhancementFeatures() {
+            // Add toolbar event listeners
+            document.querySelector('[data-tool="enhance"]').addEventListener('click', () => {
+                toggleEnhancementPanel();
+            });
+            
+            document.querySelector('[data-tool="navigator"]').addEventListener('click', () => {
+                toggleImageNavigator();
+            });
+            
+            document.querySelector('[data-tool="folder-upload"]').addEventListener('click', () => {
+                document.getElementById('folder-input').click();
+            });
+        }
+        
+        function toggleEnhancementPanel() {
+            const panel = document.getElementById('enhancement-panel');
+            panel.classList.toggle('show');
+        }
+        
+        function toggleImageNavigator() {
+            const navigator = document.getElementById('image-navigator');
+            navigator.classList.toggle('show');
+            
+            if (navigator.classList.contains('show')) {
+                loadImageThumbnails();
+            }
+        }
+        
+        // X-ray enhancement functions
+        function enhanceXray(enhancementType) {
+            if (!window.viewer || !window.viewer.currentImageId) {
+                alert('Please load an image first');
+                return;
+            }
+            
+            const button = event.target;
+            button.classList.add('processing');
+            button.textContent = 'Processing...';
+            
+            fetch(`/viewer/api/images/${window.viewer.currentImageId}/enhance-xray/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({
+                    enhancement_type: enhancementType
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Display enhanced image
+                    if (window.viewer && window.viewer.displayEnhancedImage) {
+                        window.viewer.displayEnhancedImage(data.enhanced_image);
+                    }
+                    showNotification(`X-ray enhancement applied: ${enhancementType}`, 'success');
+                } else {
+                    showNotification(`Enhancement failed: ${data.error}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Enhancement error:', error);
+                showNotification('Enhancement failed: Network error', 'error');
+            })
+            .finally(() => {
+                button.classList.remove('processing');
+                button.textContent = button.textContent.replace('Processing...', enhancementType.replace('_', ' '));
+            });
+        }
+        
+        // MRI enhancement functions
+        function enhanceMri(enhancementType) {
+            if (!window.viewer || !window.viewer.currentImageId) {
+                alert('Please load an image first');
+                return;
+            }
+            
+            const button = event.target;
+            button.classList.add('processing');
+            button.textContent = 'Processing...';
+            
+            fetch(`/viewer/api/images/${window.viewer.currentImageId}/enhance-mri/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({
+                    enhancement_type: enhancementType
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Display enhanced image
+                    if (window.viewer && window.viewer.displayEnhancedImage) {
+                        window.viewer.displayEnhancedImage(data.enhanced_image);
+                    }
+                    showNotification(`MRI enhancement applied: ${enhancementType}`, 'success');
+                } else {
+                    showNotification(`Enhancement failed: ${data.error}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Enhancement error:', error);
+                showNotification('Enhancement failed: Network error', 'error');
+            })
+            .finally(() => {
+                button.classList.remove('processing');
+                button.textContent = button.textContent.replace('Processing...', enhancementType.replace('_', ' '));
+            });
+        }
+        
+        // MRI reconstruction functions
+        function reconstructMri(reconstructionType) {
+            if (!window.viewer || !window.viewer.currentImageId) {
+                alert('Please load an image first');
+                return;
+            }
+            
+            const button = event.target;
+            button.classList.add('processing');
+            button.textContent = 'Processing...';
+            
+            fetch(`/viewer/api/images/${window.viewer.currentImageId}/reconstruct-mri/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({
+                    reconstruction_type: reconstructionType
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Display reconstructed image
+                    if (window.viewer && window.viewer.displayEnhancedImage) {
+                        window.viewer.displayEnhancedImage(data.reconstructed_image);
+                    }
+                    showNotification(`MRI reconstruction applied: ${reconstructionType}`, 'success');
+                } else {
+                    showNotification(`Reconstruction failed: ${data.error}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Reconstruction error:', error);
+                showNotification('Reconstruction failed: Network error', 'error');
+            })
+            .finally(() => {
+                button.classList.remove('processing');
+                button.textContent = button.textContent.replace('Processing...', reconstructionType.replace('_', ' '));
+            });
+        }
+        
+        // Image navigator functions
+        function loadImageThumbnails() {
+            if (!window.viewer || !window.viewer.currentSeriesId) {
+                return;
+            }
+            
+            const container = document.getElementById('navigator-thumbnails');
+            container.innerHTML = '<div style="text-align: center; color: #666;">Loading thumbnails...</div>';
+            
+            fetch(`/viewer/api/series/${window.viewer.currentSeriesId}/images-scrollable/?per_page=50`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayThumbnails(data.images);
+                } else {
+                    container.innerHTML = '<div style="text-align: center; color: #f00;">Failed to load thumbnails</div>';
+                }
+            })
+            .catch(error => {
+                console.error('Thumbnail loading error:', error);
+                container.innerHTML = '<div style="text-align: center; color: #f00;">Error loading thumbnails</div>';
+            });
+        }
+        
+        function displayThumbnails(images) {
+            const container = document.getElementById('navigator-thumbnails');
+            container.innerHTML = '';
+            
+            images.forEach(image => {
+                const thumbnail = document.createElement('div');
+                thumbnail.className = 'navigator-thumbnail';
+                thumbnail.dataset.imageId = image.id;
+                
+                if (image.thumbnail) {
+                    thumbnail.innerHTML = `
+                        <img src="${image.thumbnail}" alt="Image ${image.instance_number}">
+                        <span>Image ${image.instance_number}</span>
+                    `;
+                } else {
+                    thumbnail.innerHTML = `
+                        <div style="width: 30px; height: 30px; background: #333; margin-right: 8px; border-radius: 2px;"></div>
+                        <span>Image ${image.instance_number}</span>
+                    `;
+                }
+                
+                thumbnail.addEventListener('click', () => {
+                    selectThumbnailImage(image.id);
+                });
+                
+                container.appendChild(thumbnail);
+            });
+        }
+        
+        function selectThumbnailImage(imageId) {
+            // Update active thumbnail
+            document.querySelectorAll('.navigator-thumbnail').forEach(thumb => {
+                thumb.classList.remove('active');
+            });
+            document.querySelector(`[data-image-id="${imageId}"]`).classList.add('active');
+            
+            // Load image in viewer
+            if (window.viewer && window.viewer.loadImageById) {
+                window.viewer.loadImageById(imageId);
+            }
+        }
+        
+        // Enhanced folder upload functionality
+        document.getElementById('folder-input').addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                handleFolderUpload(e.target.files);
+            }
+        });
+        
+        function handleFolderUpload(files) {
+            const formData = new FormData();
+            
+            // Add all files to form data
+            Array.from(files).forEach(file => {
+                formData.append('folder', file);
+            });
+            
+            // Show progress
+            showNotification(`Uploading ${files.length} files from folder...`, 'info');
+            
+            fetch('/viewer/api/upload-folder/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(`Folder upload initiated. Upload ID: ${data.upload_id}`, 'success');
+                    // Start monitoring upload progress
+                    monitorUploadProgress(data.upload_id);
+                } else {
+                    showNotification(`Upload failed: ${data.error}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Upload error:', error);
+                showNotification('Upload failed: Network error', 'error');
+            });
+        }
+        
+        function monitorUploadProgress(uploadId) {
+            const interval = setInterval(() => {
+                fetch(`/viewer/api/enhanced-upload-progress/${uploadId}/`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.progress) {
+                        const progress = data.progress;
+                        showNotification(`Upload progress: ${progress.processed_files}/${progress.total_files} files processed`, 'info');
+                        
+                        if (progress.status === 'completed' || progress.status === 'failed') {
+                            clearInterval(interval);
+                            if (progress.status === 'completed') {
+                                showNotification('Folder upload completed successfully!', 'success');
+                                // Refresh studies list
+                                if (window.viewer && window.viewer.refreshStudies) {
+                                    window.viewer.refreshStudies();
+                                }
+                            } else {
+                                showNotification('Folder upload failed', 'error');
+                            }
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Progress monitoring error:', error);
+                    clearInterval(interval);
+                });
+            }, 2000); // Check every 2 seconds
+        }
+        
+        // Utility functions
+        function getCsrfToken() {
+            return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                   document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        }
+        
+        function showNotification(message, type = 'info') {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${type === 'success' ? '#006600' : type === 'error' ? '#660000' : '#003366'};
+                color: white;
+                padding: 15px 20px;
+                border-radius: 5px;
+                z-index: 2000;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+                max-width: 300px;
+                word-wrap: break-word;
+            `;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 5000);
+        }
         
 
 
