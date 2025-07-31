@@ -143,45 +143,180 @@ class DicomViewer {
     }
     
     setupCanvas() {
-        // Set canvas size with improved resolution handling
+        // Set canvas size with enhanced resolution handling for medical imaging
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
         
-        // Set up image smoothing for medical images
-        this.ctx.imageSmoothingEnabled = false; // Preserve sharp medical image details
+        // Enhanced image smoothing configuration for medical images
+        this.ctx.imageSmoothingEnabled = true; // Enable for better quality at different zoom levels
         this.ctx.imageSmoothingQuality = 'high';
+        
+        // Set additional canvas properties for enhanced rendering
+        this.enhancedRendering = true;
+        this.pixelDensityScale = window.devicePixelRatio || 1;
+        
+        // Initialize enhanced rendering parameters
+        this.renderingOptions = {
+            preserveSharpness: true,
+            enhanceDensityContrast: true,
+            antialiasing: false, // Disable for pixel-perfect medical imaging
+            subpixelRendering: true
+        };
+        
+        console.log(`Canvas initialized with enhanced rendering, pixel density scale: ${this.pixelDensityScale}`);
     }
     
     resizeCanvas() {
         const viewport = document.querySelector('.viewport');
         if (viewport) {
-            // Use device pixel ratio for crisp medical images
-            const devicePixelRatio = window.devicePixelRatio || 1;
+            // Enhanced pixel ratio handling for medical imaging
+            const basePixelRatio = window.devicePixelRatio || 1;
+            // Apply additional scaling for medical image clarity
+            const medicalImageScaling = 1.25; // 25% additional resolution for medical imaging
+            const effectivePixelRatio = basePixelRatio * medicalImageScaling;
+            
             const displayWidth = viewport.clientWidth;
             const displayHeight = viewport.clientHeight;
             
-            // Set actual canvas dimensions for high resolution
-            this.canvas.width = displayWidth * devicePixelRatio;
-            this.canvas.height = displayHeight * devicePixelRatio;
+            // Set actual canvas dimensions with enhanced resolution
+            this.canvas.width = Math.round(displayWidth * effectivePixelRatio);
+            this.canvas.height = Math.round(displayHeight * effectivePixelRatio);
             
             // Set CSS dimensions for display
             this.canvas.style.width = displayWidth + 'px';
             this.canvas.style.height = displayHeight + 'px';
             
-            // Reset the context and scale for high-DPI displays
+            // Reset the context and apply enhanced scaling
             this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-            this.ctx.scale(devicePixelRatio, devicePixelRatio);
+            this.ctx.scale(effectivePixelRatio, effectivePixelRatio);
             
-            // Disable image smoothing for medical images
-            this.ctx.imageSmoothingEnabled = false;
-            this.ctx.imageSmoothingQuality = 'high';
+            // Apply enhanced rendering settings for medical images
+            this.applyEnhancedRenderingSettings();
             
-            console.log(`Canvas resized: ${displayWidth}x${displayHeight} (display) / ${this.canvas.width}x${this.canvas.height} (actual)`);
+            // Store effective scaling for use in image rendering
+            this.effectivePixelRatio = effectivePixelRatio;
+            this.displayDimensions = { width: displayWidth, height: displayHeight };
+            
+            console.log(`Canvas resized with enhanced medical imaging: ${displayWidth}x${displayHeight} (display) / ${this.canvas.width}x${this.canvas.height} (actual), ratio: ${effectivePixelRatio.toFixed(2)}`);
             
             // Force redraw if image is loaded
             if (this.currentImage) {
                 this.redraw();
             }
+        }
+    }
+    
+    applyEnhancedRenderingSettings() {
+        // Configure context for optimal medical image rendering
+        if (this.renderingOptions.preserveSharpness) {
+            this.ctx.imageSmoothingEnabled = false; // Preserve pixel boundaries for measurements
+        } else {
+            this.ctx.imageSmoothingEnabled = true;
+            this.ctx.imageSmoothingQuality = 'high';
+        }
+        
+        // Set pixel rendering properties
+        this.ctx.pixelStorei = this.ctx.pixelStorei || function() {};
+        
+        // Additional canvas properties for enhanced medical imaging
+        if (this.renderingOptions.subpixelRendering) {
+            this.ctx.textRenderingOptimization = 'optimizeSpeed';
+        }
+        
+        console.log('Enhanced rendering settings applied:', this.renderingOptions);
+    }
+    
+    buildEnhancedFilters() {
+        // Build CSS filters for enhanced density visualization
+        const filters = [];
+        
+        if (this.renderingOptions.enhanceDensityContrast) {
+            // Enhance contrast for better tissue differentiation
+            const contrastLevel = this.calculateOptimalContrast();
+            filters.push(`contrast(${contrastLevel}%)`);
+            
+            // Slight brightness adjustment for better visibility
+            const brightnessLevel = this.calculateOptimalBrightness();
+            filters.push(`brightness(${brightnessLevel}%)`);
+            
+            // Apply slight saturation for grayscale enhancement (helps with density perception)
+            filters.push('saturate(105%)');
+            
+            // Enhance sharpness for clearer tissue boundaries
+            if (this.zoomFactor > 1.0) {
+                const sharpnessLevel = Math.min(200, 100 + (this.zoomFactor - 1) * 20);
+                filters.push(`sepia(0%) hue-rotate(0deg) saturate(100%) brightness(100%) contrast(${sharpnessLevel}%)`);
+            }
+        }
+        
+        return filters.length > 0 ? filters.join(' ') : 'none';
+    }
+    
+    calculateOptimalContrast() {
+        // Calculate optimal contrast based on window width and level
+        const baseContrast = 100;
+        
+        // Adjust contrast based on window width (wider window = lower contrast enhancement needed)
+        const windowFactor = Math.max(0.5, Math.min(2.0, 1000 / Math.max(100, this.windowWidth)));
+        
+        // Adjust for zoom level (higher zoom = slightly more contrast for detail visibility)
+        const zoomFactor = Math.min(1.3, 1.0 + (this.zoomFactor - 1) * 0.1);
+        
+        const optimalContrast = baseContrast * windowFactor * zoomFactor;
+        
+        return Math.round(Math.max(90, Math.min(150, optimalContrast)));
+    }
+    
+    calculateOptimalBrightness() {
+        // Calculate optimal brightness based on window level and image characteristics
+        const baseBrightness = 100;
+        
+        // Adjust brightness based on window level
+        const levelFactor = this.windowLevel < 0 ? 
+            Math.max(0.9, 1.0 + this.windowLevel / 1000) : 
+            Math.min(1.1, 1.0 + this.windowLevel / 2000);
+        
+        const optimalBrightness = baseBrightness * levelFactor;
+        
+        return Math.round(Math.max(85, Math.min(115, optimalBrightness)));
+    }
+    
+    calculateWindowingSensitivity() {
+        // Calculate adaptive windowing sensitivity for better density control
+        const baseSensitivity = { width: 2.0, level: 2.0 };
+        
+        // Adjust sensitivity based on current window width (narrower windows need finer control)
+        const widthFactor = Math.max(0.5, Math.min(3.0, 800 / Math.max(50, this.windowWidth)));
+        
+        // Adjust sensitivity based on zoom level (higher zoom needs finer control)
+        const zoomFactor = Math.max(0.3, Math.min(1.5, 1.0 / Math.max(0.5, this.zoomFactor)));
+        
+        // For density differentiation, provide finer control in critical HU ranges
+        const levelFactor = this.getDensityControlFactor();
+        
+        return {
+            width: baseSensitivity.width * widthFactor * zoomFactor,
+            level: baseSensitivity.level * levelFactor * zoomFactor
+        };
+    }
+    
+    getDensityControlFactor() {
+        // Provide finer control in critical density ranges for better tissue differentiation
+        const currentLevel = this.windowLevel;
+        
+        // Critical HU ranges for different tissues
+        if (currentLevel >= -200 && currentLevel <= 200) {
+            // Soft tissue range - finer control needed
+            return 0.7;
+        } else if (currentLevel >= -1000 && currentLevel <= -500) {
+            // Lung tissue range - moderate control
+            return 0.8;
+        } else if (currentLevel >= 200 && currentLevel <= 1000) {
+            // Bone tissue range - moderate control
+            return 0.9;
+        } else {
+            // Other ranges - standard control
+            return 1.0;
         }
     }
     
@@ -834,16 +969,19 @@ class DicomViewer {
         this.ctx.fillText('Loading image...', displayWidth / 2, displayHeight / 2);
         
         try {
-            // Request high-quality image data
+            // Request enhanced high-quality image data with density optimization
             const params = new URLSearchParams({
                 window_width: this.windowWidth,
                 window_level: this.windowLevel,
                 inverted: this.inverted,
                 high_quality: 'true', // Request high quality rendering
-                preserve_aspect: 'true'
+                preserve_aspect: 'true',
+                density_enhancement: 'true', // Enable density differentiation
+                resolution_factor: this.effectivePixelRatio || 1.25, // Use enhanced resolution
+                contrast_optimization: 'medical' // Medical imaging optimized contrast
             });
             
-            const response = await fetch(`/viewer/api/images/${imageData.id}/data/?${params}`);
+            const response = await fetch(`/viewer/api/images/${imageData.id}/enhanced-data/?${params}`);
             
             if (!response.ok) {
                 throw new Error(`Failed to load image: HTTP ${response.status} - ${response.statusText}`);
@@ -1070,19 +1208,36 @@ class DicomViewer {
         const x = (displayWidth - scaledWidth) / 2 + this.panX;
         const y = (displayHeight - scaledHeight) / 2 + this.panY;
         
-        // Draw image with high quality
+        // Draw image with enhanced quality and density optimization
         this.ctx.save();
         
-        // Apply window/level if needed (inversion)
-        if (this.inverted) {
-            this.ctx.filter = 'invert(1)';
+        // Apply enhanced rendering settings before drawing
+        this.applyEnhancedRenderingSettings();
+        
+        // Apply advanced filtering for better density visualization
+        const filters = this.buildEnhancedFilters();
+        if (filters) {
+            this.ctx.filter = filters;
+        }
+        
+        // Apply window/level inversion if needed
+        if (this.inverted && !filters.includes('invert')) {
+            this.ctx.filter = (this.ctx.filter === 'none' ? '' : this.ctx.filter + ' ') + 'invert(1)';
         }
         
         try {
-            this.ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
-            console.log(`Image drawn successfully: ${scaledWidth}x${scaledHeight} at (${x}, ${y}), scale: ${scale}`);
+            // Use enhanced drawing with pixel-perfect alignment
+            const pixelAlignedX = Math.round(x * this.effectivePixelRatio) / this.effectivePixelRatio;
+            const pixelAlignedY = Math.round(y * this.effectivePixelRatio) / this.effectivePixelRatio;
+            const pixelAlignedWidth = Math.round(scaledWidth * this.effectivePixelRatio) / this.effectivePixelRatio;
+            const pixelAlignedHeight = Math.round(scaledHeight * this.effectivePixelRatio) / this.effectivePixelRatio;
+            
+            this.ctx.drawImage(img, pixelAlignedX, pixelAlignedY, pixelAlignedWidth, pixelAlignedHeight);
+            console.log(`Enhanced image drawn: ${pixelAlignedWidth.toFixed(1)}x${pixelAlignedHeight.toFixed(1)} at (${pixelAlignedX.toFixed(1)}, ${pixelAlignedY.toFixed(1)}), scale: ${scale.toFixed(3)}`);
         } catch (error) {
-            console.error('Error drawing image:', error);
+            console.error('Error drawing enhanced image:', error);
+            // Fallback to standard drawing
+            this.ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
         }
         
         this.ctx.restore();
@@ -1535,13 +1690,16 @@ class DicomViewer {
             const deltaX = x - this.dragStart.x;
             const deltaY = y - this.dragStart.y;
             
-            // Adjust window width and level based on mouse movement
-            this.windowWidth += deltaX * 2;
-            this.windowLevel += deltaY * 2;
+            // Apply density-aware windowing adjustments with enhanced sensitivity
+            const sensitivity = this.calculateWindowingSensitivity();
             
-            // Clamp values
+            // Adjust window width and level with enhanced precision for medical imaging
+            this.windowWidth += deltaX * sensitivity.width;
+            this.windowLevel += deltaY * sensitivity.level;
+            
+            // Apply enhanced clamping with extended HU ranges for better density differentiation
             this.windowWidth = Math.max(1, Math.min(4000, this.windowWidth));
-            this.windowLevel = Math.max(-1000, Math.min(1000, this.windowLevel));
+            this.windowLevel = Math.max(-1024, Math.min(3071, this.windowLevel)); // Extended HU range
             
             this.dragStart = { x, y };
             this.updateSliders();
@@ -3101,6 +3259,45 @@ Pixel Count: ${data.pixel_count}`;
         
         // Start monitoring
         checkProgress();
+    }
+    
+    calculateWindowingSensitivity() {
+        // Calculate adaptive windowing sensitivity for better density control
+        const baseSensitivity = { width: 2.0, level: 2.0 };
+        
+        // Adjust sensitivity based on current window width (narrower windows need finer control)
+        const widthFactor = Math.max(0.5, Math.min(3.0, 800 / Math.max(50, this.windowWidth)));
+        
+        // Adjust sensitivity based on zoom level (higher zoom needs finer control)
+        const zoomFactor = Math.max(0.3, Math.min(1.5, 1.0 / Math.max(0.5, this.zoomFactor)));
+        
+        // For density differentiation, provide finer control in critical HU ranges
+        const levelFactor = this.getDensityControlFactor();
+        
+        return {
+            width: baseSensitivity.width * widthFactor * zoomFactor,
+            level: baseSensitivity.level * levelFactor * zoomFactor
+        };
+    }
+    
+    getDensityControlFactor() {
+        // Provide finer control in critical density ranges for better tissue differentiation
+        const currentLevel = this.windowLevel;
+        
+        // Critical HU ranges for different tissues
+        if (currentLevel >= -200 && currentLevel <= 200) {
+            // Soft tissue range - finer control needed
+            return 0.7;
+        } else if (currentLevel >= -1000 && currentLevel <= -500) {
+            // Lung tissue range - moderate control
+            return 0.8;
+        } else if (currentLevel >= 200 && currentLevel <= 1000) {
+            // Bone tissue range - moderate control
+            return 0.9;
+        } else {
+            // Other ranges - standard control
+            return 1.0;
+        }
     }
 }
 

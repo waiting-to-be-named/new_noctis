@@ -387,7 +387,7 @@ class DicomImage(models.Model):
     
     def apply_enhanced_windowing(self, pixel_array, window_width=None, window_level=None, inverted=False,
                                 density_enhancement=False, contrast_boost=1.0):
-        """Apply enhanced windowing with density differentiation"""
+        """Apply enhanced windowing with superior density differentiation for medical imaging"""
         try:
             # Use default values if not provided
             if window_width is None:
@@ -398,19 +398,26 @@ class DicomImage(models.Model):
             # Convert to float for better precision
             pixel_array = pixel_array.astype(np.float32)
             
-            # Apply contrast boost
-            if contrast_boost != 1.0:
-                pixel_array = pixel_array * contrast_boost
+            # Pre-process for noise reduction while preserving edges
+            pixel_array = self.apply_medical_preprocessing(pixel_array)
             
-            # Apply windowing with enhanced precision
+            # Apply adaptive contrast boost based on tissue characteristics
+            if contrast_boost != 1.0:
+                pixel_array = self.apply_adaptive_contrast_boost(pixel_array, contrast_boost, window_level)
+            
+            # Apply enhanced windowing with gamma correction for better tissue visualization
             window_min = window_level - window_width / 2
             window_max = window_level + window_width / 2
             
             # Clip values to window range
             pixel_array = np.clip(pixel_array, window_min, window_max)
             
-            # Normalize to 0-255 range with enhanced precision
-            pixel_array = ((pixel_array - window_min) / (window_max - window_min)) * 255
+            # Apply non-linear windowing for better density differentiation
+            if density_enhancement:
+                pixel_array = self.apply_nonlinear_windowing(pixel_array, window_min, window_max)
+            else:
+                # Standard linear windowing
+                pixel_array = ((pixel_array - window_min) / (window_max - window_min)) * 255
             
             # Apply density enhancement if requested
             if density_enhancement:
@@ -420,10 +427,100 @@ class DicomImage(models.Model):
             if inverted:
                 pixel_array = 255 - pixel_array
             
+            # Final enhancement for medical imaging
+            pixel_array = self.apply_final_medical_enhancement(pixel_array)
+            
             return pixel_array
             
         except Exception as e:
             print(f"Error in enhanced windowing: {e}")
+            return pixel_array
+    
+    def apply_medical_preprocessing(self, pixel_array):
+        """Apply medical imaging specific preprocessing"""
+        try:
+            from scipy.ndimage import median_filter
+            
+            # Light denoising to preserve fine structures
+            if pixel_array.size > 10000:  # Only for larger images
+                denoised = median_filter(pixel_array, size=3)
+                # Blend to preserve details
+                alpha = 0.7  # Preserve 70% of original detail
+                pixel_array = alpha * pixel_array + (1 - alpha) * denoised
+            
+            return pixel_array
+        except Exception as e:
+            print(f"Error in medical preprocessing: {e}")
+            return pixel_array
+    
+    def apply_adaptive_contrast_boost(self, pixel_array, contrast_boost, window_level):
+        """Apply adaptive contrast boost based on tissue type"""
+        try:
+            # Different boost factors for different tissue types based on HU values
+            if window_level < -500:  # Air/lung tissue
+                effective_boost = contrast_boost * 1.1
+            elif -200 <= window_level <= 200:  # Soft tissue
+                effective_boost = contrast_boost * 1.2  # Higher boost for soft tissue contrast
+            elif window_level > 200:  # Bone tissue
+                effective_boost = contrast_boost * 0.9
+            else:
+                effective_boost = contrast_boost
+            
+            return pixel_array * effective_boost
+        except Exception as e:
+            print(f"Error in adaptive contrast boost: {e}")
+            return pixel_array
+    
+    def apply_nonlinear_windowing(self, pixel_array, window_min, window_max):
+        """Apply non-linear windowing for enhanced density differentiation"""
+        try:
+            # Normalize to 0-1 range first
+            normalized = (pixel_array - window_min) / (window_max - window_min)
+            
+            # Apply gamma correction for better tissue contrast
+            gamma = 0.8  # Slightly enhance darker regions
+            enhanced = np.power(normalized, gamma)
+            
+            # Apply S-curve for better contrast in mid-range densities
+            enhanced = self.apply_s_curve_enhancement(enhanced)
+            
+            # Convert back to 0-255 range
+            return enhanced * 255
+            
+        except Exception as e:
+            print(f"Error in nonlinear windowing: {e}")
+            # Fallback to linear windowing
+            return ((pixel_array - window_min) / (window_max - window_min)) * 255
+    
+    def apply_s_curve_enhancement(self, normalized_array):
+        """Apply S-curve enhancement for better mid-tone contrast"""
+        try:
+            # S-curve function for enhanced contrast
+            # f(x) = 0.5 * (1 + tanh(k * (x - 0.5)))
+            k = 3.0  # Curve steepness
+            enhanced = 0.5 * (1 + np.tanh(k * (normalized_array - 0.5)))
+            return enhanced
+        except Exception as e:
+            print(f"Error in S-curve enhancement: {e}")
+            return normalized_array
+    
+    def apply_final_medical_enhancement(self, pixel_array):
+        """Apply final enhancement specifically for medical imaging"""
+        try:
+            # Ensure proper range
+            pixel_array = np.clip(pixel_array, 0, 255)
+            
+            # Apply histogram stretching for better utilization of dynamic range
+            min_val = np.percentile(pixel_array, 1)
+            max_val = np.percentile(pixel_array, 99)
+            
+            if max_val > min_val:
+                pixel_array = ((pixel_array - min_val) / (max_val - min_val)) * 255
+                pixel_array = np.clip(pixel_array, 0, 255)
+            
+            return pixel_array
+        except Exception as e:
+            print(f"Error in final medical enhancement: {e}")
             return pixel_array
     
     def apply_density_enhancement(self, pixel_array):
@@ -448,35 +545,102 @@ class DicomImage(models.Model):
             return pixel_array
     
     def apply_density_differentiation(self, pixel_array):
-        """Apply density differentiation for better tissue visualization"""
+        """Apply enhanced density differentiation for superior tissue visualization"""
         try:
-            # Apply multi-scale processing for better density differentiation
+            # Apply multi-scale processing with medical imaging optimization
             from scipy import ndimage
+            from scipy.ndimage import uniform_filter
             
-            # Create multiple scales for processing
-            scales = [1.0, 2.0, 4.0]
+            # Enhanced multi-scale approach for better tissue contrast
+            scales = [0.5, 1.0, 2.0, 4.0]  # Added finer scale for detail preservation
             processed_scales = []
             
             for scale in scales:
                 if scale == 1.0:
                     processed_scales.append(pixel_array)
+                elif scale < 1.0:
+                    # High-pass filtering for edge enhancement
+                    sigma = scale
+                    smoothed = ndimage.gaussian_filter(pixel_array, sigma=sigma)
+                    high_pass = pixel_array - smoothed
+                    processed_scales.append(pixel_array + 0.3 * high_pass)  # Enhance edges
                 else:
-                    # Apply Gaussian blur at different scales
+                    # Low-pass filtering for structure enhancement
                     sigma = scale
                     blurred = ndimage.gaussian_filter(pixel_array, sigma=sigma)
                     processed_scales.append(blurred)
             
-            # Combine scales for enhanced density differentiation
-            enhanced = np.zeros_like(pixel_array)
-            weights = [0.5, 0.3, 0.2]  # Weights for different scales
+            # Apply density-aware weighted combination
+            enhanced = np.zeros_like(pixel_array, dtype=np.float32)
+            weights = [0.2, 0.4, 0.25, 0.15]  # Optimized weights for medical imaging
             
             for i, scale_data in enumerate(processed_scales):
-                enhanced += weights[i] * scale_data
+                enhanced += weights[i] * scale_data.astype(np.float32)
+            
+            # Apply local contrast enhancement using CLAHE-like technique
+            enhanced = self.apply_local_contrast_enhancement(enhanced)
+            
+            # Apply edge-preserving smoothing to reduce noise while maintaining boundaries
+            enhanced = self.apply_edge_preserving_filter(enhanced)
             
             return enhanced
             
         except Exception as e:
-            print(f"Error in density differentiation: {e}")
+            print(f"Error in enhanced density differentiation: {e}")
+            return pixel_array
+    
+    def apply_local_contrast_enhancement(self, pixel_array):
+        """Apply local contrast enhancement for better tissue differentiation"""
+        try:
+            from scipy.ndimage import uniform_filter
+            
+            # Calculate local mean and standard deviation
+            kernel_size = min(16, max(8, int(min(pixel_array.shape) / 32)))
+            local_mean = uniform_filter(pixel_array, size=kernel_size)
+            
+            # Calculate local variance
+            local_variance = uniform_filter(pixel_array**2, size=kernel_size) - local_mean**2
+            local_std = np.sqrt(np.maximum(local_variance, 1e-6))
+            
+            # Apply adaptive contrast enhancement
+            contrast_factor = 1.0 + 0.5 * (local_std / (np.mean(local_std) + 1e-6))
+            contrast_factor = np.clip(contrast_factor, 0.8, 1.5)
+            
+            enhanced = local_mean + contrast_factor * (pixel_array - local_mean)
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in local contrast enhancement: {e}")
+            return pixel_array
+    
+    def apply_edge_preserving_filter(self, pixel_array):
+        """Apply edge-preserving filter to maintain tissue boundaries while reducing noise"""
+        try:
+            from scipy.ndimage import median_filter
+            
+            # Apply bilateral-like filtering using median filter for edge preservation
+            # Use small kernel to preserve fine details
+            kernel_size = 3
+            filtered = median_filter(pixel_array, size=kernel_size)
+            
+            # Blend original and filtered based on local gradients
+            # Calculate gradients to detect edges
+            grad_x = np.gradient(pixel_array, axis=1)
+            grad_y = np.gradient(pixel_array, axis=0)
+            gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+            
+            # Create edge-aware blending weights
+            edge_threshold = np.percentile(gradient_magnitude, 75)
+            edge_weights = np.clip(gradient_magnitude / (edge_threshold + 1e-6), 0, 1)
+            
+            # Blend: use original data at edges, filtered data in smooth regions
+            result = edge_weights * pixel_array + (1 - edge_weights) * filtered
+            
+            return result
+            
+        except Exception as e:
+            print(f"Error in edge preserving filter: {e}")
             return pixel_array
     
     def apply_resolution_enhancement(self, pixel_array, resolution_factor):
