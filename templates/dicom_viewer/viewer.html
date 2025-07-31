@@ -1026,6 +1026,79 @@
                 }
             }
         }
+
+        // Enhanced dropdown functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            // Handle dropdown toggles
+            document.querySelectorAll('.dropdown-toggle').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    
+                    // Close all other dropdowns
+                    document.querySelectorAll('.dropdown-menu').forEach(menu => {
+                        if (menu !== this.nextElementSibling) {
+                            menu.style.display = 'none';
+                        }
+                    });
+                    
+                    // Toggle current dropdown
+                    const menu = this.nextElementSibling;
+                    if (menu && menu.classList.contains('dropdown-menu')) {
+                        menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+                    }
+                });
+            });
+            
+            // Handle dropdown item clicks
+            document.querySelectorAll('.dropdown-item').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    
+                    // Add visual feedback
+                    this.style.background = 'rgba(0, 255, 0, 0.3)';
+                    setTimeout(() => {
+                        this.style.background = '';
+                    }, 200);
+                    
+                    // Close dropdown after selection
+                    const dropdown = this.closest('.dropdown-menu');
+                    if (dropdown) {
+                        dropdown.style.display = 'none';
+                    }
+                });
+            });
+            
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', function() {
+                document.querySelectorAll('.dropdown-menu').forEach(menu => {
+                    menu.style.display = 'none';
+                });
+            });
+            
+            // Enhanced 3D reconstruction with better error handling
+            window.apply3DReconstruction = function(type) {
+                if (window.viewer) {
+                    try {
+                        window.viewer.apply3DReconstruction(type);
+                    } catch (error) {
+                        console.error('3D reconstruction error:', error);
+                        if (window.viewer.showError) {
+                            window.viewer.showError('3D reconstruction failed: ' + error.message);
+                        } else {
+                            alert('3D reconstruction failed: ' + error.message);
+                        }
+                    }
+                } else {
+                    console.error('DICOM viewer not initialized');
+                    alert('Please wait for the viewer to initialize');
+                }
+            };
+            
+            // Performance monitoring for debugging
+            if (window.performance && window.performance.mark) {
+                window.performance.mark('viewer-dom-ready');
+            }
+        });
     </script>
 </body>
 </html>

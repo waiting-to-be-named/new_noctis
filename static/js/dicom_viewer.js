@@ -99,60 +99,49 @@ class DicomViewer {
         
         console.log('Initializing DicomViewer with initialStudyId:', this.initialStudyId);
         
-        this.setupCanvas();
-        this.setupEventListeners();
-        await this.loadBackendStudies();
-        this.setupNotifications();
-        this.setupMeasurementUnitSelector();
-        this.setup3DControls();
-        this.setupAIPanel();
+        // Initialize enhanced viewer features
+        this.initializeEnhancedViewer();
         
-        // Load initial study if provided with improved error handling
-        if (this.initialStudyId) {
-            console.log('Loading initial study:', this.initialStudyId);
-            try {
-                // Show loading state
-                this.showLoadingState();
+        try {
+            this.setupEventListeners();
+            this.resizeCanvas();
+            
+            // Mark as initialized
+            this.initialized = true;
+            
+            // Load initial study if provided
+            if (this.initialStudyId) {
+                console.log('Loading initial study:', this.initialStudyId);
+                try {
+                    await this.loadStudy(this.initialStudyId);
+                } catch (error) {
+                    console.error('Error loading initial study:', error);
+                    this.showError('Failed to load initial study: ' + error.message);
+                }
+            } else {
+                // Show initial state
+                this.ctx.fillStyle = '#000';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
                 
-                await this.loadStudy(this.initialStudyId);
+                const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+                const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
                 
-                // Force UI updates after loading
-                setTimeout(() => {
-                    this.redraw();
-                    this.updatePatientInfo();
-                    this.updateSliders();
-                    
-                    // Ensure patient info is visible
-                    const patientInfo = document.getElementById('patient-info');
-                    if (patientInfo && this.currentStudy) {
-                        patientInfo.textContent = `Patient: ${this.currentStudy.patient_name} | Study Date: ${this.currentStudy.study_date} | Modality: ${this.currentStudy.modality}`;
-                        patientInfo.style.display = 'block';
-                    }
-                    
-                    // Update image controls if available
-                    if (this.currentImages && this.currentImages.length > 0) {
-                        const sliceSlider = document.getElementById('slice-slider');
-                        if (sliceSlider) {
-                            sliceSlider.max = this.currentImages.length - 1;
-                            sliceSlider.value = 0;
-                        }
-                        
-                        const sliceValue = document.getElementById('slice-value');
-                        if (sliceValue) {
-                            sliceValue.textContent = '1';
-                        }
-                    }
-                    
-                    console.log('Initial study loaded successfully');
-                }, 200);
-                
-            } catch (error) {
-                console.error('Failed to load initial study:', error);
-                this.showError('Failed to load initial study: ' + error.message);
+                this.ctx.fillStyle = '#00ff00';
+                this.ctx.font = '18px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText('Enhanced DICOM Viewer Ready', displayWidth / 2, displayHeight / 2);
+                this.ctx.font = '14px Arial';
+                this.ctx.fillStyle = '#888';
+                this.ctx.fillText('Load DICOM files or select from worklist', displayWidth / 2, displayHeight / 2 + 30);
             }
+            
+            console.log('DicomViewer initialization completed successfully');
+            
+        } catch (error) {
+            console.error('Error during DicomViewer initialization:', error);
+            this.showError('Failed to initialize DICOM viewer: ' + error.message);
         }
-        
-        this.initialized = true;
     }
     
     setupCanvas() {
@@ -1122,15 +1111,10 @@ class DicomViewer {
         try {
             console.log(`Loading study ${studyId}...`);
             
-            // Show loading indicator
-            this.ctx.fillStyle = '#000';
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-            this.ctx.fillStyle = '#fff';
-            this.ctx.font = '20px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            this.ctx.fillText('Loading study...', this.canvas.width / 2, this.canvas.height / 2);
+            // Create enhanced loading overlay
+            this.showEnhancedLoadingOverlay('Loading study...', studyId);
             
+            const startTime = performance.now();
             const response = await fetch(`/viewer/api/studies/${studyId}/images/`);
             
             if (!response.ok) {
@@ -1145,13 +1129,18 @@ class DicomViewer {
                 throw new Error(errorMessage);
             }
             
+            this.updateLoadingProgress('Processing study data...', 30);
+            
             const data = await response.json();
             
             if (!data.images || data.images.length === 0) {
                 throw new Error('No images found in this study');
             }
             
-            console.log(`Found ${data.images.length} images in study`);
+            const loadTime = performance.now() - startTime;
+            console.log(`Found ${data.images.length} images in study (${loadTime.toFixed(2)}ms)`);
+            
+            this.updateLoadingProgress(`Loading ${data.images.length} images...`, 50);
             
             this.currentStudy = data.study;
             this.currentSeries = data.series || null;
@@ -1161,19 +1150,32 @@ class DicomViewer {
             // Clear any existing measurements for new study
             this.measurements = [];
             this.annotations = [];
-            this.updateMeasurementsList();
+            this.updateMeasurements();
+            
+            this.updateLoadingProgress('Updating interface...', 70);
             
             // Update UI immediately
             this.updatePatientInfo();
             this.updateSliders();
             
-            // Load the first image
+            this.updateLoadingProgress('Loading first image...', 80);
+            
+            // Load the first image with progress tracking
             await this.loadCurrentImage();
+            
+            this.updateLoadingProgress('Finalizing...', 95);
             
             // Load clinical info if available
             if (window.loadClinicalInfo && typeof window.loadClinicalInfo === 'function') {
-                window.loadClinicalInfo(studyId);
+                try {
+                    await window.loadClinicalInfo(studyId);
+                } catch (clinicalError) {
+                    console.warn('Failed to load clinical info:', clinicalError);
+                }
             }
+            
+            // Hide loading overlay with completion animation
+            this.hideEnhancedLoadingOverlay();
             
             // Force a redraw to ensure the image is displayed
             setTimeout(() => {
@@ -1181,13 +1183,18 @@ class DicomViewer {
                 this.updatePatientInfo();
             }, 100);
             
-            console.log('Study loaded successfully');
+            const totalTime = performance.now() - startTime;
+            console.log(`Study loaded successfully in ${totalTime.toFixed(2)}ms`);
+            
+            // Show success notification
+            this.showSuccessNotification(`Study loaded (${data.images.length} images) in ${totalTime.toFixed(0)}ms`);
             
         } catch (error) {
             console.error('Error loading study:', error);
+            this.hideEnhancedLoadingOverlay();
             this.showError('Error loading study: ' + error.message);
             
-            // Clear canvas
+            // Clear canvas and show error state
             this.ctx.fillStyle = '#000';
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             this.ctx.fillStyle = '#ff0000';
@@ -1198,8 +1205,158 @@ class DicomViewer {
             this.ctx.fillText(error.message, this.canvas.width / 2, this.canvas.height / 2 + 20);
             
             // Reset patient info on error
-            this.updatePatientInfo();
+            const patientInfo = document.getElementById('patient-info');
+            if (patientInfo) {
+                patientInfo.textContent = 'Patient: - | Study Date: - | Modality: -';
+            }
         }
+    }
+    
+    showEnhancedLoadingOverlay(message, studyId = null) {
+        // Remove any existing loading overlay
+        this.hideEnhancedLoadingOverlay();
+        
+        const overlay = document.createElement('div');
+        overlay.id = 'enhanced-loading-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            color: white;
+            font-family: Arial, sans-serif;
+        `;
+        
+        overlay.innerHTML = `
+            <div style="text-align: center; padding: 40px; background: rgba(0, 0, 0, 0.8); border-radius: 15px; border: 2px solid #00ff00; min-width: 400px;">
+                <div style="font-size: 24px; margin-bottom: 20px; color: #00ff00;">
+                    <i class="fas fa-file-medical-alt fa-spin" style="margin-right: 15px;"></i>
+                    DICOM Viewer
+                </div>
+                <div id="loading-message" style="font-size: 16px; margin-bottom: 25px; color: #ffffff;">
+                    ${message}
+                </div>
+                ${studyId ? `<div style="font-size: 12px; color: #888; margin-bottom: 20px;">Study ID: ${studyId}</div>` : ''}
+                <div style="width: 300px; height: 8px; background: #333; border-radius: 4px; margin: 0 auto; overflow: hidden;">
+                    <div id="loading-progress-bar" style="height: 100%; background: linear-gradient(to right, #00ff00, #00aa00); width: 0%; transition: width 0.5s; border-radius: 4px;"></div>
+                </div>
+                <div id="loading-percentage" style="margin-top: 15px; font-size: 14px; color: #00ff00;">0%</div>
+                <div style="margin-top: 20px;">
+                    <div style="font-size: 12px; color: #666;">
+                        Processing medical imaging data...
+                    </div>
+                    <div id="loading-tips" style="font-size: 11px; color: #555; margin-top: 10px; font-style: italic;">
+                        Tip: Use mouse wheel to zoom, drag to pan
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(overlay);
+        
+        // Animate progress to 10% immediately
+        setTimeout(() => {
+            this.updateLoadingProgress(message, 10);
+        }, 100);
+    }
+    
+    updateLoadingProgress(message, percentage) {
+        const messageEl = document.getElementById('loading-message');
+        const progressBar = document.getElementById('loading-progress-bar');
+        const percentageEl = document.getElementById('loading-percentage');
+        
+        if (messageEl) messageEl.textContent = message;
+        if (progressBar) progressBar.style.width = `${percentage}%`;
+        if (percentageEl) percentageEl.textContent = `${percentage}%`;
+        
+        // Update loading tips based on progress
+        const tipsEl = document.getElementById('loading-tips');
+        if (tipsEl && percentage > 50) {
+            const tips = [
+                'Tip: Right-click for tools menu',
+                'Tip: Press R to reset view',
+                'Tip: Use window presets for different tissues',
+                'Tip: Double-click to fit image to screen'
+            ];
+            tipsEl.textContent = tips[Math.floor(Math.random() * tips.length)];
+        }
+    }
+    
+    hideEnhancedLoadingOverlay() {
+        const overlay = document.getElementById('enhanced-loading-overlay');
+        if (overlay) {
+            // Animate completion
+            this.updateLoadingProgress('Complete!', 100);
+            
+            setTimeout(() => {
+                overlay.style.opacity = '0';
+                overlay.style.transition = 'opacity 0.3s';
+                
+                setTimeout(() => {
+                    overlay.remove();
+                }, 300);
+            }, 500);
+        }
+    }
+    
+    showSuccessNotification(message) {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 255, 0, 0.9);
+            color: black;
+            padding: 15px 20px;
+            border-radius: 5px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            z-index: 9999;
+            animation: slideIn 0.3s ease-out;
+            max-width: 300px;
+        `;
+        
+        notification.innerHTML = `
+            <div style="display: flex; align-items: center;">
+                <i class="fas fa-check-circle" style="margin-right: 10px; font-size: 16px;"></i>
+                ${message}
+            </div>
+        `;
+        
+        // Add animation keyframes
+        if (!document.getElementById('notification-styles')) {
+            const style = document.createElement('style');
+            style.id = 'notification-styles';
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 3 seconds
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s ease-out';
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.remove();
+                }
+            }, 300);
+        }, 3000);
     }
     
     async loadCurrentImage() {
@@ -1212,30 +1369,41 @@ class DicomViewer {
         const imageData = this.currentImages[this.currentImageIndex];
         console.log(`Loading image ${this.currentImageIndex + 1}/${this.currentImages.length}, ID: ${imageData.id}`);
         
-        // Show loading state
-        this.ctx.fillStyle = '#000';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        this.ctx.fillStyle = '#00ff00';
-        this.ctx.font = '16px Arial';
-        this.ctx.textAlign = 'center';
-        this.ctx.textBaseline = 'middle';
-        const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
-        const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
-        this.ctx.fillText('Loading image...', displayWidth / 2, displayHeight / 2);
+        // Check cache first for faster loading
+        const cacheKey = `${imageData.id}_${this.windowWidth}_${this.windowLevel}_${this.inverted}`;
+        if (this.imageCache && this.imageCache.has(cacheKey)) {
+            console.log('Loading from cache');
+            this.currentImage = this.imageCache.get(cacheKey);
+            this.updateDisplay();
+            this.loadMeasurements();
+            this.loadAnnotations();
+            this.updatePatientInfo();
+            this.updateSliders();
+            
+            // Preload adjacent images in background
+            this.preloadAdjacentImages();
+            return;
+        }
+
+        // Show optimized loading state with progress
+        this.showLoadingState('Loading image...');
         
         try {
-            // Request enhanced high-quality image data with density optimization
+            // Use optimized parameters for faster loading
             const params = new URLSearchParams({
                 window_width: this.windowWidth,
                 window_level: this.windowLevel,
                 inverted: this.inverted,
-                high_quality: 'true', // Request high quality rendering
+                // Reduced quality for initial load, enhanced later
+                high_quality: 'false', 
                 preserve_aspect: 'true',
-                density_enhancement: 'true', // Enable density differentiation
-                resolution_factor: this.effectivePixelRatio || 1.25, // Use enhanced resolution
-                contrast_optimization: 'medical' // Medical imaging optimized contrast
+                fast_load: 'true', // Request fast loading mode
+                resolution_factor: 1.0, // Start with normal resolution
+                format: 'jpeg', // Use JPEG for faster transfer
+                quality: 85 // Good quality but smaller file size
             });
             
+            const startTime = performance.now();
             const response = await fetch(`/viewer/api/images/${imageData.id}/enhanced-data/?${params}`);
             
             if (!response.ok) {
@@ -1243,18 +1411,25 @@ class DicomViewer {
             }
             
             const data = await response.json();
+            const loadTime = performance.now() - startTime;
+            console.log(`Image data loaded in ${loadTime.toFixed(2)}ms`);
             
             if (!data.image_data) {
                 throw new Error(data.error || 'No image data received from server');
             }
             
-            // Create and load the image with proper error handling
+            // Create and load the image with optimized loading
             const img = new Image();
             
-            // Set up image loading promise for better control
+            // Set up image loading promise with timeout
             const imageLoadPromise = new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error('Image loading timeout'));
+                }, 10000); // 10 second timeout
+                
                 img.onload = () => {
-                    console.log(`Image loaded successfully: ${img.width}x${img.height}`);
+                    clearTimeout(timeout);
+                    console.log(`Image rendered: ${img.width}x${img.height} in ${(performance.now() - startTime).toFixed(2)}ms total`);
                     
                     // Store image with enhanced metadata
                     this.currentImage = {
@@ -1272,52 +1447,245 @@ class DicomViewer {
                         window_width: this.windowWidth,
                         window_level: this.windowLevel,
                         original_width: data.metadata.columns || img.width,
-                        original_height: data.metadata.rows || img.height
+                        original_height: data.metadata.rows || img.height,
+                        load_time: loadTime,
+                        cached: false
                     };
+                    
+                    // Cache the image for faster subsequent access
+                    if (!this.imageCache) {
+                        this.imageCache = new Map();
+                    }
+                    this.imageCache.set(cacheKey, this.currentImage);
+                    
+                    // Limit cache size to prevent memory issues
+                    if (this.imageCache.size > 50) {
+                        const firstKey = this.imageCache.keys().next().value;
+                        this.imageCache.delete(firstKey);
+                    }
                     
                     resolve();
                 };
                 
                 img.onerror = (error) => {
+                    clearTimeout(timeout);
                     console.error('Image loading failed:', error);
-                    console.error('Image source length:', data.image_data ? data.image_data.length : 'N/A');
                     reject(new Error('Failed to decode image data'));
                 };
             });
             
-            // Set image source (base64 data URL)
+            // Set image source with optimized loading
+            img.decoding = 'async'; // Use async decoding for better performance
             img.src = data.image_data;
             
             // Wait for image to load
             await imageLoadPromise;
             
-            // Update display and UI after successful loading
-            this.resizeCanvas(); // Ensure canvas is properly sized
+            // Update display immediately with fast render
+            this.hideLoadingState();
+            this.resizeCanvas();
+            this.updateDisplayFast();
             
-            // Give a small delay to ensure image is fully processed
+            // Load measurements and annotations in parallel
+            const measurementsPromise = this.loadMeasurements();
+            const annotationsPromise = this.loadAnnotations();
+            
+            // Update UI elements immediately
+            this.updatePatientInfo();
+            this.updateSliders();
+            
+            // Wait for measurements and annotations to load
+            await Promise.all([measurementsPromise, annotationsPromise]);
+            
+            // Preload adjacent images for smoother navigation
+            this.preloadAdjacentImages();
+            
+            // Schedule high-quality enhancement after initial display
             setTimeout(() => {
-                this.updateDisplay();
-                this.loadMeasurements();
-                this.loadAnnotations();
-                this.updatePatientInfo();
-                this.updateSliders();
-            }, 50);
-            
-            console.log('Image loading completed successfully');
+                this.enhanceCurrentImageQuality();
+            }, 100);
             
         } catch (error) {
-            console.error('Error loading image:', error);
-            this.showError(`Error loading image: ${error.message}`);
+            this.hideLoadingState();
+            console.error('Error loading current image:', error);
+            this.showError('Failed to load image: ' + error.message);
             
-            // Show error state in canvas
+            // Show error state on canvas
             this.ctx.fillStyle = '#000';
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             this.ctx.fillStyle = '#ff0000';
-            this.ctx.font = '14px Arial';
+            this.ctx.font = '16px Arial';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
-            this.ctx.fillText('Failed to load image', displayWidth / 2, displayHeight / 2 - 10);
-            this.ctx.fillText(error.message, displayWidth / 2, displayHeight / 2 + 10);
+            const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+            const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+            this.ctx.fillText('Failed to load image', displayWidth / 2, displayHeight / 2 - 20);
+            this.ctx.fillText(error.message, displayWidth / 2, displayHeight / 2 + 20);
+        }
+    }
+    
+    showLoadingState(message = 'Loading...') {
+        this.ctx.fillStyle = '#000';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.fillStyle = '#00ff00';
+        this.ctx.font = '16px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        this.ctx.fillText(message, displayWidth / 2, displayHeight / 2);
+    }
+    
+    hideLoadingState() {
+        // Clear any loading indicators
+        const loadingElements = document.querySelectorAll('.loading-indicator');
+        loadingElements.forEach(el => el.remove());
+    }
+    
+    updateDisplayFast() {
+        // Fast display update without expensive filters
+        if (!this.canvas || !this.ctx || !this.currentImage) {
+            return;
+        }
+        
+        // Clear canvas
+        this.ctx.fillStyle = '#000';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        const img = this.currentImage.image;
+        if (!img || !img.complete) {
+            return;
+        }
+        
+        // Fast rendering without expensive filters
+        this.ctx.imageSmoothingEnabled = false;
+        
+        const scale = this.getScale();
+        const scaledWidth = img.width * scale;
+        const scaledHeight = img.height * scale;
+        
+        const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        
+        const x = (displayWidth - scaledWidth) / 2 + this.panX;
+        const y = (displayHeight - scaledHeight) / 2 + this.panY;
+        
+        // Draw image quickly
+        this.ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
+        
+        // Update basic overlays
+        this.updateOverlayLabels();
+    }
+    
+    preloadAdjacentImages() {
+        // Preload next and previous images for smoother navigation
+        const preloadIndices = [];
+        
+        // Add next image
+        if (this.currentImageIndex < this.currentImages.length - 1) {
+            preloadIndices.push(this.currentImageIndex + 1);
+        }
+        
+        // Add previous image
+        if (this.currentImageIndex > 0) {
+            preloadIndices.push(this.currentImageIndex - 1);
+        }
+        
+        // Preload in background without blocking
+        preloadIndices.forEach(index => {
+            const imageData = this.currentImages[index];
+            const cacheKey = `${imageData.id}_${this.windowWidth}_${this.windowLevel}_${this.inverted}`;
+            
+            if (!this.imageCache || !this.imageCache.has(cacheKey)) {
+                // Preload with low priority
+                setTimeout(() => {
+                    this.preloadImage(imageData, cacheKey);
+                }, 200);
+            }
+        });
+    }
+    
+    async preloadImage(imageData, cacheKey) {
+        try {
+            const params = new URLSearchParams({
+                window_width: this.windowWidth,
+                window_level: this.windowLevel,
+                inverted: this.inverted,
+                high_quality: 'false',
+                fast_load: 'true',
+                format: 'jpeg',
+                quality: 80
+            });
+            
+            const response = await fetch(`/viewer/api/images/${imageData.id}/enhanced-data/?${params}`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.image_data) {
+                    const img = new Image();
+                    img.onload = () => {
+                        const imageObj = {
+                            image: img,
+                            metadata: data.metadata,
+                            id: imageData.id,
+                            cached: true,
+                            preloaded: true
+                        };
+                        
+                        if (!this.imageCache) {
+                            this.imageCache = new Map();
+                        }
+                        this.imageCache.set(cacheKey, imageObj);
+                        console.log(`Preloaded image ${imageData.id}`);
+                    };
+                    img.src = data.image_data;
+                }
+            }
+        } catch (error) {
+            console.log(`Failed to preload image ${imageData.id}:`, error.message);
+        }
+    }
+    
+    async enhanceCurrentImageQuality() {
+        // Enhance image quality after initial fast load
+        if (!this.currentImage || this.currentImage.enhanced) {
+            return;
+        }
+        
+        try {
+            const imageData = this.currentImages[this.currentImageIndex];
+            const params = new URLSearchParams({
+                window_width: this.windowWidth,
+                window_level: this.windowLevel,
+                inverted: this.inverted,
+                high_quality: 'true',
+                preserve_aspect: 'true',
+                density_enhancement: 'true',
+                resolution_factor: this.effectivePixelRatio || 1.25,
+                contrast_optimization: 'medical',
+                format: 'png' // Higher quality for enhancement
+            });
+            
+            const response = await fetch(`/viewer/api/images/${imageData.id}/enhanced-data/?${params}`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.image_data) {
+                    const enhancedImg = new Image();
+                    enhancedImg.onload = () => {
+                        // Replace current image with enhanced version
+                        this.currentImage.image = enhancedImg;
+                        this.currentImage.enhanced = true;
+                        
+                        // Update display with enhanced image
+                        this.updateDisplay();
+                        console.log('Image quality enhanced');
+                    };
+                    enhancedImg.src = data.image_data;
+                }
+            }
+        } catch (error) {
+            console.log('Failed to enhance image quality:', error.message);
         }
     }
     
@@ -1421,84 +1789,317 @@ class DicomViewer {
             return;
         }
         
-        // Clear the entire canvas first
+        // Set high-quality rendering properties for medical imaging
+        this.setupHighQualityRendering();
+        
+        // Clear the entire canvas with optimized clearing
         this.ctx.save();
         this.ctx.setTransform(1, 0, 0, 1, 0, 0);
         this.ctx.fillStyle = '#000';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.restore();
         
-        // Get canvas display dimensions
+        // Get canvas display dimensions with pixel ratio consideration
         const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
         const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
         
         if (!this.currentImage) {
-            // Show "No image loaded" state
+            // Show enhanced "No image loaded" state
             this.ctx.save();
             this.ctx.fillStyle = '#666';
-            this.ctx.font = '16px Arial';
+            this.ctx.font = '18px Arial';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
             this.ctx.fillText('No image loaded', displayWidth / 2, displayHeight / 2);
+            this.ctx.font = '14px Arial';
+            this.ctx.fillStyle = '#999';
+            this.ctx.fillText('Select a study or load DICOM files', displayWidth / 2, displayHeight / 2 + 25);
             this.ctx.restore();
             return;
         }
         
-        // Ensure image smoothing is disabled for medical images
-        this.ctx.imageSmoothingEnabled = false;
-        
-        // Calculate display parameters with improved scaling
         const img = this.currentImage.image;
         if (!img || !img.complete) {
-            console.warn('Image not loaded or complete');
+            this.showLoadingState('Rendering image...');
             return;
         }
         
-        const scale = this.getScale();
-        
+        // Calculate optimal scaling with sub-pixel precision
+        const scale = this.getOptimalScale();
         const scaledWidth = img.width * scale;
         const scaledHeight = img.height * scale;
         
-        // Center the image with pan offset
-        const x = (displayWidth - scaledWidth) / 2 + this.panX;
-        const y = (displayHeight - scaledHeight) / 2 + this.panY;
+        // Center the image with pan offset and pixel-perfect alignment
+        const x = Math.round((displayWidth - scaledWidth) / 2 + this.panX);
+        const y = Math.round((displayHeight - scaledHeight) / 2 + this.panY);
         
-        // Draw image with enhanced quality and density optimization
+        // Apply medical imaging optimizations
         this.ctx.save();
         
-        // Apply enhanced rendering settings before drawing
-        this.applyEnhancedRenderingSettings();
+        // Set optimal rendering context for medical images
+        this.applyMedicalImagingOptimizations();
         
-        // Apply advanced filtering for better density visualization
-        const filters = this.buildEnhancedFilters();
-        if (filters) {
-            this.ctx.filter = filters;
+        // Apply advanced window/level and enhancement filters
+        const enhancementFilters = this.buildMedicalEnhancementFilters();
+        if (enhancementFilters) {
+            this.ctx.filter = enhancementFilters;
         }
         
-        // Apply window/level inversion if needed
-        if (this.inverted && !filters.includes('invert')) {
+        // Apply inversion if needed
+        if (this.inverted && !this.ctx.filter.includes('invert')) {
             this.ctx.filter = (this.ctx.filter === 'none' ? '' : this.ctx.filter + ' ') + 'invert(1)';
         }
         
         try {
-            // Use enhanced drawing with pixel-perfect alignment
-            const pixelAlignedX = Math.round(x * this.effectivePixelRatio) / this.effectivePixelRatio;
-            const pixelAlignedY = Math.round(y * this.effectivePixelRatio) / this.effectivePixelRatio;
-            const pixelAlignedWidth = Math.round(scaledWidth * this.effectivePixelRatio) / this.effectivePixelRatio;
-            const pixelAlignedHeight = Math.round(scaledHeight * this.effectivePixelRatio) / this.effectivePixelRatio;
+            // High-quality image rendering with medical imaging optimizations
+            if (this.effectivePixelRatio && this.effectivePixelRatio > 1) {
+                // High-DPI rendering for crisp medical images
+                const pixelAlignedX = Math.round(x * this.effectivePixelRatio) / this.effectivePixelRatio;
+                const pixelAlignedY = Math.round(y * this.effectivePixelRatio) / this.effectivePixelRatio;
+                const pixelAlignedWidth = Math.round(scaledWidth * this.effectivePixelRatio) / this.effectivePixelRatio;
+                const pixelAlignedHeight = Math.round(scaledHeight * this.effectivePixelRatio) / this.effectivePixelRatio;
+                
+                this.ctx.drawImage(img, pixelAlignedX, pixelAlignedY, pixelAlignedWidth, pixelAlignedHeight);
+            } else {
+                // Standard rendering with pixel alignment
+                this.ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
+            }
             
-            this.ctx.drawImage(img, pixelAlignedX, pixelAlignedY, pixelAlignedWidth, pixelAlignedHeight);
-            console.log(`Enhanced image drawn: ${pixelAlignedWidth.toFixed(1)}x${pixelAlignedHeight.toFixed(1)} at (${pixelAlignedX.toFixed(1)}, ${pixelAlignedY.toFixed(1)}), scale: ${scale.toFixed(3)}`);
+            console.log(`Enhanced medical image rendered: ${scaledWidth.toFixed(1)}x${scaledHeight.toFixed(1)} at (${x.toFixed(1)}, ${y.toFixed(1)}), scale: ${scale.toFixed(3)}`);
         } catch (error) {
-            console.error('Error drawing enhanced image:', error);
-            // Fallback to standard drawing
+            console.error('Error drawing enhanced medical image:', error);
+            // Fallback to basic rendering
+            this.ctx.filter = 'none';
             this.ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
         }
         
         this.ctx.restore();
         
-        // Update overlay labels with current image info
-        this.updateOverlayLabels();
+        // Apply post-processing enhancements for medical visualization
+        this.applyPostProcessingEnhancements();
+        
+        // Draw medical imaging overlays
+        this.drawMedicalOverlays();
+        
+        // Update overlay labels with enhanced information
+        this.updateEnhancedOverlayLabels();
+        
+        // Update canvas quality indicator
+        this.updateQualityIndicator();
+    }
+    
+    setupHighQualityRendering() {
+        // Configure canvas for optimal medical image rendering
+        this.ctx.imageSmoothingEnabled = false; // Preserve medical image sharpness
+        this.ctx.imageSmoothingQuality = 'high';
+        
+        // Set effective pixel ratio for high-DPI displays
+        this.effectivePixelRatio = window.devicePixelRatio || 1;
+        
+        // Ensure canvas matches device pixel ratio for crisp rendering
+        if (this.canvas.width !== this.canvas.offsetWidth * this.effectivePixelRatio) {
+            const rect = this.canvas.getBoundingClientRect();
+            this.canvas.width = rect.width * this.effectivePixelRatio;
+            this.canvas.height = rect.height * this.effectivePixelRatio;
+            this.ctx.scale(this.effectivePixelRatio, this.effectivePixelRatio);
+        }
+    }
+    
+    getOptimalScale() {
+        if (!this.currentImage || !this.currentImage.image) {
+            return 1.0;
+        }
+        
+        const img = this.currentImage.image;
+        const displayWidth = this.canvas.style.width ? parseInt(this.canvas.style.width) : this.canvas.width;
+        const displayHeight = this.canvas.style.height ? parseInt(this.canvas.style.height) : this.canvas.height;
+        
+        // Calculate base scale to fit image in viewport
+        const scaleX = displayWidth / img.width;
+        const scaleY = displayHeight / img.height;
+        const baseScale = Math.min(scaleX, scaleY) * 0.9; // 90% to leave some margin
+        
+        // Apply user zoom factor
+        const finalScale = baseScale * this.zoomFactor;
+        
+        // Ensure minimum readable scale for medical images
+        const minScale = 0.1;
+        const maxScale = 10.0;
+        
+        return Math.max(minScale, Math.min(maxScale, finalScale));
+    }
+    
+    applyMedicalImagingOptimizations() {
+        // Disable anti-aliasing for crisp medical images
+        this.ctx.imageSmoothingEnabled = false;
+        
+        // Set composite operation for optimal medical image display
+        this.ctx.globalCompositeOperation = 'source-over';
+        
+        // Optimize for medical image contrast
+        this.ctx.globalAlpha = 1.0;
+    }
+    
+    buildMedicalEnhancementFilters() {
+        const filters = [];
+        
+        // Auto-detect optimal tissue contrast enhancement
+        const tissueType = this.autoDetectTissueType();
+        
+        // Apply tissue-specific enhancement
+        switch (tissueType) {
+            case 'bone':
+                filters.push('contrast(1.3)');
+                filters.push('brightness(1.1)');
+                break;
+            case 'lung':
+                filters.push('contrast(1.4)');
+                filters.push('brightness(0.9)');
+                break;
+            case 'soft':
+                filters.push('contrast(1.2)');
+                filters.push('brightness(1.05)');
+                break;
+            case 'brain':
+                filters.push('contrast(1.25)');
+                filters.push('brightness(1.0)');
+                break;
+            default:
+                filters.push('contrast(1.15)');
+                filters.push('brightness(1.02)');
+        }
+        
+        // Apply manual adjustments if set
+        if (this.manualBrightness !== null) {
+            const brightnessValue = 0.5 + (this.manualBrightness / 100);
+            filters.push(`brightness(${brightnessValue})`);
+        }
+        
+        if (this.manualContrast !== null) {
+            const contrastValue = 0.5 + (this.manualContrast / 100);
+            filters.push(`contrast(${contrastValue})`);
+        }
+        
+        // Apply density enhancement for better tissue differentiation
+        if (this.densityMultiplier !== 1.0) {
+            const enhancedContrast = 1.0 + ((this.densityMultiplier - 1.0) * 0.3);
+            filters.push(`contrast(${enhancedContrast})`);
+        }
+        
+        return filters.length > 0 ? filters.join(' ') : 'none';
+    }
+    
+    applyPostProcessingEnhancements() {
+        // Apply histogram equalization for better contrast (simplified)
+        if (this.currentImage && this.currentImage.metadata) {
+            // Could implement histogram equalization here for enhanced contrast
+            // This would require image data manipulation which is complex in canvas
+        }
+    }
+    
+    drawMedicalOverlays() {
+        // Draw measurements with enhanced visibility
+        this.drawMeasurements();
+        
+        // Draw annotations with medical context
+        this.drawAnnotations();
+        
+        // Draw crosshair if enabled
+        if (this.crosshair) {
+            this.drawEnhancedCrosshair();
+        }
+        
+        // Draw AI highlights if enabled
+        if (this.aiAnalysisResults && this.showAIHighlights) {
+            this.drawAIHighlights();
+        }
+        
+        // Draw Hounsfield Unit regions if active
+        if (this.activeTool === 'hu') {
+            this.drawHURegions();
+        }
+    }
+    
+    drawEnhancedCrosshair() {
+        this.ctx.save();
+        this.ctx.strokeStyle = '#00ffff';
+        this.ctx.lineWidth = 1;
+        this.ctx.setLineDash([8, 4]);
+        this.ctx.shadowColor = '#000';
+        this.ctx.shadowBlur = 2;
+        
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, centerY);
+        this.ctx.lineTo(this.canvas.width, centerY);
+        this.ctx.moveTo(centerX, 0);
+        this.ctx.lineTo(centerX, this.canvas.height);
+        this.ctx.stroke();
+        
+        this.ctx.restore();
+    }
+    
+    updateEnhancedOverlayLabels() {
+        const wlInfo = document.getElementById('wl-info');
+        const zoomInfo = document.getElementById('zoom-info');
+        
+        if (!wlInfo || !zoomInfo) return;
+        
+        // Auto-detect tissue type and update display
+        const detectedTissue = this.autoDetectTissueType();
+        const tissueLabel = detectedTissue.charAt(0).toUpperCase() + detectedTissue.slice(1);
+        
+        // Enhanced overlay with performance and quality metrics
+        const loadTime = this.currentImage && this.currentImage.load_time ? `${this.currentImage.load_time.toFixed(0)}ms` : 'N/A';
+        const qualityStatus = this.currentImage && this.currentImage.enhanced ? 'Enhanced' : 'Standard';
+        const cacheStatus = this.currentImage && this.currentImage.cached ? 'Cached' : 'Live';
+        
+        wlInfo.innerHTML = `
+            WW: ${Math.round(this.windowWidth)}<br>
+            WL: ${Math.round(this.windowLevel)}<br>
+            Slice: ${this.currentImageIndex + 1}/${this.currentImages.length}<br>
+            <span style="color: #00ff88; font-size: 10px;">
+                Tissue: ${tissueLabel}<br>
+                Quality: ${qualityStatus}
+            </span>
+        `;
+        
+        zoomInfo.innerHTML = `
+            Zoom: ${Math.round(this.zoomFactor * 100)}%<br>
+            <span style="color: #00ff88; font-size: 9px;">
+                Load: ${loadTime}<br>
+                Cache: ${cacheStatus}<br>
+                DPI: ${this.effectivePixelRatio.toFixed(1)}x
+            </span>
+        `;
+    }
+    
+    updateQualityIndicator() {
+        // Add a visual quality indicator in the corner
+        if (!this.currentImage) return;
+        
+        this.ctx.save();
+        const x = 10;
+        const y = this.canvas.height - 30;
+        
+        // Background
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        this.ctx.fillRect(x, y, 80, 20);
+        
+        // Quality indicator
+        const isEnhanced = this.currentImage.enhanced;
+        const isCached = this.currentImage.cached;
+        
+        this.ctx.fillStyle = isEnhanced ? '#00ff00' : '#ffaa00';
+        this.ctx.font = '10px Arial';
+        this.ctx.fillText(isEnhanced ? 'HQ' : 'STD', x + 5, y + 12);
+        
+        this.ctx.fillStyle = isCached ? '#00aa00' : '#aa0000';
+        this.ctx.fillText(isCached ? 'CACHE' : 'LIVE', x + 30, y + 12);
+        
+        this.ctx.restore();
     }
     
     // Enhanced scale calculation with better quality preservation
@@ -2495,24 +3096,8 @@ class DicomViewer {
     }
     
     redraw() {
-        // First update the main image display
+        // Force a complete redraw of the canvas
         this.updateDisplay();
-        
-        // Then draw overlays in proper order
-        if (this.currentImage) {
-            this.drawMeasurements();
-            this.drawAnnotations();
-            this.drawAIHighlights();
-            this.drawVolumeContour();
-            
-            // Draw crosshair if enabled
-            if (this.crosshair) {
-                this.drawCrosshair();
-            }
-        }
-        
-        // Always update overlay labels last
-        this.updateOverlayLabels();
     }
 
     performAIAnalysis(analysisType = 'general') {
@@ -2691,40 +3276,123 @@ ${this.aiAnalysisResults.recommendations || 'None'}`;
         const seriesId = this.currentSeries ? this.currentSeries.id : null;
         
         if (!seriesId) {
-            alert('Please select a series first');
+            this.showError('Please select a series first to perform 3D reconstruction');
             return;
         }
-        
-        // Show a simple progress indicator
+
+        // Validate reconstruction type
+        const validTypes = ['mpr', 'volume', 'bone', 'vessel', 'surface'];
+        if (!validTypes.includes(type)) {
+            this.showError(`Invalid reconstruction type: ${type}`);
+            return;
+        }
+
+        // Check if we have enough images for reconstruction
+        if (!this.currentImages || this.currentImages.length < 5) {
+            this.showError('At least 5 images are required for 3D reconstruction');
+            return;
+        }
+
+        // Close dropdown menu after selection
+        const dropdown = document.querySelector('.dropdown-menu.reconstruction-dropdown');
+        if (dropdown) {
+            dropdown.style.display = 'none';
+        }
+
+        // Show enhanced progress indicator with estimated time
         const progressOverlay = document.createElement('div');
         progressOverlay.className = 'reconstruction-progress';
+        progressOverlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            color: white;
+            font-family: Arial, sans-serif;
+        `;
+        
+        const typeNames = {
+            'mpr': 'Multi-Planar Reconstruction',
+            'volume': 'Volume Rendering',
+            'bone': '3D Bone Reconstruction',
+            'vessel': 'Vessel Analysis',
+            'surface': 'Surface Rendering'
+        };
+
         progressOverlay.innerHTML = `
-            <div class="progress-content">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>Generating ${type.toUpperCase()} reconstruction...</p>
+            <div class="progress-content" style="text-align: center; padding: 40px; background: rgba(0, 0, 0, 0.9); border-radius: 10px; border: 1px solid #00ff00;">
+                <div style="font-size: 20px; margin-bottom: 20px; color: #00ff00;">
+                    <i class="fas fa-cube fa-spin" style="margin-right: 10px;"></i>
+                    Generating ${typeNames[type] || type.toUpperCase()}
+                </div>
+                <div class="progress-bar" style="width: 300px; height: 6px; background: #333; border-radius: 3px; margin: 20px auto; overflow: hidden;">
+                    <div class="progress-fill" style="height: 100%; background: linear-gradient(to right, #00ff00, #00aa00); width: 0%; transition: width 0.3s;"></div>
+                </div>
+                <div style="color: #ccc; font-size: 14px;">
+                    Processing ${this.currentImages.length} images...<br>
+                    <span style="font-size: 12px; color: #888;">Estimated time: ${Math.ceil(this.currentImages.length / 10)} seconds</span>
+                </div>
+                <button onclick="this.parentElement.parentElement.remove()" style="margin-top: 20px; padding: 8px 16px; background: #ff4444; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Cancel
+                </button>
             </div>
         `;
         document.body.appendChild(progressOverlay);
-        
-        // Use default parameters for quick reconstruction
-        const windowCenter = 40;
-        const windowWidth = 400;
-        const thresholdMin = -1000;
-        const thresholdMax = 1000;
-        
+
+        // Animate progress bar
+        const progressFill = progressOverlay.querySelector('.progress-fill');
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+            progress += Math.random() * 15;
+            if (progress > 90) progress = 90;
+            progressFill.style.width = progress + '%';
+        }, 300);
+
+        // Use current window/level settings for better reconstruction
+        const windowCenter = this.windowLevel;
+        const windowWidth = this.windowWidth;
+        const thresholdMin = this.windowLevel - (this.windowWidth / 2);
+        const thresholdMax = this.windowLevel + (this.windowWidth / 2);
+
         const url = `/viewer/api/series/${seriesId}/3d-reconstruction/?type=${type}&window_center=${windowCenter}&window_width=${windowWidth}&threshold_min=${thresholdMin}&threshold_max=${thresholdMax}`;
-        
-        fetch(url)
-            .then(response => response.json())
-            .then(data => {
+
+        fetch(url, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        })
+        .then(response => {
+            clearInterval(progressInterval);
+            progressFill.style.width = '100%';
+            
+            if (!response.ok) {
+                throw new Error(`Server error ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            setTimeout(() => {
                 progressOverlay.remove();
+                if (data.error) {
+                    throw new Error(data.error);
+                }
                 this.show3DResult(data, type);
-            })
-            .catch(error => {
-                progressOverlay.remove();
-                alert('3D reconstruction failed: ' + error.message);
-                console.error('3D reconstruction error:', error);
-            });
+            }, 500); // Small delay to show completion
+        })
+        .catch(error => {
+            clearInterval(progressInterval);
+            progressOverlay.remove();
+            console.error('3D reconstruction error:', error);
+            this.showError(`3D reconstruction failed: ${error.message}. Please try again or contact support.`);
+        });
     }
     
     create3DModal() {
@@ -3531,6 +4199,54 @@ Pixel Count: ${data.pixel_count}`;
         checkProgress();
     }
     
+    // Compatibility methods to ensure smooth operation
+    updateMeasurements() {
+        // Alias for updateMeasurementsList for compatibility
+        if (this.updateMeasurementsList) {
+            this.updateMeasurementsList();
+        }
+    }
+    
+    // Fix for missing drawHURegions method
+    drawHURegions() {
+        // Draw Hounsfield Unit measurement regions if any exist
+        if (this.volumeContour && this.volumeContour.length > 0) {
+            this.ctx.save();
+            this.ctx.strokeStyle = '#ffaa00';
+            this.ctx.lineWidth = 2;
+            this.ctx.setLineDash([5, 5]);
+            
+            this.ctx.beginPath();
+            this.volumeContour.forEach((point, index) => {
+                if (index === 0) {
+                    this.ctx.moveTo(point.x, point.y);
+                } else {
+                    this.ctx.lineTo(point.x, point.y);
+                }
+            });
+            this.ctx.closePath();
+            this.ctx.stroke();
+            
+            this.ctx.restore();
+        }
+    }
+    
+    // Enhanced initialization to prevent errors
+    initializeEnhancedViewer() {
+        // Ensure all required properties are initialized
+        this.imageCache = this.imageCache || new Map();
+        this.effectivePixelRatio = window.devicePixelRatio || 1;
+        
+        // Set up performance monitoring
+        if (window.performance && window.performance.mark) {
+            window.performance.mark('dicom-viewer-init-start');
+        }
+        
+        // Initialize with optimized settings for medical imaging
+        this.setupHighQualityRendering();
+        
+        console.log('Enhanced DICOM viewer initialized with optimizations');
+    }
 }
 
 // Initialize the viewer when the page loads
