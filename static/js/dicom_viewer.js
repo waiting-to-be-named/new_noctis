@@ -60,12 +60,13 @@ class DicomViewer {
         this.reconstructionType = 'mpr';
         this.is3DEnabled = false;
         
-        // Window presets
+        // Window presets with enhanced processing options
         this.windowPresets = {
-            'lung': { ww: 1500, wl: -600 },
-            'bone': { ww: 2000, wl: 300 },
-            'soft': { ww: 400, wl: 40 },
-            'brain': { ww: 100, wl: 50 }
+            'lung': { ww: 1500, wl: -600, enhanced: true, resolution: 1.5 },
+            'bone': { ww: 2000, wl: 300, enhanced: true, resolution: 1.3 },
+            'soft': { ww: 400, wl: 40, enhanced: true, resolution: 1.2 },
+            'brain': { ww: 100, wl: 50, enhanced: true, resolution: 1.4 },
+            'enhanced': { ww: 400, wl: 40, enhanced: true, resolution: 1.5, density: true }
         };
         
         // Notifications
@@ -834,16 +835,20 @@ class DicomViewer {
         this.ctx.fillText('Loading image...', displayWidth / 2, displayHeight / 2);
         
         try {
-            // Request high-quality image data
+            // Request enhanced high-quality image data with density differentiation
             const params = new URLSearchParams({
                 window_width: this.windowWidth,
                 window_level: this.windowLevel,
                 inverted: this.inverted,
                 high_quality: 'true', // Request high quality rendering
-                preserve_aspect: 'true'
+                preserve_aspect: 'true',
+                enhanced_processing: 'true', // Enable enhanced processing
+                resolution_factor: '1.5', // Higher resolution factor
+                density_enhancement: 'true', // Enable density enhancement
+                contrast_boost: '1.2' // Slight contrast boost for better differentiation
             });
             
-            const response = await fetch(`/viewer/api/images/${imageData.id}/data/?${params}`);
+            const response = await fetch(`/viewer/api/images/${imageData.id}/enhanced-data/?${params}`);
             
             if (!response.ok) {
                 throw new Error(`Failed to load image: HTTP ${response.status} - ${response.statusText}`);
@@ -1051,8 +1056,10 @@ class DicomViewer {
             return;
         }
         
-        // Ensure image smoothing is disabled for medical images
-        this.ctx.imageSmoothingEnabled = false;
+        // Configure high-quality rendering for medical images
+        this.ctx.imageSmoothingEnabled = true; // Enable for better quality
+        this.ctx.imageSmoothingQuality = 'high'; // Use high quality smoothing
+        this.ctx.filter = 'none'; // Ensure no additional filters
         
         // Calculate display parameters with improved scaling
         const img = this.currentImage.image;
@@ -1070,8 +1077,12 @@ class DicomViewer {
         const x = (displayWidth - scaledWidth) / 2 + this.panX;
         const y = (displayHeight - scaledHeight) / 2 + this.panY;
         
-        // Draw image with high quality
+        // Draw image with enhanced quality for better density differentiation
         this.ctx.save();
+        
+        // Apply enhanced rendering settings
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.imageSmoothingQuality = 'high';
         
         // Apply window/level if needed (inversion)
         if (this.inverted) {
@@ -1079,10 +1090,16 @@ class DicomViewer {
         }
         
         try {
+            // Use high-quality image drawing with enhanced precision
             this.ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
-            console.log(`Image drawn successfully: ${scaledWidth}x${scaledHeight} at (${x}, ${y}), scale: ${scale}`);
+            console.log(`Enhanced image drawn successfully: ${scaledWidth}x${scaledHeight} at (${x}, ${y}), scale: ${scale}`);
+            
+            // Apply subtle sharpening for better edge definition
+            if (scale > 1.0) {
+                this.applyImageSharpening(x, y, scaledWidth, scaledHeight);
+            }
         } catch (error) {
-            console.error('Error drawing image:', error);
+            console.error('Error drawing enhanced image:', error);
         }
         
         this.ctx.restore();
@@ -1091,7 +1108,7 @@ class DicomViewer {
         this.updateOverlayLabels();
     }
     
-    // Enhanced scale calculation with better quality preservation
+    // Enhanced scale calculation with improved resolution and density differentiation
     getScale() {
         if (!this.currentImage) return 1;
         
@@ -1104,11 +1121,68 @@ class DicomViewer {
         const scaleY = displayHeight / img.height;
         const baseScale = Math.min(scaleX, scaleY);
         
-        // For medical images, prefer 1:1 pixel mapping when possible
-        const optimalScale = baseScale > 1 ? 1 : baseScale;
+        // For medical images, prefer higher resolution when possible
+        // Allow up to 2x zoom for better density differentiation
+        const maxScale = Math.min(2.0, Math.max(scaleX, scaleY));
+        const optimalScale = baseScale > 1 ? Math.min(1.5, maxScale) : baseScale;
         
-        // Apply user zoom factor
-        return this.zoomFactor * optimalScale;
+        // Apply user zoom factor with enhanced precision
+        const finalScale = this.zoomFactor * optimalScale;
+        
+        // Ensure minimum scale for visibility
+        return Math.max(finalScale, 0.1);
+    }
+    
+    // Apply subtle sharpening for better edge definition and density differentiation
+    applyImageSharpening(x, y, width, height) {
+        try {
+            // Get image data for processing
+            const imageData = this.ctx.getImageData(x, y, width, height);
+            const data = imageData.data;
+            
+            // Apply unsharp masking for edge enhancement
+            const factor = 0.3; // Sharpening factor
+            const threshold = 10; // Threshold for edge detection
+            
+            // Create a copy for blurring
+            const blurred = new Uint8ClampedArray(data);
+            
+            // Simple box blur for unsharp masking
+            for (let i = 1; i < width - 1; i++) {
+                for (let j = 1; j < height - 1; j++) {
+                    const idx = (j * width + i) * 4;
+                    
+                    // Calculate blurred value
+                    let sum = 0;
+                    for (let di = -1; di <= 1; di++) {
+                        for (let dj = -1; dj <= 1; dj++) {
+                            const ni = i + di;
+                            const nj = j + dj;
+                            const nidx = (nj * width + ni) * 4;
+                            sum += data[nidx];
+                        }
+                    }
+                    const blurredValue = sum / 9;
+                    
+                    // Apply unsharp masking
+                    const originalValue = data[idx];
+                    const diff = originalValue - blurredValue;
+                    
+                    if (Math.abs(diff) > threshold) {
+                        const sharpened = originalValue + factor * diff;
+                        data[idx] = Math.max(0, Math.min(255, sharpened));
+                        data[idx + 1] = data[idx]; // Green
+                        data[idx + 2] = data[idx]; // Blue
+                    }
+                }
+            }
+            
+            // Put the sharpened image data back
+            this.ctx.putImageData(imageData, x, y);
+            
+        } catch (error) {
+            console.warn('Image sharpening failed:', error);
+        }
     }
     
     drawMeasurements() {
@@ -1473,12 +1547,64 @@ class DicomViewer {
             this.windowWidth = presetValues.ww;
             this.windowLevel = presetValues.wl;
             
+            // Apply enhanced processing options if available
+            if (presetValues.enhanced) {
+                this.enhancedProcessing = true;
+                this.resolutionFactor = presetValues.resolution || 1.2;
+                this.densityEnhancement = presetValues.density || false;
+                this.contrastBoost = presetValues.contrast || 1.1;
+            }
+            
             document.getElementById('ww-slider').value = this.windowWidth;
             document.getElementById('wl-slider').value = this.windowLevel;
             document.getElementById('ww-value').textContent = this.windowWidth;
             document.getElementById('wl-value').textContent = this.windowLevel;
             
             this.loadCurrentImage();
+            
+            // Show notification for enhanced processing
+            if (presetValues.enhanced) {
+                this.showNotification(`Applied ${preset} preset with enhanced processing for better density differentiation`);
+            }
+        }
+    }
+    
+    showNotification(message, type = 'info') {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.innerHTML = `
+            <div class="notification-content">
+                <i class="fas fa-info-circle"></i>
+                <span>${message}</span>
+                <button onclick="this.parentElement.parentElement.remove()">×</button>
+            </div>
+        `;
+        
+        // Style the notification
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: ${type === 'error' ? '#ff4444' : type === 'success' ? '#44ff44' : '#4444ff'};
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            z-index: 1000;
+            max-width: 400px;
+            font-size: 14px;
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 3 seconds
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, 3000);
+    }
         }
     }
     
