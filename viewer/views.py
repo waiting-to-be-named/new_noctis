@@ -3036,12 +3036,15 @@ def get_enhanced_image_data(request, image_id):
         image = DicomImage.objects.get(id=image_id)
         print(f"Found image: {image}, file_path: {image.file_path}")
         
-        # Get query parameters with enhanced options
+        # Get query parameters with enhanced options for density differentiation
         window_width = request.GET.get('window_width', image.window_width)
         window_level = request.GET.get('window_level', image.window_center)
         inverted = request.GET.get('inverted', 'false').lower() == 'true'
         high_quality = request.GET.get('high_quality', 'false').lower() == 'true'
         preserve_aspect = request.GET.get('preserve_aspect', 'true').lower() == 'true'
+        density_enhancement = request.GET.get('density_enhancement', 'false').lower() == 'true'
+        resolution_factor = float(request.GET.get('resolution_factor', 1.0))
+        contrast_optimization = request.GET.get('contrast_optimization', 'standard')
         
         # Set defaults if None
         if window_width:
@@ -3055,15 +3058,23 @@ def get_enhanced_image_data(request, image_id):
             except ValueError:
                 window_level = 40
         
-        print(f"Processing image with WW: {window_width}, WL: {window_level}, inverted: {inverted}, high_quality: {high_quality}")
+        print(f"Processing image with WW: {window_width}, WL: {window_level}, inverted: {inverted}, high_quality: {high_quality}, density_enhancement: {density_enhancement}")
         
-        # Use enhanced processing for high quality requests
+        # Use enhanced processing for high quality requests with medical optimization
         if high_quality:
+            # Apply contrast optimization based on request type
+            if contrast_optimization == 'medical':
+                contrast_boost = 1.15  # Enhanced contrast for medical imaging
+                effective_resolution_factor = max(1.0, min(2.0, resolution_factor))  # Clamp resolution factor
+            else:
+                contrast_boost = 1.1
+                effective_resolution_factor = resolution_factor
+            
             image_base64 = image.get_enhanced_processed_image_base64(
                 window_width, window_level, inverted, 
-                resolution_factor=1.5,  # Enhance resolution
-                density_enhancement=True,  # Better tissue differentiation
-                contrast_boost=1.1  # Slight contrast enhancement
+                resolution_factor=effective_resolution_factor,
+                density_enhancement=density_enhancement,
+                contrast_boost=contrast_boost
             )
         else:
             image_base64 = image.get_processed_image_base64(window_width, window_level, inverted)
