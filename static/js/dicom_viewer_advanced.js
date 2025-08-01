@@ -47,7 +47,7 @@ class AdvancedDicomViewer {
             ]
         });
 
-        // Core elements
+        // Core elements with better error checking
         this.canvas = document.getElementById('dicom-canvas-advanced');
         if (!this.canvas) {
             console.error('Canvas element with ID "dicom-canvas-advanced" not found!');
@@ -57,6 +57,7 @@ class AdvancedDicomViewer {
                 const canvas = document.createElement('canvas');
                 canvas.id = 'dicom-canvas-advanced';
                 canvas.className = 'dicom-canvas-advanced';
+                canvas.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000;';
                 canvasContainer.appendChild(canvas);
                 this.canvas = canvas;
                 console.log('Created canvas element');
@@ -182,8 +183,10 @@ class AdvancedDicomViewer {
 
         // Auto-load study if provided, otherwise load available studies
         if (initialStudyId) {
+            console.log(`Loading initial study ID: ${initialStudyId}`);
             this.loadStudy(initialStudyId);
         } else {
+            console.log('No initial study ID provided, loading available studies');
             this.loadAvailableStudies();
         }
 
@@ -193,21 +196,37 @@ class AdvancedDicomViewer {
         // Start performance monitoring
         this.startPerformanceMonitoring();
 
+        console.log('Advanced DICOM Viewer Pro initialized successfully!');
         this.notyf.success('Advanced DICOM Viewer Pro initialized successfully!');
     }
 
     initializeViewer() {
-        // Set canvas size
-        this.resizeCanvas();
+        // Set canvas size with error handling
+        try {
+            this.resizeCanvas();
+        } catch (error) {
+            console.error('Error resizing canvas:', error);
+            this.notyf.error('Failed to initialize canvas size');
+        }
         
         // Initialize overlays
-        this.initializeOverlays();
+        try {
+            this.initializeOverlays();
+        } catch (error) {
+            console.error('Error initializing overlays:', error);
+        }
         
         // Set up resize observer
         if (window.ResizeObserver) {
             this.resizeObserver = new ResizeObserver(() => {
-                this.resizeCanvas();
-                this.render();
+                try {
+                    this.resizeCanvas();
+                    if (this.currentImage) {
+                        this.render();
+                    }
+                } catch (error) {
+                    console.error('Error during resize:', error);
+                }
             });
             this.resizeObserver.observe(this.canvas.parentElement);
         }
@@ -667,6 +686,7 @@ class AdvancedDicomViewer {
     // Image loading and management
     async loadAvailableStudies() {
         try {
+            console.log('Loading available studies...');
             this.updateStatus('Loading available studies...');
             
             const response = await fetch('/viewer/api/studies/');
@@ -675,13 +695,22 @@ class AdvancedDicomViewer {
             }
             
             const studies = await response.json();
-            this.displayStudiesList(studies);
+            console.log(`Found ${studies.length} studies:`, studies);
             
-            this.updateStatus('Select a study to view');
+            if (studies.length > 0) {
+                // Auto-load the first study if available
+                console.log(`Auto-loading first study: ${studies[0].id}`);
+                this.loadStudy(studies[0].id);
+            } else {
+                this.displayStudiesList(studies);
+                this.updateStatus('No studies available - upload DICOM files to get started');
+                this.showErrorOnCanvas('No DICOM studies found\nUpload DICOM files to begin viewing');
+            }
         } catch (error) {
             console.error('Error loading studies:', error);
             this.notyf.error(`Failed to load studies: ${error.message}`);
             this.updateStatus('Error loading studies');
+            this.showErrorOnCanvas('Failed to load studies\nCheck console for details');
         }
     }
 
@@ -823,14 +852,19 @@ class AdvancedDicomViewer {
 
     async loadImage(index) {
         try {
-            if (index < 0 || index >= this.currentImages.length) return;
+            if (index < 0 || index >= this.currentImages.length) {
+                console.warn(`Invalid image index: ${index}, available: ${this.currentImages.length}`);
+                return;
+            }
 
             this.currentImageIndex = index;
             const imageInfo = this.currentImages[index];
+            console.log(`Loading image ${index + 1}/${this.currentImages.length}, ID: ${imageInfo.id}`);
             
             // Check cache first
             const cacheKey = `image_${imageInfo.id}`;
             if (this.imageCache.has(cacheKey)) {
+                console.log('Image found in cache');
                 this.currentImage = this.imageCache.get(cacheKey);
                 this.processAndRenderImage();
                 return;
@@ -839,39 +873,72 @@ class AdvancedDicomViewer {
             this.updateStatus(`Loading image ${index + 1}/${this.currentImages.length}...`);
 
             const startTime = performance.now();
+            console.log(`Fetching image data from: /viewer/api/images/${imageInfo.id}/data/`);
+            
             const response = await fetch(`/viewer/api/images/${imageInfo.id}/data/`);
             if (!response.ok) {
-                throw new Error(`Failed to load image: ${response.statusText}`);
+                const errorText = await response.text();
+                console.error(`HTTP ${response.status}: ${errorText}`);
+                throw new Error(`Failed to load image: ${response.status} ${response.statusText}`);
             }
 
             const data = await response.json();
+            console.log('Received image data:', {
+                hasImageData: !!data.image_data,
+                imageDataLength: data.image_data ? data.image_data.length : 0,
+                metadata: data.metadata
+            });
+            
             if (!data.image_data) {
                 throw new Error('No image data received from server');
             }
             
             const img = new Image();
-            img.onload = () => {
-                this.currentImage = img;
-                this.currentImageMetadata = data.metadata || {};
-                this.cacheImage(cacheKey, img);
-                this.processAndRenderImage();
+            
+            // Set up promise-based loading for better error handling
+            const imageLoadPromise = new Promise((resolve, reject) => {
+                img.onload = () => {
+                    console.log(`Image loaded successfully: ${img.width}x${img.height}`);
+                    this.currentImage = img;
+                    this.currentImageMetadata = data.metadata || {};
+                    this.cacheImage(cacheKey, img);
+                    
+                    const loadTime = performance.now() - startTime;
+                    this.performanceMetrics.loadTime = loadTime;
+                    console.log(`Image load time: ${loadTime.toFixed(2)}ms`);
+                    
+                    resolve();
+                };
                 
-                const loadTime = performance.now() - startTime;
-                this.performanceMetrics.loadTime = loadTime;
-                this.updatePerformanceDisplay();
+                img.onerror = (error) => {
+                    console.error('Image load error:', error);
+                    reject(new Error('Failed to decode image data'));
+                };
                 
-                // Update image info display
-                this.updateImageInfo();
-            };
-            img.onerror = () => {
-                console.error('Failed to load image data');
-                this.notyf.error('Failed to load image');
-            };
+                // Set timeout for image loading
+                setTimeout(() => {
+                    reject(new Error('Image load timeout'));
+                }, 10000);
+            });
+            
+            // Start image loading
             img.src = data.image_data;
+            
+            // Wait for image to load
+            await imageLoadPromise;
+            
+            // Process and render the loaded image
+            this.processAndRenderImage();
+            this.updatePerformanceDisplay();
+            this.updateImageInfo();
 
         } catch (error) {
             console.error('Error loading image:', error);
             this.notyf.error(`Failed to load image: ${error.message}`);
+            this.updateStatus('Error loading image');
+            
+            // Show a placeholder or error message on canvas
+            this.showErrorOnCanvas(`Failed to load image: ${error.message}`);
         }
     }
 
@@ -952,41 +1019,75 @@ class AdvancedDicomViewer {
 
     // Rendering
     render() {
-        if (!this.currentImage) return;
+        if (!this.currentImage) {
+            console.log('No current image to render');
+            return;
+        }
 
         const startTime = performance.now();
         
-        // Clear canvas
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        // Clear canvas with black background
+        this.ctx.fillStyle = '#000000';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
         // Save context state
         this.ctx.save();
         
-        // Apply transformations
-        this.applyTransformations();
-        
-        // Draw image
-        if (this.imageData) {
-            // Create temporary canvas for processed image
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = this.imageData.width;
-            tempCanvas.height = this.imageData.height;
-            tempCtx.putImageData(this.imageData, 0, 0);
+        try {
+            // Apply transformations
+            this.applyTransformations();
             
-            this.ctx.drawImage(tempCanvas, 0, 0);
-        } else {
-            this.ctx.drawImage(this.currentImage, 0, 0);
+            // Draw image
+            if (this.imageData) {
+                // Create temporary canvas for processed image
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = this.imageData.width;
+                tempCanvas.height = this.imageData.height;
+                tempCtx.putImageData(this.imageData, 0, 0);
+                
+                console.log(`Drawing processed image: ${tempCanvas.width}x${tempCanvas.height}`);
+                this.ctx.drawImage(tempCanvas, 0, 0);
+            } else {
+                console.log(`Drawing original image: ${this.currentImage.width}x${this.currentImage.height}`);
+                this.ctx.drawImage(this.currentImage, 0, 0);
+            }
+        } catch (error) {
+            console.error('Error during image rendering:', error);
+            this.showErrorOnCanvas('Image rendering failed');
         }
         
         // Restore context state
         this.ctx.restore();
         
         // Update overlays
-        this.updateOverlays();
+        try {
+            this.updateOverlays();
+        } catch (error) {
+            console.error('Error updating overlays:', error);
+        }
         
         const renderTime = performance.now() - startTime;
         this.performanceMetrics.renderTime = renderTime;
+        console.log(`Render time: ${renderTime.toFixed(2)}ms`);
+    }
+    
+    showErrorOnCanvas(message) {
+        // Clear canvas with dark background
+        this.ctx.fillStyle = '#1a1a1a';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Draw error message
+        this.ctx.fillStyle = '#ff6666';
+        this.ctx.font = '16px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        
+        const x = this.canvas.width / 2;
+        const y = this.canvas.height / 2;
+        
+        this.ctx.fillText(message, x, y - 10);
+        this.ctx.fillText('Check console for details', x, y + 20);
     }
 
     applyTransformations() {
@@ -1469,8 +1570,30 @@ class AdvancedDicomViewer {
     resizeCanvas() {
         const container = this.canvas.parentElement;
         if (container) {
-            this.canvas.width = container.clientWidth;
-            this.canvas.height = container.clientHeight;
+            // Get computed styles to ensure we have the actual dimensions
+            const rect = container.getBoundingClientRect();
+            const computedStyle = window.getComputedStyle(container);
+            
+            // Use the actual visible dimensions
+            let width = rect.width;
+            let height = rect.height;
+            
+            // Fallback to client dimensions if rect is zero
+            if (width === 0) width = container.clientWidth || 800;
+            if (height === 0) height = container.clientHeight || 600;
+            
+            // Ensure minimum size
+            width = Math.max(width, 400);
+            height = Math.max(height, 300);
+            
+            console.log(`Resizing canvas to: ${width}x${height}`);
+            
+            this.canvas.width = width;
+            this.canvas.height = height;
+            
+            // Set CSS size to match canvas size for proper scaling
+            this.canvas.style.width = width + 'px';
+            this.canvas.style.height = height + 'px';
             
             // Re-enable high-quality rendering after resize
             this.ctx.imageSmoothingEnabled = false;
@@ -1478,9 +1601,15 @@ class AdvancedDicomViewer {
             this.ctx.webkitImageSmoothingEnabled = false;
             this.ctx.msImageSmoothingEnabled = false;
             
+            // Fill with black background
+            this.ctx.fillStyle = '#000000';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            
             if (this.currentImage) {
                 this.render();
             }
+        } else {
+            console.error('Canvas container not found for resizing');
         }
     }
 
