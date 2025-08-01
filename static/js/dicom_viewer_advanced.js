@@ -50,6 +50,22 @@ class AdvancedDicomViewer {
         // Core elements
         this.canvas = document.getElementById('dicom-canvas-advanced');
         if (!this.canvas) {
+            console.error('Canvas element with ID "dicom-canvas-advanced" not found!');
+            // Try to create canvas if it doesn't exist
+            const canvasContainer = document.getElementById('canvas-container');
+            if (canvasContainer) {
+                const canvas = document.createElement('canvas');
+                canvas.id = 'dicom-canvas-advanced';
+                canvas.className = 'dicom-canvas-advanced';
+                canvasContainer.appendChild(canvas);
+                this.canvas = canvas;
+                console.log('Created canvas element');
+            } else {
+                this.notyf.error('Canvas container not found! Viewer initialization failed.');
+                return;
+            }
+        }
+        if (!this.canvas) {
             this.notyf.error('Canvas element not found! Viewer initialization failed.');
             console.error('Canvas element not found!');
             return;
@@ -729,6 +745,7 @@ class AdvancedDicomViewer {
     }
 
     async loadStudy(studyId) {
+        console.log(`Loading study: ${studyId}`);
         try {
             this.showLoading(true);
             this.updateStatus('Loading study...');
@@ -1996,5 +2013,47 @@ class AdvancedDicomViewer {
     }
 }
 
-// Export the class for use
+
+        // Enhanced API call with better error handling
+        async makeAPICall(url, options = {}) {
+            try {
+                console.log(`Making API call to: ${url}`);
+                const response = await fetch(url, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': this.getCSRFToken(),
+                        ...options.headers
+                    },
+                    ...options
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`API call failed: ${response.status} - ${errorText}`);
+                    throw new Error(`API call failed: ${response.status} - ${response.statusText}`);
+                }
+                
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    return await response.json();
+                } else {
+                    return await response.text();
+                }
+            } catch (error) {
+                console.error(`API call error for ${url}:`, error);
+                throw error;
+            }
+        }
+        
+        getCSRFToken() {
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === 'csrftoken') {
+                    return value;
+                }
+            }
+            return '';
+        }
+    // Export the class for use
 window.AdvancedDicomViewer = AdvancedDicomViewer;

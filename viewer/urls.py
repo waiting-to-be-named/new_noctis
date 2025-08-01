@@ -85,4 +85,5 @@ urlpatterns = [
     path('api/worklist/', views.get_worklist, name='get_worklist'),
     path('api/worklist/create/', views.create_worklist_entry, name='create_worklist_entry'),
     path('api/worklist/<int:entry_id>/update/', views.update_worklist_entry, name='update_worklist_entry'),
+    path('api/test/', views.test_viewer_api, name='test_viewer_api'),
 ]

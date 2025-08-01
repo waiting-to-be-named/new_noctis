@@ -1693,6 +1693,88 @@ def get_study_images(request, study_id):
         return Response({'error': f'Server error: {str(e)}'}, status=500)
 
 
+
+def generate_synthetic_image(image, window_width=1500, window_level=-600, inverted=False):
+    """Generate synthetic image for testing when real DICOM files are not available"""
+    try:
+        import numpy as np
+        from PIL import Image as PILImage
+        import io
+        import base64
+        
+        width, height = 512, 512
+        
+        # Create different patterns based on image ID
+        x = np.linspace(-1, 1, width)
+        y = np.linspace(-1, 1, height)
+        X, Y = np.meshgrid(x, y)
+        R = np.sqrt(X**2 + Y**2)
+        
+        if image.id % 3 == 0:
+            # Concentric circles
+            image_array = ((np.sin(R * 10) + 1) * 127.5).astype(np.uint8)
+        elif image.id % 3 == 1:
+            # Grid pattern
+            image_array = ((np.sin(X * 20) * np.sin(Y * 20) + 1) * 127.5).astype(np.uint8)
+        else:
+            # Radial gradient
+            image_array = ((1 - R) * 255).clip(0, 255).astype(np.uint8)
+        
+        # Apply window/level
+        ww = float(window_width) if window_width else 1500
+        wl = float(window_level) if window_level else -600
+        window_min = wl - ww / 2
+        window_max = wl + ww / 2
+        
+        image_array = image_array.astype(np.float32)
+        image_array = (image_array - window_min) / (window_max - window_min) * 255
+        image_array = np.clip(image_array, 0, 255).astype(np.uint8)
+        
+        # Apply inversion
+        if inverted:
+            image_array = 255 - image_array
+        
+        # Convert to PIL Image
+        pil_image = PILImage.fromarray(image_array, mode='L')
+        
+        # Convert to base64
+        buffer = io.BytesIO()
+        pil_image.save(buffer, format='PNG')
+        image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        return f"data:image/png;base64,{image_base64}"
+        
+    except Exception as e:
+        print(f"Error generating synthetic image: {e}")
+        return generate_placeholder_image()
+
+def generate_placeholder_image():
+    """Generate a simple placeholder image"""
+    try:
+        import numpy as np
+        from PIL import Image as PILImage
+        import io
+        import base64
+        
+        width, height = 512, 512
+        image_array = np.zeros((height, width), dtype=np.uint8)
+        
+        # Create a simple gradient
+        for i in range(height):
+            for j in range(width):
+                image_array[i, j] = int((i + j) / (height + width) * 255)
+        
+        pil_image = PILImage.fromarray(image_array, mode='L')
+        buffer = io.BytesIO()
+        pil_image.save(buffer, format='PNG')
+        image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        return f"data:image/png;base64,{image_base64}"
+    except Exception as e:
+        print(f"Error creating placeholder: {e}")
+        return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+
 @api_view(['GET'])
 def get_image_data(request, image_id):
     """Get processed image data with superior diagnostic quality for all modalities"""
@@ -4383,3 +4465,27 @@ def notify_new_study_upload(study, uploaded_by_user):
             message=f'Your {study.modality} study for {study.patient_name} has been successfully uploaded and is ready for review.',
             related_study=study
         )
+
+@api_view(['GET'])
+def test_viewer_api(request):
+    """Test endpoint to verify API connectivity"""
+    try:
+        study_count = DicomStudy.objects.count()
+        series_count = DicomSeries.objects.count()
+        image_count = DicomImage.objects.count()
+        
+        return Response({
+            'status': 'success',
+            'message': 'API is working',
+            'data': {
+                'studies': study_count,
+                'series': series_count,
+                'images': image_count,
+                'timestamp': str(datetime.now())
+            }
+        })
+    except Exception as e:
+        return Response({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)

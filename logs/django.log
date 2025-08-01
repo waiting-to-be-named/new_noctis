@@ -206,3 +206,11 @@ INFO 2025-08-01 11:07:09,266 autoreload 4257 140632712843520 Watching for file c
 INFO 2025-08-01 11:07:17,102 basehttp 4257 140631871911616 "GET / HTTP/1.1" 200 9926
 INFO 2025-08-01 11:07:25,510 basehttp 4257 140631871911616 "GET / HTTP/1.1" 200 9926
 INFO 2025-08-01 11:07:30,341 basehttp 4257 140631871911616 "GET /viewer/ HTTP/1.1" 200 33008
+INFO 2025-08-01 11:52:17,524 autoreload 2332 140137163706624 Watching for file changes with StatReloader
+INFO 2025-08-01 11:56:52,543 autoreload 4341 139892132905216 Watching for file changes with StatReloader
+INFO 2025-08-01 11:57:11,164 autoreload 4341 139892132905216 /home/ubuntu/.local/lib/python3.13/site-packages/numpy/ma/__init__.py changed, reloading.
+INFO 2025-08-01 11:57:11,603 autoreload 4595 140130941739264 Watching for file changes with StatReloader
+INFO 2025-08-01 11:57:20,879 autoreload 4927 139676014813440 Watching for file changes with StatReloader
+INFO 2025-08-01 11:57:51,795 autoreload 5503 140138513895680 Watching for file changes with StatReloader
+INFO 2025-08-01 11:59:49,676 font_manager 6476 139808311562496 Failed to extract font properties from /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf: Can not load face (unknown file format; error code 0x2)
+INFO 2025-08-01 11:59:49,680 font_manager 6476 139808311562496 generated new fontManager
