@@ -32,73 +32,6 @@
             </div>
         </div>
 
-        <!-- Professional Toolbar -->
-        <div class="toolbar">
-            <div class="tool-group">
-                <button class="tool-btn active" id="windowing-btn" title="Window/Level Tool">
-                    <i class="fas fa-adjust"></i>
-                    Window
-                </button>
-                <button class="tool-btn" id="pan-btn" title="Pan Tool">
-                    <i class="fas fa-arrows-alt"></i>
-                    Pan
-                </button>
-                <button class="tool-btn" id="zoom-btn" title="Zoom Tool">
-                    <i class="fas fa-search"></i>
-                    Zoom
-                </button>
-                <button class="tool-btn" id="measure-btn" title="Measurement Tool">
-                    <i class="fas fa-ruler"></i>
-                    Measure
-                </button>
-            </div>
-
-            <div class="tool-group">
-                <button class="tool-btn" id="crosshair-btn" title="Toggle Crosshair">
-                    <i class="fas fa-crosshairs"></i>
-                    Crosshair
-                </button>
-                <button class="tool-btn" id="invert-btn" title="Invert Image">
-                    <i class="fas fa-adjust"></i>
-                    Invert
-                </button>
-                <button class="tool-btn" id="reset-btn" title="Reset View">
-                    <i class="fas fa-undo"></i>
-                    Reset
-                </button>
-            </div>
-
-            <div class="tool-group">
-                <button class="tool-btn" id="preset-btn" title="Window Presets">
-                    <i class="fas fa-sliders-h"></i>
-                    Presets
-                </button>
-                <button class="tool-btn" id="enhance-btn" title="Image Enhancement">
-                    <i class="fas fa-magic"></i>
-                    Enhance
-                </button>
-                <button class="tool-btn" id="ai-btn" title="AI Analysis">
-                    <i class="fas fa-brain"></i>
-                    AI
-                </button>
-            </div>
-
-            <div class="tool-group">
-                <button class="tool-btn" id="3d-btn" title="3D Reconstruction">
-                    <i class="fas fa-cube"></i>
-                    3D
-                </button>
-                <button class="tool-btn" id="series-btn" title="Series Selector">
-                    <i class="fas fa-layer-group"></i>
-                    Series
-                </button>
-                <button class="tool-btn" id="report-btn" title="Generate Report">
-                    <i class="fas fa-file-medical"></i>
-                    Report
-                </button>
-            </div>
-        </div>
-
         <!-- Professional Patient Info -->
         <div class="patient-info">
             <div class="patient-info-item">
@@ -127,19 +60,120 @@
             </div>
         </div>
 
-        <!-- Professional Viewport Container -->
-        <div class="viewport-container">
-            <div class="viewport">
-                <canvas id="dicom-canvas" width="800" height="600"></canvas>
-                
-                <!-- Quality Indicator -->
-                <div class="quality-indicator">
-                    <i class="fas fa-check-circle"></i>
-                    Diagnostic Quality
+        <!-- Main Content Area -->
+        <div class="main-content">
+            <!-- Left Sidebar with Tools -->
+            <div class="left-sidebar">
+                <div class="tool-group vertical">
+                    <button class="tool-btn active" id="windowing-btn" title="Window/Level Tool">
+                        <i class="fas fa-adjust"></i>
+                        Window
+                    </button>
+                    <button class="tool-btn" id="pan-btn" title="Pan Tool">
+                        <i class="fas fa-arrows-alt"></i>
+                        Pan
+                    </button>
+                    <button class="tool-btn" id="zoom-btn" title="Zoom Tool">
+                        <i class="fas fa-search"></i>
+                        Zoom
+                    </button>
+                    <button class="tool-btn" id="measure-btn" title="Measurement Tool">
+                        <i class="fas fa-ruler"></i>
+                        Measure
+                    </button>
                 </div>
 
-                <!-- Overlay Labels -->
-                <div class="overlay-label top-left" id="wl-info">
+                <div class="tool-group vertical">
+                    <button class="tool-btn" id="crosshair-btn" title="Toggle Crosshair">
+                        <i class="fas fa-crosshairs"></i>
+                        Crosshair
+                    </button>
+                    <button class="tool-btn" id="invert-btn" title="Invert Image">
+                        <i class="fas fa-adjust"></i>
+                        Invert
+                    </button>
+                    <button class="tool-btn" id="reset-btn" title="Reset View">
+                        <i class="fas fa-undo"></i>
+                        Reset
+                    </button>
+                </div>
+
+                <div class="tool-group vertical">
+                    <button class="tool-btn" id="preset-btn" title="Window Presets">
+                        <i class="fas fa-sliders-h"></i>
+                        Presets
+                    </button>
+                    <button class="tool-btn" id="enhance-btn" title="Image Enhancement">
+                        <i class="fas fa-magic"></i>
+                        Enhance
+                    </button>
+                    <button class="tool-btn" id="ai-btn" title="AI Analysis">
+                        <i class="fas fa-brain"></i>
+                        AI
+                    </button>
+                </div>
+
+                <div class="tool-group vertical">
+                    <button class="tool-btn" id="3d-btn" title="3D Reconstruction">
+                        <i class="fas fa-cube"></i>
+                        3D
+                    </button>
+                    <button class="tool-btn" id="series-btn" title="Series Selector">
+                        <i class="fas fa-layer-group"></i>
+                        Series
+                    </button>
+                    <button class="tool-btn" id="report-btn" title="Generate Report">
+                        <i class="fas fa-file-medical"></i>
+                        Report
+                    </button>
+                </div>
+            </div>
+
+            <!-- Center Viewport Area -->
+            <div class="center-viewport">
+                <!-- Professional Viewport Container -->
+                <div class="viewport-container">
+                    <div class="viewport">
+                        <canvas id="dicom-canvas" width="800" height="600"></canvas>
+                        
+                        <!-- Quality Indicator -->
+                        <div class="quality-indicator">
+                            <i class="fas fa-check-circle"></i>
+                            Diagnostic Quality
+                        </div>
+
+                        <!-- Crosshair -->
+                        <div class="crosshair" id="crosshair" style="display: none;">
+                            <div class="crosshair-horizontal"></div>
+                            <div class="crosshair-vertical"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Professional Slider Controls -->
+                <div class="slider-controls">
+                    <div class="slider-control">
+                        <label>Window Width</label>
+                        <input type="range" id="window-width-slider" min="1" max="4000" value="1500" step="1">
+                        <div class="value" id="window-width-value">1500</div>
+                    </div>
+                    <div class="slider-control">
+                        <label>Window Level</label>
+                        <input type="range" id="window-level-slider" min="-2000" max="2000" value="-600" step="1">
+                        <div class="value" id="window-level-value">-600</div>
+                    </div>
+                    <div class="slider-control">
+                        <label>Zoom</label>
+                        <input type="range" id="zoom-slider" min="10" max="500" value="100" step="1">
+                        <div class="value" id="zoom-slider-value">100%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Sidebar with Info -->
+            <div class="right-sidebar">
+                <!-- Overlay Labels moved to right side -->
+                <div class="overlay-label top-right" id="wl-info">
                     <strong>Window/Level:</strong><br>
                     Width: <span id="ww-value">1500</span><br>
                     Level: <span id="wl-value">-600</span>
@@ -149,31 +183,25 @@
                     <strong>Zoom:</strong> <span id="zoom-value">100%</span><br>
                     <strong>Position:</strong> <span id="position-info">-</span>
                 </div>
-
-                <!-- Crosshair -->
-                <div class="crosshair" id="crosshair" style="display: none;">
-                    <div class="crosshair-horizontal"></div>
-                    <div class="crosshair-vertical"></div>
-                </div>
             </div>
         </div>
 
-        <!-- Professional Slider Controls -->
-        <div class="slider-controls">
-            <div class="slider-control">
-                <label>Window Width</label>
-                <input type="range" id="window-width-slider" min="1" max="4000" value="1500" step="1">
-                <div class="value" id="window-width-value">1500</div>
+        <!-- Series Display Area Below -->
+        <div class="series-display-area">
+            <div class="series-display-header">
+                <h4 class="series-display-title">Series & Images</h4>
+                <div class="series-display-controls">
+                    <button class="series-control-btn" id="prev-series-btn" title="Previous Series">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <span class="series-counter" id="series-counter">Series 1 of 1</span>
+                    <button class="series-control-btn" id="next-series-btn" title="Next Series">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
             </div>
-            <div class="slider-control">
-                <label>Window Level</label>
-                <input type="range" id="window-level-slider" min="-2000" max="2000" value="-600" step="1">
-                <div class="value" id="window-level-value">-600</div>
-            </div>
-            <div class="slider-control">
-                <label>Zoom</label>
-                <input type="range" id="zoom-slider" min="10" max="500" value="100" step="1">
-                <div class="value" id="zoom-slider-value">100%</div>
+            <div class="series-grid" id="series-grid">
+                <!-- Series items will be populated here -->
             </div>
         </div>
 
@@ -243,6 +271,7 @@
                             <i class="fas fa-folder-open upload-icon"></i>
                             <h4>Drop folder here</h4>
                             <p>or click to browse folder</p>
+                            <p class="folder-info">Supports large CT/MRI files with multiple series</p>
                         </div>
                         <input type="file" id="folder-input" webkitdirectory directory multiple style="display: none;">
                     </div>

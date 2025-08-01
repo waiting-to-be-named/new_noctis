@@ -17,7 +17,9 @@ urlpatterns = [
     path('admin/radiologists/new/', views.create_radiologist, name='radiologist_create'),
     path('admin/radiologists/<int:pk>/delete/', views.delete_radiologist, name='radiologist_delete'),
     
-    # File upload
+    # File upload - Updated endpoints for JavaScript compatibility
+    path('api/upload-dicom-files/', views.upload_dicom_files, name='upload_dicom_files'),
+    path('api/upload-dicom-folder/', views.upload_dicom_folder, name='upload_dicom_folder'),
     path('api/upload/', views.upload_dicom_files, name='upload_dicom'),
     path('api/upload-folder/', views.upload_dicom_folder, name='upload_dicom_folder'),
     path('api/bulk-upload/', views.enhanced_bulk_upload_dicom_folder, name='bulk_upload_dicom_folder'),
@@ -29,10 +31,12 @@ urlpatterns = [
     path('api/enhanced-upload-progress/<str:upload_id>/', views.get_enhanced_upload_progress, name='get_enhanced_upload_progress'),
     path('api/enhanced-upload-result/<str:upload_id>/', views.get_enhanced_upload_result, name='get_enhanced_upload_result'),
     
-    # Study and image data
+    # Study and image data - Updated endpoints for JavaScript compatibility
+    path('api/get-study-images/<int:study_id>/', views.get_study_images, name='get_study_images'),
+    path('api/get-image-data/<int:image_id>/', views.get_image_data, name='get_image_data'),
     path('api/studies/', views.get_studies, name='get_studies'),
-    path('api/studies/<int:study_id>/images/', views.get_study_images, name='get_study_images'),
-    path('api/images/<int:image_id>/data/', views.get_image_data, name='get_image_data'),
+    path('api/studies/<int:study_id>/images/', views.get_study_images, name='get_study_images_old'),
+    path('api/images/<int:image_id>/data/', views.get_image_data, name='get_image_data_old'),
     
     # Enhanced image processing
     path('api/images/<int:image_id>/enhanced-data/', views.get_enhanced_image_data, name='get_enhanced_image_data'),
