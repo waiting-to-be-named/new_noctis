@@ -158,6 +158,9 @@ class DicomImage(models.Model):
     # Cached processed image
     processed_image_cache = models.TextField(blank=True)  # Base64 encoded image
     
+    # Test data flag
+    test_data = models.BooleanField(default=False)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
