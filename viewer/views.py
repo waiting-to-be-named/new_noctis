@@ -713,6 +713,52 @@ class DicomViewerView(TemplateView):
         return context
 
 
+class AdvancedDicomViewerView(TemplateView):
+    """Advanced DICOM viewer page with enhanced features"""
+    template_name = 'dicom_viewer/viewer_advanced.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Use the new access control system
+        context['studies'] = get_user_study_queryset(self.request.user)[:10]
+        
+        # Check if we have a study_id parameter
+        study_id = kwargs.get('study_id')
+        if study_id:
+            try:
+                study = DicomStudy.objects.get(id=study_id)
+                context['initial_study_id'] = study_id
+                context['initial_study'] = study
+                
+                # Update worklist entry status to in_progress if radiologist is viewing
+                if self.request.user.is_authenticated:
+                    worklist_entries = WorklistEntry.objects.filter(
+                        study=study,
+                        status='scheduled'
+                    )
+                    for entry in worklist_entries:
+                        entry.status = 'in_progress'
+                        entry.save()
+                        
+            except DicomStudy.DoesNotExist:
+                context['initial_study_error'] = f'Study with ID {study_id} not found'
+        
+        # Add advanced viewer specific context
+        context['viewer_version'] = '3.0'
+        context['features'] = {
+            'mpr': True,
+            'volume_rendering': True,
+            'ai_analysis': True,
+            'advanced_measurements': True,
+            'export_capabilities': True,
+            'multi_viewport': True,
+            'performance_monitoring': True
+        }
+        
+        return context
+
+
 # Admin functionality for facilities and radiologists
 def is_admin(user):
     """Check if user is admin"""
