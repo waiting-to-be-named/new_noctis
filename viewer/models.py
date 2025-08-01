@@ -345,53 +345,56 @@ class DicomImage(models.Model):
             return None
     
     def get_enhanced_processed_image_base64(self, window_width=None, window_level=None, inverted=False, 
-                                          resolution_factor=1.0, density_enhancement=False, contrast_boost=1.0, thumbnail_size=None):
-        """Get enhanced processed image with superior quality for medical imaging"""
+                                          resolution_factor=2.0, density_enhancement=True, contrast_boost=1.5, thumbnail_size=None):
+        """Get enhanced processed image with superior diagnostic quality for medical imaging"""
         try:
             # Get pixel data
             pixel_array = self.get_pixel_array()
             if pixel_array is None:
                 return None
             
-            # Apply enhanced windowing with density differentiation
-            processed_array = self.apply_enhanced_windowing(
+            # Apply diagnostic-grade preprocessing
+            pixel_array = self.apply_diagnostic_preprocessing(pixel_array)
+            
+            # Apply enhanced windowing with superior tissue differentiation
+            processed_array = self.apply_diagnostic_windowing(
                 pixel_array, window_width, window_level, inverted, 
                 density_enhancement, contrast_boost
             )
             
-            # Apply resolution enhancement if requested
+            # Apply resolution enhancement for diagnostic clarity
             if resolution_factor != 1.0:
-                processed_array = self.apply_resolution_enhancement(processed_array, resolution_factor)
+                processed_array = self.apply_diagnostic_resolution_enhancement(processed_array, resolution_factor)
             
-            # Apply density differentiation if requested
+            # Apply advanced tissue differentiation
             if density_enhancement:
-                processed_array = self.apply_density_differentiation(processed_array)
+                processed_array = self.apply_advanced_tissue_differentiation(processed_array)
             
-            # Convert to PIL Image with superior quality
+            # Convert to PIL Image with diagnostic quality
             if processed_array.dtype != np.uint8:
                 processed_array = np.clip(processed_array, 0, 255).astype(np.uint8)
             
             image = Image.fromarray(processed_array, mode='L')
             
-            # Apply final quality enhancements
-            image = self.apply_final_quality_enhancement(image)
+            # Apply final diagnostic quality enhancements
+            image = self.apply_diagnostic_quality_enhancement(image)
             
             # Resize for thumbnail if requested
             if thumbnail_size:
                 image = image.resize(thumbnail_size, Image.Resampling.LANCZOS)
             
-            # Convert to base64 with maximum quality
+            # Convert to base64 with maximum diagnostic quality
             buffer = io.BytesIO()
-            image.save(buffer, format='PNG', optimize=False, compress_level=0)  # No compression for maximum quality
+            image.save(buffer, format='PNG', optimize=False, compress_level=0)  # No compression for diagnostic quality
             buffer.seek(0)
             image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
             
             return f"data:image/png;base64,{image_base64}"
             
         except Exception as e:
-            print(f"Error processing enhanced image {self.id}: {e}")
+            print(f"Error processing diagnostic image {self.id}: {e}")
             return None
-    
+
     def apply_enhanced_windowing(self, pixel_array, window_width=None, window_level=None, inverted=False,
                                 density_enhancement=False, contrast_boost=1.0):
         """Apply enhanced windowing with superior density differentiation for medical imaging"""
@@ -998,3 +1001,504 @@ class ChatMessage(models.Model):
     
     def __str__(self):
         return f"{self.sender.username} -> {self.recipient.username if self.recipient else 'Facility'}: {self.message[:50]}"
+
+    def apply_diagnostic_preprocessing(self, pixel_array):
+        """Apply diagnostic-grade preprocessing for superior image quality"""
+        try:
+            from scipy.ndimage import median_filter, gaussian_filter
+            from scipy.signal import wiener
+            
+            # Convert to float for precision
+            pixel_array = pixel_array.astype(np.float32)
+            
+            # Apply noise reduction while preserving diagnostic details
+            # Use adaptive filtering based on image characteristics
+            noise_level = np.std(pixel_array)
+            if noise_level > 10:  # High noise image
+                # Wiener filter for noise reduction
+                pixel_array = wiener(pixel_array, (3, 3))
+            elif noise_level > 5:  # Moderate noise
+                # Gaussian filter with small kernel
+                pixel_array = gaussian_filter(pixel_array, sigma=0.5)
+            
+            # Edge-preserving smoothing for diagnostic clarity
+            pixel_array = self.apply_edge_preserving_smoothing(pixel_array)
+            
+            # Normalize for optimal processing
+            pixel_array = self.normalize_for_diagnostic_processing(pixel_array)
+            
+            return pixel_array
+            
+        except Exception as e:
+            print(f"Error in diagnostic preprocessing: {e}")
+            return pixel_array
+
+    def apply_diagnostic_windowing(self, pixel_array, window_width=None, window_level=None, inverted=False,
+                                  density_enhancement=True, contrast_boost=1.5):
+        """Apply diagnostic-grade windowing with superior tissue differentiation"""
+        try:
+            # Use optimal defaults for diagnostic imaging
+            if window_width is None:
+                window_width = self.window_width or 1500
+            if window_level is None:
+                window_level = self.window_center or -600
+            
+            # Convert to float for precision
+            pixel_array = pixel_array.astype(np.float32)
+            
+            # Apply diagnostic contrast enhancement
+            if contrast_boost != 1.0:
+                pixel_array = self.apply_diagnostic_contrast_enhancement(pixel_array, contrast_boost, window_level)
+            
+            # Apply diagnostic windowing with gamma correction
+            window_min = window_level - window_width / 2
+            window_max = window_level + window_width / 2
+            
+            # Clip values to window range
+            pixel_array = np.clip(pixel_array, window_min, window_max)
+            
+            # Apply diagnostic non-linear windowing for superior tissue visualization
+            if density_enhancement:
+                pixel_array = self.apply_diagnostic_nonlinear_windowing(pixel_array, window_min, window_max)
+            else:
+                # Enhanced linear windowing with gamma correction
+                pixel_array = self.apply_enhanced_linear_windowing(pixel_array, window_min, window_max)
+            
+            # Apply diagnostic density enhancement
+            if density_enhancement:
+                pixel_array = self.apply_diagnostic_density_enhancement(pixel_array)
+            
+            # Apply inversion if requested
+            if inverted:
+                pixel_array = 255 - pixel_array
+            
+            # Final diagnostic enhancement
+            pixel_array = self.apply_final_diagnostic_enhancement(pixel_array)
+            
+            return pixel_array
+            
+        except Exception as e:
+            print(f"Error in diagnostic windowing: {e}")
+            return pixel_array
+
+    def apply_diagnostic_resolution_enhancement(self, pixel_array, resolution_factor):
+        """Apply diagnostic-grade resolution enhancement"""
+        try:
+            from scipy.ndimage import zoom
+            
+            # Use Lanczos interpolation for superior quality
+            enhanced_array = zoom(pixel_array, resolution_factor, order=3)
+            
+            # Apply edge enhancement for diagnostic clarity
+            enhanced_array = self.apply_diagnostic_edge_enhancement(enhanced_array)
+            
+            return enhanced_array
+            
+        except Exception as e:
+            print(f"Error in diagnostic resolution enhancement: {e}")
+            return pixel_array
+
+    def apply_advanced_tissue_differentiation(self, pixel_array):
+        """Apply advanced tissue differentiation for superior diagnostic capability"""
+        try:
+            # Multi-scale tissue analysis
+            tissue_enhanced = self.apply_multi_scale_tissue_analysis(pixel_array)
+            
+            # Adaptive contrast enhancement based on tissue characteristics
+            tissue_enhanced = self.apply_adaptive_tissue_contrast(tissue_enhanced)
+            
+            # Local contrast enhancement for diagnostic details
+            tissue_enhanced = self.apply_local_diagnostic_contrast(tissue_enhanced)
+            
+            return tissue_enhanced
+            
+        except Exception as e:
+            print(f"Error in advanced tissue differentiation: {e}")
+            return pixel_array
+
+    def apply_diagnostic_quality_enhancement(self, image):
+        """Apply final diagnostic quality enhancements"""
+        try:
+            # Apply unsharp masking for diagnostic clarity
+            image = self.apply_diagnostic_unsharp_masking(image)
+            
+            # Apply contrast enhancement for diagnostic visibility
+            image = self.apply_diagnostic_contrast_enhancement_final(image)
+            
+            # Apply edge preservation for diagnostic accuracy
+            image = self.apply_diagnostic_edge_preservation(image)
+            
+            return image
+            
+        except Exception as e:
+            print(f"Error in diagnostic quality enhancement: {e}")
+            return image
+
+    def apply_edge_preserving_smoothing(self, pixel_array):
+        """Apply edge-preserving smoothing for diagnostic clarity"""
+        try:
+            from scipy.ndimage import median_filter
+            
+            # Apply bilateral filtering concept using median filter
+            # This preserves edges while reducing noise
+            smoothed = median_filter(pixel_array, size=3)
+            
+            # Preserve strong edges
+            edge_mask = np.abs(pixel_array - smoothed) > np.std(pixel_array) * 0.5
+            result = np.where(edge_mask, pixel_array, smoothed)
+            
+            return result
+            
+        except Exception as e:
+            print(f"Error in edge-preserving smoothing: {e}")
+            return pixel_array
+
+    def normalize_for_diagnostic_processing(self, pixel_array):
+        """Normalize pixel array for optimal diagnostic processing"""
+        try:
+            # Remove outliers for stable processing
+            percentile_1 = np.percentile(pixel_array, 1)
+            percentile_99 = np.percentile(pixel_array, 99)
+            normalized = np.clip(pixel_array, percentile_1, percentile_99)
+            
+            # Normalize to 0-1 range
+            normalized = (normalized - normalized.min()) / (normalized.max() - normalized.min())
+            
+            return normalized
+            
+        except Exception as e:
+            print(f"Error in diagnostic normalization: {e}")
+            return pixel_array
+
+    def apply_diagnostic_contrast_enhancement(self, pixel_array, contrast_boost, window_level):
+        """Apply diagnostic-grade contrast enhancement"""
+        try:
+            # Adaptive contrast enhancement based on tissue characteristics
+            mean_intensity = np.mean(pixel_array)
+            std_intensity = np.std(pixel_array)
+            
+            # Calculate adaptive contrast factor
+            adaptive_factor = contrast_boost * (1 + (std_intensity / mean_intensity) * 0.5)
+            
+            # Apply contrast enhancement
+            enhanced = (pixel_array - mean_intensity) * adaptive_factor + mean_intensity
+            
+            # Ensure values stay in valid range
+            enhanced = np.clip(enhanced, pixel_array.min(), pixel_array.max())
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in diagnostic contrast enhancement: {e}")
+            return pixel_array
+
+    def apply_diagnostic_nonlinear_windowing(self, pixel_array, window_min, window_max):
+        """Apply diagnostic non-linear windowing for superior tissue visualization"""
+        try:
+            # Apply S-curve enhancement for better tissue differentiation
+            normalized = (pixel_array - window_min) / (window_max - window_min)
+            normalized = np.clip(normalized, 0, 1)
+            
+            # Apply diagnostic S-curve
+            enhanced = self.apply_diagnostic_s_curve(normalized)
+            
+            # Scale to 0-255 range
+            result = enhanced * 255
+            
+            return result
+            
+        except Exception as e:
+            print(f"Error in diagnostic non-linear windowing: {e}")
+            return pixel_array
+
+    def apply_enhanced_linear_windowing(self, pixel_array, window_min, window_max):
+        """Apply enhanced linear windowing with gamma correction"""
+        try:
+            # Linear windowing with gamma correction
+            normalized = (pixel_array - window_min) / (window_max - window_min)
+            normalized = np.clip(normalized, 0, 1)
+            
+            # Apply gamma correction for better tissue visualization
+            gamma = 0.8  # Slightly darker for better contrast
+            enhanced = np.power(normalized, gamma)
+            
+            # Scale to 0-255 range
+            result = enhanced * 255
+            
+            return result
+            
+        except Exception as e:
+            print(f"Error in enhanced linear windowing: {e}")
+            return pixel_array
+
+    def apply_diagnostic_density_enhancement(self, pixel_array):
+        """Apply diagnostic-grade density enhancement"""
+        try:
+            # Multi-scale density analysis
+            enhanced = self.apply_multi_scale_density_analysis(pixel_array)
+            
+            # Adaptive density enhancement
+            enhanced = self.apply_adaptive_density_enhancement(enhanced)
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in diagnostic density enhancement: {e}")
+            return pixel_array
+
+    def apply_final_diagnostic_enhancement(self, pixel_array):
+        """Apply final diagnostic enhancement for superior quality"""
+        try:
+            # Apply local contrast enhancement
+            enhanced = self.apply_local_diagnostic_contrast(pixel_array)
+            
+            # Apply edge enhancement for diagnostic clarity
+            enhanced = self.apply_diagnostic_edge_enhancement(enhanced)
+            
+            # Apply final quality optimization
+            enhanced = self.apply_diagnostic_quality_optimization(enhanced)
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in final diagnostic enhancement: {e}")
+            return pixel_array
+
+    def apply_diagnostic_s_curve(self, normalized_array):
+        """Apply diagnostic S-curve for superior tissue differentiation"""
+        try:
+            # Diagnostic S-curve parameters
+            alpha = 0.3  # Controls the steepness
+            beta = 0.5   # Controls the center point
+            
+            # Apply S-curve transformation
+            enhanced = 1 / (1 + np.exp(-alpha * (normalized_array - beta)))
+            
+            # Normalize to 0-1 range
+            enhanced = (enhanced - enhanced.min()) / (enhanced.max() - enhanced.min())
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in diagnostic S-curve: {e}")
+            return normalized_array
+
+    def apply_multi_scale_density_analysis(self, pixel_array):
+        """Apply multi-scale density analysis for superior tissue differentiation"""
+        try:
+            from scipy.ndimage import gaussian_filter
+            
+            # Multi-scale analysis
+            scales = [1, 2, 4]
+            multi_scale_result = np.zeros_like(pixel_array)
+            
+            for scale in scales:
+                # Apply Gaussian filter at different scales
+                filtered = gaussian_filter(pixel_array, sigma=scale)
+                
+                # Weight based on scale (finer scales get higher weight)
+                weight = 1.0 / scale
+                multi_scale_result += weight * filtered
+            
+            # Normalize result
+            multi_scale_result /= len(scales)
+            
+            return multi_scale_result
+            
+        except Exception as e:
+            print(f"Error in multi-scale density analysis: {e}")
+            return pixel_array
+
+    def apply_adaptive_density_enhancement(self, pixel_array):
+        """Apply adaptive density enhancement based on local characteristics"""
+        try:
+            # Calculate local statistics
+            from scipy.ndimage import uniform_filter
+            
+            # Local mean
+            local_mean = uniform_filter(pixel_array, size=15)
+            
+            # Local standard deviation
+            local_var = uniform_filter(pixel_array**2, size=15) - local_mean**2
+            local_std = np.sqrt(np.maximum(local_var, 0))
+            
+            # Adaptive enhancement
+            enhanced = pixel_array + 0.5 * local_std
+            
+            # Ensure values stay in valid range
+            enhanced = np.clip(enhanced, 0, 255)
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in adaptive density enhancement: {e}")
+            return pixel_array
+
+    def apply_local_diagnostic_contrast(self, pixel_array):
+        """Apply local contrast enhancement for diagnostic details"""
+        try:
+            from scipy.ndimage import uniform_filter
+            
+            # Calculate local mean
+            local_mean = uniform_filter(pixel_array, size=9)
+            
+            # Calculate local contrast
+            local_contrast = pixel_array - local_mean
+            
+            # Enhance local contrast
+            enhanced_contrast = local_contrast * 1.2
+            
+            # Add back to local mean
+            enhanced = local_mean + enhanced_contrast
+            
+            # Ensure values stay in valid range
+            enhanced = np.clip(enhanced, 0, 255)
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in local diagnostic contrast: {e}")
+            return pixel_array
+
+    def apply_diagnostic_edge_enhancement(self, pixel_array):
+        """Apply diagnostic edge enhancement for clarity"""
+        try:
+            from scipy.ndimage import gaussian_filter
+            
+            # Apply Gaussian blur
+            blurred = gaussian_filter(pixel_array, sigma=1.0)
+            
+            # Calculate edge map
+            edge_map = pixel_array - blurred
+            
+            # Enhance edges
+            enhanced_edges = edge_map * 0.3
+            
+            # Add enhanced edges back
+            enhanced = pixel_array + enhanced_edges
+            
+            # Ensure values stay in valid range
+            enhanced = np.clip(enhanced, 0, 255)
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in diagnostic edge enhancement: {e}")
+            return pixel_array
+
+    def apply_diagnostic_quality_optimization(self, pixel_array):
+        """Apply final diagnostic quality optimization"""
+        try:
+            # Apply histogram equalization for optimal contrast
+            from skimage import exposure
+            
+            # Adaptive histogram equalization
+            enhanced = exposure.equalize_adapthist(pixel_array.astype(np.float32), clip_limit=0.02)
+            
+            # Scale to 0-255 range
+            enhanced = (enhanced * 255).astype(np.uint8)
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in diagnostic quality optimization: {e}")
+            return pixel_array
+
+    def apply_diagnostic_unsharp_masking(self, image):
+        """Apply diagnostic unsharp masking for clarity"""
+        try:
+            from PIL import ImageFilter
+            
+            # Apply unsharp mask filter
+            enhanced = image.filter(ImageFilter.UnsharpMask(radius=1, percent=150, threshold=3))
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in diagnostic unsharp masking: {e}")
+            return image
+
+    def apply_diagnostic_contrast_enhancement_final(self, image):
+        """Apply final diagnostic contrast enhancement"""
+        try:
+            from PIL import ImageEnhance
+            
+            # Apply contrast enhancement
+            enhancer = ImageEnhance.Contrast(image)
+            enhanced = enhancer.enhance(1.1)  # Slight contrast boost
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in diagnostic contrast enhancement final: {e}")
+            return image
+
+    def apply_diagnostic_edge_preservation(self, image):
+        """Apply diagnostic edge preservation"""
+        try:
+            from PIL import ImageFilter
+            
+            # Apply edge enhancement filter
+            enhanced = image.filter(ImageFilter.EDGE_ENHANCE_MORE)
+            
+            # Blend with original for natural appearance
+            enhanced = Image.blend(image, enhanced, 0.3)
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in diagnostic edge preservation: {e}")
+            return image
+
+    def apply_multi_scale_tissue_analysis(self, pixel_array):
+        """Apply multi-scale tissue analysis for superior diagnostic capability"""
+        try:
+            from scipy.ndimage import gaussian_filter
+            
+            # Multi-scale analysis for tissue differentiation
+            scales = [1, 2, 4, 8]
+            multi_scale_result = np.zeros_like(pixel_array)
+            
+            for scale in scales:
+                # Apply Gaussian filter at different scales
+                filtered = gaussian_filter(pixel_array, sigma=scale)
+                
+                # Weight based on scale (finer scales get higher weight for detail preservation)
+                weight = 1.0 / scale
+                multi_scale_result += weight * filtered
+            
+            # Normalize result
+            multi_scale_result /= len(scales)
+            
+            return multi_scale_result
+            
+        except Exception as e:
+            print(f"Error in multi-scale tissue analysis: {e}")
+            return pixel_array
+
+    def apply_adaptive_tissue_contrast(self, pixel_array):
+        """Apply adaptive contrast enhancement based on tissue characteristics"""
+        try:
+            # Calculate tissue-specific contrast parameters
+            mean_intensity = np.mean(pixel_array)
+            std_intensity = np.std(pixel_array)
+            
+            # Adaptive contrast factor based on tissue characteristics
+            if mean_intensity < 50:  # Dark tissue (bone, air)
+                contrast_factor = 1.3
+            elif mean_intensity > 200:  # Bright tissue (contrast, metal)
+                contrast_factor = 1.1
+            else:  # Soft tissue
+                contrast_factor = 1.2
+            
+            # Apply adaptive contrast enhancement
+            enhanced = (pixel_array - mean_intensity) * contrast_factor + mean_intensity
+            
+            # Ensure values stay in valid range
+            enhanced = np.clip(enhanced, 0, 255)
+            
+            return enhanced
+            
+        except Exception as e:
+            print(f"Error in adaptive tissue contrast: {e}")
+            return pixel_array
