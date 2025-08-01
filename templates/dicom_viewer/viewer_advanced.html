@@ -630,6 +630,7 @@
     <script src="{% static 'js/dicom_viewer_advanced.js' %}"></script>
     <script src="{% static 'js/dicom_viewer_enhanced_debug.js' %}"></script>
     <script src="{% static 'js/dicom_viewer_button_fixes.js' %}"></script>
+    <script src="{% static 'js/dicom_viewer_comprehensive_fix.js' %}"></script>
     
     <script>
         // Initialize the advanced DICOM viewer when the page loads
@@ -651,12 +652,21 @@
         });
     </script>
 
-            <div id="debug-panel" style="position: fixed; bottom: 20px; left: 20px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-size: 12px; z-index: 9999; max-width: 300px;">
-                <div><strong>Debug Info:</strong></div>
-                <div id="debug-canvas">Canvas: Not initialized</div>
-                <div id="debug-study">Study: None loaded</div>
-                <div id="debug-images">Images: 0</div>
-                <div id="debug-api">API Status: Unknown</div>
+            <div id="debug-panel" style="position: fixed; bottom: 20px; left: 20px; background: rgba(0,0,0,0.9); color: white; padding: 15px; border-radius: 8px; font-size: 12px; z-index: 9999; max-width: 350px; font-family: monospace; line-height: 1.6;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <strong style="font-size: 14px;">🔧 Debug Info</strong>
+                    <button onclick="this.parentElement.parentElement.style.display='none'" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px;">×</button>
+                </div>
+                <div id="debug-canvas" style="color: #00ff88;">Canvas: Not initialized</div>
+                <div id="debug-study" style="color: #00ff88;">Study: None loaded</div>
+                <div id="debug-images" style="color: #00ff88;">Images: 0</div>
+                <div id="debug-api" style="color: #00ff88;">API Status: Unknown</div>
+                <div id="debug-tool" style="color: #00ff88;">Active Tool: None</div>
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444;">
+                    <div style="color: #ffaa00;">Quick Actions:</div>
+                    <button onclick="window.dicomViewerFixes && window.dicomViewerFixes.applyAllFixes()" style="margin-top: 5px; padding: 5px 10px; background: #0088ff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">Reapply Fixes</button>
+                    <button onclick="location.reload()" style="margin-top: 5px; margin-left: 5px; padding: 5px 10px; background: #ff6b35; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">Reload Page</button>
+                </div>
             </div>
 </body>
 </html>
