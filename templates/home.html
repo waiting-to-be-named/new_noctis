@@ -285,27 +285,16 @@
             
             <div class="action-card" onclick="launchViewer()">
                 <div class="action-icon">
-                    <i class="fas fa-images"></i>
-                </div>
-                <h3 class="action-title">DICOM Viewer</h3>
-                <p class="action-desc">View and analyze medical images with standard tools</p>
-            </div>
-            
-            <div class="action-card" onclick="launchAdvancedViewer()">
-                <div class="action-icon">
                     <i class="fas fa-brain"></i>
                 </div>
-                <h3 class="action-title">Advanced Viewer Pro</h3>
+                <h3 class="action-title">DICOM Viewer Pro</h3>
                 <p class="action-desc">Professional DICOM viewer with AI, 3D reconstruction, and advanced tools</p>
             </div>
         </div>
         
         <div class="viewer-options">
-            <a href="/viewer/" class="launch-btn standard">
-                <i class="fas fa-rocket"></i> Launch Standard Viewer
-            </a>
-            <a href="/viewer/advanced/" class="launch-btn advanced">
-                <i class="fas fa-brain"></i> Launch Advanced Viewer Pro
+            <a href="/viewer/" class="launch-btn advanced">
+                <i class="fas fa-brain"></i> Launch DICOM Viewer Pro
             </a>
         </div>
         
@@ -370,13 +359,8 @@
     
     <script>
         function launchViewer() {
-            // Launch standard viewer in same window
+            // Launch DICOM Viewer Pro in same window
             window.location.href = '/viewer/';
-        }
-        
-        function launchAdvancedViewer() {
-            // Launch advanced viewer in same window
-            window.location.href = '/viewer/advanced/';
         }
         
         // Add hover effects to cards

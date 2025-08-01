@@ -4,11 +4,15 @@ from . import views
 app_name = 'viewer'
 
 urlpatterns = [
-    # Main viewer page
-    path('', views.DicomViewerView.as_view(), name='viewer'),
-    path('study/<int:study_id>/', views.DicomViewerView.as_view(), name='viewer_with_study'),
+    # Main viewer page - Now uses Advanced Viewer Pro as default
+    path('', views.AdvancedDicomViewerView.as_view(), name='viewer'),
+    path('study/<int:study_id>/', views.AdvancedDicomViewerView.as_view(), name='viewer_with_study'),
     
-    # Advanced viewer
+    # Legacy standard viewer (deprecated)
+    path('standard/', views.DicomViewerView.as_view(), name='standard_viewer'),
+    path('standard/study/<int:study_id>/', views.DicomViewerView.as_view(), name='standard_viewer_with_study'),
+    
+    # Advanced viewer (now redundant with main paths but keeping for compatibility)
     path('advanced/', views.AdvancedDicomViewerView.as_view(), name='advanced_viewer'),
     path('advanced/study/<int:study_id>/', views.AdvancedDicomViewerView.as_view(), name='advanced_viewer_with_study'),
     
@@ -44,6 +48,10 @@ urlpatterns = [
     
     # Enhanced image processing
     path('api/images/<int:image_id>/enhanced-data/', views.get_enhanced_image_data, name='get_enhanced_image_data'),
+    
+    # Series data
+    path('api/studies/<int:study_id>/series/', views.get_study_series, name='get_study_series'),
+    path('api/series/<int:series_id>/images/', views.get_series_images, name='get_series_images'),
     
     # Enhanced X-ray and MRI processing
     path('api/images/<int:image_id>/enhance-xray/', views.enhance_xray_image_api, name='enhance_xray_image'),

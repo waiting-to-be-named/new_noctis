@@ -163,9 +163,11 @@ class AdvancedDicomViewer {
         this.setupKeyboardShortcuts();
         this.loadSettings();
 
-        // Auto-load study if provided
+        // Auto-load study if provided, otherwise load available studies
         if (initialStudyId) {
             this.loadStudy(initialStudyId);
+        } else {
+            this.loadAvailableStudies();
         }
 
         // Initialize UI components
@@ -597,12 +599,91 @@ class AdvancedDicomViewer {
     }
 
     // Image loading and management
+    async loadAvailableStudies() {
+        try {
+            this.updateStatus('Loading available studies...');
+            
+            const response = await fetch('/viewer/api/studies/');
+            if (!response.ok) {
+                throw new Error(`Failed to load studies: ${response.statusText}`);
+            }
+            
+            const studies = await response.json();
+            this.displayStudiesList(studies);
+            
+            this.updateStatus('Select a study to view');
+        } catch (error) {
+            console.error('Error loading studies:', error);
+            this.notyf.error(`Failed to load studies: ${error.message}`);
+            this.updateStatus('Error loading studies');
+        }
+    }
+
+    displayStudiesList(studies) {
+        const container = document.getElementById('studies-list-container');
+        if (!container) {
+            // Create studies list container if it doesn't exist
+            const studiesContainer = document.createElement('div');
+            studiesContainer.id = 'studies-list-container';
+            studiesContainer.className = 'studies-list-container';
+            studiesContainer.innerHTML = `
+                <h3><i class="fas fa-list"></i> Available Studies</h3>
+                <div id="studies-list" class="studies-list"></div>
+            `;
+            
+            // Insert before the canvas container
+            const canvasContainer = document.getElementById('canvas-container');
+            canvasContainer.parentNode.insertBefore(studiesContainer, canvasContainer);
+        }
+        
+        const studiesList = document.getElementById('studies-list');
+        studiesList.innerHTML = '';
+        
+        if (studies.length === 0) {
+            studiesList.innerHTML = '<p class="no-studies">No studies available. Upload DICOM files to get started.</p>';
+            return;
+        }
+        
+        studies.forEach(study => {
+            const studyItem = document.createElement('div');
+            studyItem.className = 'study-item';
+            studyItem.innerHTML = `
+                <div class="study-info">
+                    <h4>${study.patient_name || 'Unknown Patient'}</h4>
+                    <p><strong>ID:</strong> ${study.patient_id || 'N/A'}</p>
+                    <p><strong>Study:</strong> ${study.study_description || 'N/A'}</p>
+                    <p><strong>Date:</strong> ${study.study_date ? new Date(study.study_date).toLocaleDateString() : 'N/A'}</p>
+                    <p><strong>Modality:</strong> ${study.modality || 'N/A'}</p>
+                </div>
+                <button class="btn btn-primary load-study-btn" data-study-id="${study.id}">
+                    <i class="fas fa-eye"></i> View Study
+                </button>
+            `;
+            
+            studiesList.appendChild(studyItem);
+        });
+        
+        // Add event listeners for study loading
+        document.querySelectorAll('.load-study-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const studyId = e.target.closest('.load-study-btn').dataset.studyId;
+                this.loadStudy(parseInt(studyId));
+                
+                // Hide studies list
+                const container = document.getElementById('studies-list-container');
+                if (container) {
+                    container.style.display = 'none';
+                }
+            });
+        });
+    }
+
     async loadStudy(studyId) {
         try {
             this.showLoading(true);
             this.updateStatus('Loading study...');
 
-            const response = await fetch(`/api/studies/${studyId}/`);
+            const response = await fetch(`/viewer/api/studies/${studyId}/`);
             if (!response.ok) {
                 throw new Error(`Failed to load study: ${response.statusText}`);
             }
@@ -624,7 +705,7 @@ class AdvancedDicomViewer {
 
     async loadSeries() {
         try {
-            const response = await fetch(`/api/studies/${this.currentStudy.id}/series/`);
+            const response = await fetch(`/viewer/api/studies/${this.currentStudy.id}/series/`);
             if (!response.ok) {
                 throw new Error(`Failed to load series: ${response.statusText}`);
             }
@@ -645,7 +726,7 @@ class AdvancedDicomViewer {
         try {
             this.updateStatus('Loading images...');
 
-            const response = await fetch(`/api/series/${seriesId}/images/`);
+            const response = await fetch(`/viewer/api/series/${seriesId}/images/`);
             if (!response.ok) {
                 throw new Error(`Failed to load images: ${response.statusText}`);
             }
@@ -683,7 +764,7 @@ class AdvancedDicomViewer {
             this.updateStatus(`Loading image ${index + 1}/${this.currentImages.length}...`);
 
             const startTime = performance.now();
-            const response = await fetch(`/api/images/${imageInfo.id}/data/`);
+            const response = await fetch(`/viewer/api/images/${imageInfo.id}/data/`);
             if (!response.ok) {
                 throw new Error(`Failed to load image: ${response.statusText}`);
             }
