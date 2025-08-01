@@ -10,80 +10,66 @@
 </head>
 <body>
     <div class="dicom-viewer">
-        <!-- Professional Header -->
+        <!-- Top Bar - Primary Navigation & Patient Info -->
         <div class="viewer-header">
-            <div class="viewer-title">
-                <i class="fas fa-x-ray"></i>
-                Noctis DICOM Viewer
-            </div>
-            <div class="viewer-controls">
-                <button class="tool-btn" id="upload-btn" title="Upload DICOM Files">
-                    <i class="fas fa-upload"></i>
-                    Upload
-                </button>
-                <button class="tool-btn" id="worklist-btn" title="View Worklist">
+            <div class="header-left">
+                <button class="header-btn" id="worklist-btn" title="View Worklist">
                     <i class="fas fa-list"></i>
                     Worklist
                 </button>
-                <button class="tool-btn" id="logout-btn" title="Logout">
+                <button class="header-btn" id="load-dicom-btn" title="Load DICOM Files">
+                    <i class="fas fa-upload"></i>
+                    Load DICOM
+                </button>
+                <button class="header-btn" id="series-btn" title="Series Selector">
+                    <i class="fas fa-layer-group"></i>
+                    Series
+                </button>
+                <button class="header-btn logout-btn" id="logout-btn" title="Logout">
                     <i class="fas fa-sign-out-alt"></i>
                     Logout
                 </button>
             </div>
-        </div>
-
-        <!-- Professional Patient Info -->
-        <div class="patient-info">
-            <div class="patient-info-item">
-                <span class="patient-info-label">Patient:</span>
-                <span class="patient-info-value" id="patient-name">-</span>
-            </div>
-            <div class="patient-info-item">
-                <span class="patient-info-label">ID:</span>
-                <span class="patient-info-value" id="patient-id">-</span>
-            </div>
-            <div class="patient-info-item">
-                <span class="patient-info-label">Study:</span>
-                <span class="patient-info-value" id="study-description">-</span>
-            </div>
-            <div class="patient-info-item">
-                <span class="patient-info-label">Date:</span>
-                <span class="patient-info-value" id="study-date">-</span>
-            </div>
-            <div class="patient-info-item">
-                <span class="patient-info-label">Modality:</span>
-                <span class="patient-info-value" id="modality">-</span>
-            </div>
-            <div class="patient-info-item">
-                <span class="patient-info-label">Images:</span>
-                <span class="patient-info-value" id="image-count">-</span>
+            <div class="header-right">
+                <div class="patient-info-display">
+                    <span class="patient-info-text">
+                        Patient: <span id="patient-name">-</span> | 
+                        Study Date: <span id="study-date">-</span> | 
+                        Modality: <span id="modality">-</span>
+                    </span>
+                </div>
             </div>
         </div>
 
         <!-- Main Content Area -->
         <div class="main-content">
-            <!-- Left Sidebar with Tools -->
+            <!-- Left Sidebar - Image Tools -->
             <div class="left-sidebar">
-                <div class="tool-group vertical">
-                    <button class="tool-btn active" id="windowing-btn" title="Window/Level Tool">
+                <div class="tool-group">
+                    <button class="tool-btn" id="window-btn" title="Window/Level Tool">
                         <i class="fas fa-adjust"></i>
                         Window
+                    </button>
+                    <button class="tool-btn active" id="zoom-btn" title="Zoom Tool">
+                        <i class="fas fa-search"></i>
+                        Zoom
                     </button>
                     <button class="tool-btn" id="pan-btn" title="Pan Tool">
                         <i class="fas fa-arrows-alt"></i>
                         Pan
                     </button>
-                    <button class="tool-btn" id="zoom-btn" title="Zoom Tool">
-                        <i class="fas fa-search"></i>
-                        Zoom
-                    </button>
                     <button class="tool-btn" id="measure-btn" title="Measurement Tool">
                         <i class="fas fa-ruler"></i>
                         Measure
                     </button>
-                </div>
-
-                <div class="tool-group vertical">
+                    <button class="tool-btn" id="ellipse-btn" title="Ellipse Measurement">
+                        <i class="fas fa-circle"></i>
+                        Ellipse
+                    </button>
+                    <button class="tool-btn" id="annotate-btn" title="Annotation Tool">
+                        <i class="fas fa-edit"></i>
+                        Annotate
+                    </button>
                     <button class="tool-btn" id="crosshair-btn" title="Toggle Crosshair">
                         <i class="fas fa-crosshairs"></i>
                         Crosshair
@@ -92,143 +78,153 @@
                         <i class="fas fa-adjust"></i>
                         Invert
                     </button>
-                    <button class="tool-btn" id="reset-btn" title="Reset View">
-                        <i class="fas fa-undo"></i>
-                        Reset
-                    </button>
                 </div>
-
-                <div class="tool-group vertical">
-                    <button class="tool-btn" id="preset-btn" title="Window Presets">
-                        <i class="fas fa-sliders-h"></i>
-                        Presets
-                    </button>
-                    <button class="tool-btn" id="enhance-btn" title="Image Enhancement">
-                        <i class="fas fa-magic"></i>
-                        Enhance
-                    </button>
-                    <button class="tool-btn" id="ai-btn" title="AI Analysis">
-                        <i class="fas fa-brain"></i>
-                        AI
-                    </button>
-                </div>
-
-                <div class="tool-group vertical">
-                    <button class="tool-btn" id="3d-btn" title="3D Reconstruction">
-                        <i class="fas fa-cube"></i>
-                        3D
-                    </button>
-                    <button class="tool-btn" id="series-btn" title="Series Selector">
-                        <i class="fas fa-layer-group"></i>
-                        Series
-                    </button>
-                    <button class="tool-btn" id="report-btn" title="Generate Report">
-                        <i class="fas fa-file-medical"></i>
-                        Report
-                    </button>
+                
+                <!-- Crosshair Status -->
+                <div class="crosshair-status">
+                    <span class="status-label">Crosshair:</span>
+                    <span class="status-value" id="crosshair-status">OFF</span>
                 </div>
             </div>
 
-            <!-- Center Viewport Area -->
+            <!-- Central Display Area -->
             <div class="center-viewport">
-                <!-- Professional Viewport Container -->
                 <div class="viewport-container">
-                    <div class="viewport">
-                        <canvas id="dicom-canvas" width="800" height="600"></canvas>
-                        
-                        <!-- Quality Indicator -->
-                        <div class="quality-indicator">
-                            <i class="fas fa-check-circle"></i>
-                            Diagnostic Quality
+                    <canvas id="dicom-canvas" width="800" height="600"></canvas>
+                    
+                    <!-- Image Overlay Information -->
+                    <div class="image-overlay top-left">
+                        <div class="overlay-item">
+                            <span class="overlay-label">WW:</span>
+                            <span class="overlay-value" id="ww-display">400</span>
                         </div>
-
-                        <!-- Crosshair -->
-                        <div class="crosshair" id="crosshair" style="display: none;">
-                            <div class="crosshair-horizontal"></div>
-                            <div class="crosshair-vertical"></div>
+                        <div class="overlay-item">
+                            <span class="overlay-label">WL:</span>
+                            <span class="overlay-value" id="wl-display">40</span>
+                        </div>
+                        <div class="overlay-item">
+                            <span class="overlay-label">Slice:</span>
+                            <span class="overlay-value" id="slice-display">1/1</span>
                         </div>
                     </div>
-                </div>
-
-                <!-- Professional Slider Controls -->
-                <div class="slider-controls">
-                    <div class="slider-control">
-                        <label>Window Width</label>
-                        <input type="range" id="window-width-slider" min="1" max="4000" value="1500" step="1">
-                        <div class="value" id="window-width-value">1500</div>
+                    
+                    <div class="image-overlay bottom-right">
+                        <div class="overlay-item">
+                            <span class="overlay-label">Zoom:</span>
+                            <span class="overlay-value" id="zoom-display">100%</span>
+                        </div>
                     </div>
-                    <div class="slider-control">
-                        <label>Window Level</label>
-                        <input type="range" id="window-level-slider" min="-2000" max="2000" value="-600" step="1">
-                        <div class="value" id="window-level-value">-600</div>
-                    </div>
-                    <div class="slider-control">
-                        <label>Zoom</label>
-                        <input type="range" id="zoom-slider" min="10" max="500" value="100" step="1">
-                        <div class="value" id="zoom-slider-value">100%</div>
+                    
+                    <!-- Crosshair -->
+                    <div class="crosshair" id="crosshair" style="display: none;">
+                        <div class="crosshair-horizontal"></div>
+                        <div class="crosshair-vertical"></div>
                     </div>
                 </div>
             </div>
 
-            <!-- Right Sidebar with Info -->
+            <!-- Right Sidebar - Controls & Information -->
             <div class="right-sidebar">
-                <!-- Overlay Labels moved to right side -->
-                <div class="overlay-label top-right" id="wl-info">
-                    <strong>Window/Level:</strong><br>
-                    Width: <span id="ww-value">1500</span><br>
-                    Level: <span id="wl-value">-600</span>
+                <!-- Enhanced Processing Section -->
+                <div class="control-section">
+                    <h4 class="section-title">ENHANCED PROCESSING</h4>
+                    <div class="toggle-controls">
+                        <div class="toggle-item">
+                            <label>Density</label>
+                            <div class="toggle-switch" id="density-toggle">
+                                <span class="toggle-slider"></span>
+                            </div>
+                            <span class="toggle-status" id="density-status">Off</span>
+                        </div>
+                        <div class="toggle-item">
+                            <label>High Res</label>
+                            <div class="toggle-switch" id="highres-toggle">
+                                <span class="toggle-slider"></span>
+                            </div>
+                            <span class="toggle-status" id="highres-status">Off</span>
+                        </div>
+                        <div class="toggle-item">
+                            <label>Contrast</label>
+                            <div class="toggle-switch" id="contrast-toggle">
+                                <span class="toggle-slider"></span>
+                            </div>
+                            <span class="toggle-status" id="contrast-status">Off</span>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="overlay-label top-right" id="zoom-info">
-                    <strong>Zoom:</strong> <span id="zoom-value">100%</span><br>
-                    <strong>Position:</strong> <span id="position-info">-</span>
+                <!-- Window/Level Section -->
+                <div class="control-section">
+                    <h4 class="section-title">WINDOW/LEVEL</h4>
+                    <div class="slider-control">
+                        <label>Window Width <span id="window-width-value">400</span></label>
+                        <input type="range" id="window-width-slider" min="1" max="4000" value="400" step="1">
+                    </div>
+                    <div class="slider-control">
+                        <label>Window Level <span id="window-level-value">40</span></label>
+                        <input type="range" id="window-level-slider" min="-2000" max="2000" value="40" step="1">
+                    </div>
+                    <div class="preset-buttons">
+                        <button class="preset-btn" data-preset="lung">Lung</button>
+                        <button class="preset-btn" data-preset="bone">Bone</button>
+                        <button class="preset-btn" data-preset="soft">Soft</button>
+                        <button class="preset-btn" data-preset="brain">Brain</button>
+                    </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Series Display Area Below -->
-        <div class="series-display-area">
-            <div class="series-display-header">
-                <h4 class="series-display-title">Series & Images</h4>
-                <div class="series-display-controls">
-                    <button class="series-control-btn" id="prev-series-btn" title="Previous Series">
-                        <i class="fas fa-chevron-left"></i>
+                <!-- Navigation Section -->
+                <div class="control-section">
+                    <h4 class="section-title">NAVIGATION</h4>
+                    <div class="slice-info">
+                        <span id="slice-info">Slice 1/1</span>
+                    </div>
+                    <div class="slice-control">
+                        <input type="range" id="slice-slider" min="1" max="1" value="1" step="1">
+                        <div class="slice-buttons">
+                            <button class="slice-btn" id="prev-slice-btn">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <button class="slice-btn" id="next-slice-btn">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Measurements Section -->
+                <div class="control-section">
+                    <h4 class="section-title">MEASUREMENTS</h4>
+                    <div class="measurement-info">
+                        <span id="measurement-count">No measurements</span>
+                    </div>
+                    <button class="clear-btn" id="clear-measurements-btn">
+                        <i class="fas fa-trash"></i>
+                        Clear All
                     </button>
-                    <span class="series-counter" id="series-counter">Series 1 of 1</span>
-                    <button class="series-control-btn" id="next-series-btn" title="Next Series">
-                        <i class="fas fa-chevron-right"></i>
+                </div>
+
+                <!-- Annotations Section -->
+                <div class="control-section">
+                    <h4 class="section-title">ANNOTATIONS</h4>
+                    <div class="annotation-info">
+                        <span id="annotation-count">No annotations</span>
+                    </div>
+                    <button class="clear-btn" id="clear-annotations-btn">
+                        <i class="fas fa-trash"></i>
+                        Clear All
                     </button>
                 </div>
-            </div>
-            <div class="series-grid" id="series-grid">
-                <!-- Series items will be populated here -->
-            </div>
-        </div>
-
-        <!-- Professional Status Bar -->
-        <div class="status-bar">
-            <div class="status-item">
-                <i class="fas fa-image"></i>
-                <span id="current-image-info">No image loaded</span>
-            </div>
-            <div class="status-item">
-                <i class="fas fa-tools"></i>
-                <span id="current-tool">Window/Level</span>
-            </div>
-            <div class="status-item">
-                <i class="fas fa-clock"></i>
-                <span id="processing-status">Ready</span>
             </div>
         </div>
     </div>
 
-    <!-- Professional Loading Overlay -->
+    <!-- Loading Overlay -->
     <div class="loading-overlay" id="loading-overlay" style="display: none;">
         <div class="loading-spinner"></div>
         <div class="loading-text" id="loading-text">Loading...</div>
     </div>
 
-    <!-- Professional Upload Modal -->
+    <!-- Upload Modal -->
     <div class="modal" id="upload-modal" style="display: none;">
         <div class="modal-content">
             <div class="modal-header">
@@ -311,7 +307,7 @@
         </div>
     </div>
 
-    <!-- Professional Series Selector -->
+    <!-- Series Selector -->
     <div class="series-selector" id="series-selector">
         <div class="series-selector-header">
             <h4 class="series-selector-title">Series Selection</h4>
@@ -321,28 +317,7 @@
         </div>
     </div>
 
-    <!-- Professional Enhancement Panel -->
-    <div class="enhancement-panel" id="enhancement-panel">
-        <h4 class="enhancement-title">Image Enhancement</h4>
-        <div class="enhancement-control">
-            <label>Brightness</label>
-            <input type="range" id="brightness-slider" min="0" max="200" value="100">
-        </div>
-        <div class="enhancement-control">
-            <label>Contrast</label>
-            <input type="range" id="contrast-slider" min="0" max="200" value="100">
-        </div>
-        <div class="enhancement-control">
-            <label>Gamma</label>
-            <input type="range" id="gamma-slider" min="0.1" max="3.0" value="1.0" step="0.1">
-        </div>
-        <div class="enhancement-control">
-            <label>Sharpness</label>
-            <input type="range" id="sharpness-slider" min="0" max="100" value="50">
-        </div>
-    </div>
-
-    <!-- Professional Notifications Container -->
+    <!-- Notifications Container -->
     <div id="notifications-container"></div>
 
     <!-- JavaScript -->

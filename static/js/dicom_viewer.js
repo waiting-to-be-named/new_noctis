@@ -22,8 +22,8 @@ class DicomViewer {
         this.currentImage = null;
         
         // Display parameters optimized for medical imaging
-        this.windowWidth = 1500;  // Lung window for optimal tissue differentiation
-        this.windowLevel = -600;  // Lung level for optimal contrast
+        this.windowWidth = 400;  // Default window width
+        this.windowLevel = 40;   // Default window level
         this.zoomFactor = 1.0;
         this.panX = 0;
         this.panY = 0;
@@ -31,7 +31,7 @@ class DicomViewer {
         this.crosshair = false;
         
         // Tools
-        this.activeTool = 'windowing';
+        this.activeTool = 'zoom';
         this.measurements = [];
         this.annotations = [];
         this.currentMeasurement = null;
@@ -186,7 +186,7 @@ class DicomViewer {
     }
     
     resizeCanvas() {
-        const viewport = document.querySelector('.viewport');
+        const viewport = document.querySelector('.viewport-container');
         if (viewport) {
             // Get the actual available viewport dimensions
             const viewportRect = viewport.getBoundingClientRect();
@@ -200,7 +200,7 @@ class DicomViewer {
             this.canvas.width = Math.round(displayWidth * devicePixelRatio);
             this.canvas.height = Math.round(displayHeight * devicePixelRatio);
             
-            // Set canvas display size to match viewport
+            // Set display size to maintain aspect ratio
             this.canvas.style.width = displayWidth + 'px';
             this.canvas.style.height = displayHeight + 'px';
             
@@ -212,6 +212,113 @@ class DicomViewer {
     }
     
     setupEventListeners() {
+        // Header buttons
+        document.getElementById('worklist-btn')?.addEventListener('click', () => {
+            window.location.href = '/worklist/';
+        });
+        
+        document.getElementById('load-dicom-btn')?.addEventListener('click', () => {
+            this.showUploadModal();
+        });
+        
+        document.getElementById('series-btn')?.addEventListener('click', () => {
+            this.toggleSeriesSelector();
+        });
+        
+        document.getElementById('logout-btn')?.addEventListener('click', () => {
+            window.location.href = '/logout/';
+        });
+        
+        // Tool buttons
+        document.getElementById('window-btn')?.addEventListener('click', () => {
+            this.handleToolClick('window');
+        });
+        
+        document.getElementById('zoom-btn')?.addEventListener('click', () => {
+            this.handleToolClick('zoom');
+        });
+        
+        document.getElementById('pan-btn')?.addEventListener('click', () => {
+            this.handleToolClick('pan');
+        });
+        
+        document.getElementById('measure-btn')?.addEventListener('click', () => {
+            this.handleToolClick('measure');
+        });
+        
+        document.getElementById('ellipse-btn')?.addEventListener('click', () => {
+            this.handleToolClick('ellipse');
+        });
+        
+        document.getElementById('annotate-btn')?.addEventListener('click', () => {
+            this.handleToolClick('annotate');
+        });
+        
+        document.getElementById('crosshair-btn')?.addEventListener('click', () => {
+            this.toggleCrosshair();
+        });
+        
+        document.getElementById('invert-btn')?.addEventListener('click', () => {
+            this.invertImage();
+        });
+        
+        // Toggle switches
+        document.getElementById('density-toggle')?.addEventListener('click', () => {
+            this.toggleEnhancement('density');
+        });
+        
+        document.getElementById('highres-toggle')?.addEventListener('click', () => {
+            this.toggleEnhancement('highres');
+        });
+        
+        document.getElementById('contrast-toggle')?.addEventListener('click', () => {
+            this.toggleEnhancement('contrast');
+        });
+        
+        // Sliders
+        document.getElementById('window-width-slider')?.addEventListener('input', (e) => {
+            this.windowWidth = parseInt(e.target.value);
+            this.updateWindowLevelDisplay();
+            this.updateDisplay();
+        });
+        
+        document.getElementById('window-level-slider')?.addEventListener('input', (e) => {
+            this.windowLevel = parseInt(e.target.value);
+            this.updateWindowLevelDisplay();
+            this.updateDisplay();
+        });
+        
+        // Preset buttons
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const preset = btn.dataset.preset;
+                this.applyPreset(preset);
+            });
+        });
+        
+        // Navigation controls
+        document.getElementById('slice-slider')?.addEventListener('input', (e) => {
+            this.currentImageIndex = parseInt(e.target.value) - 1;
+            this.loadCurrentImage();
+        });
+        
+        document.getElementById('prev-slice-btn')?.addEventListener('click', () => {
+            this.previousSlice();
+        });
+        
+        document.getElementById('next-slice-btn')?.addEventListener('click', () => {
+            this.nextSlice();
+        });
+        
+        // Clear buttons
+        document.getElementById('clear-measurements-btn')?.addEventListener('click', () => {
+            this.clearMeasurements();
+        });
+        
+        document.getElementById('clear-annotations-btn')?.addEventListener('click', () => {
+            this.clearAnnotations();
+        });
+        
         // Canvas event listeners
         this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
         this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
@@ -219,270 +326,116 @@ class DicomViewer {
         this.canvas.addEventListener('wheel', (e) => this.onWheel(e));
         this.canvas.addEventListener('dblclick', (e) => this.onDoubleClick(e));
         
-        // Tool button event listeners
-        const toolButtons = [
-            'windowing-btn', 'pan-btn', 'zoom-btn', 'measure-btn',
-            'crosshair-btn', 'invert-btn', 'reset-btn',
-            'preset-btn', 'enhance-btn', 'ai-btn',
-            '3d-btn', 'series-btn', 'report-btn'
-        ];
-        
-        toolButtons.forEach(btnId => {
-            const btn = document.getElementById(btnId);
-            if (btn) {
-                btn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    this.handleToolClick(btnId.replace('-btn', ''));
-                });
-            }
+        // Upload modal
+        document.getElementById('close-upload-modal')?.addEventListener('click', () => {
+            this.hideUploadModal();
         });
         
-        // Slider event listeners
-        const windowWidthSlider = document.getElementById('window-width-slider');
-        const windowLevelSlider = document.getElementById('window-level-slider');
-        const zoomSlider = document.getElementById('zoom-slider');
-        
-        if (windowWidthSlider) {
-            windowWidthSlider.addEventListener('input', (e) => {
-                this.windowWidth = parseInt(e.target.value);
-                this.updateDisplay();
-                this.updateOverlayLabels();
-            });
-        }
-        
-        if (windowLevelSlider) {
-            windowLevelSlider.addEventListener('input', (e) => {
-                this.windowLevel = parseInt(e.target.value);
-                this.updateDisplay();
-                this.updateOverlayLabels();
-            });
-        }
-        
-        if (zoomSlider) {
-            zoomSlider.addEventListener('input', (e) => {
-                this.zoomFactor = parseInt(e.target.value) / 100;
-                this.updateDisplay();
-                this.updateOverlayLabels();
-            });
-        }
-        
-        // Upload button
-        const uploadBtn = document.getElementById('upload-btn');
-        if (uploadBtn) {
-            uploadBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.showUploadModal();
-            });
-        }
-        
-        // Worklist button
-        const worklistBtn = document.getElementById('worklist-btn');
-        if (worklistBtn) {
-            worklistBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                window.location.href = '/worklist/';
-            });
-        }
-        
-        // Logout button
-        const logoutBtn = document.getElementById('logout-btn');
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                window.location.href = '/logout/';
-            });
-        }
-        
-        // Upload modal event listeners
+        // Setup upload functionality
         this.setupUploadModal();
-        
-        // Series navigation buttons
-        const prevSeriesBtn = document.getElementById('prev-series-btn');
-        const nextSeriesBtn = document.getElementById('next-series-btn');
-        
-        if (prevSeriesBtn) {
-            prevSeriesBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.previousSeries();
-            });
-        }
-        
-        if (nextSeriesBtn) {
-            nextSeriesBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.nextSeries();
-            });
-        }
-        
-        // Window resize
-        window.addEventListener('resize', () => {
-            this.resizeCanvas();
-            this.updateDisplay();
-        });
         
         console.log('Event listeners setup completed');
     }
     
     handleToolClick(tool) {
-        console.log('Tool clicked:', tool);
-        
         // Remove active class from all tool buttons
-        const allToolBtns = document.querySelectorAll('.tool-btn');
-        allToolBtns.forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tool-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
         
         // Add active class to clicked button
-        const clickedBtn = document.getElementById(`${tool}-btn`);
-        if (clickedBtn) {
-            clickedBtn.classList.add('active');
+        const toolBtn = document.getElementById(tool + '-btn');
+        if (toolBtn) {
+            toolBtn.classList.add('active');
         }
         
-        // Handle specific tool actions
+        // Update active tool
+        this.activeTool = tool;
+        
+        // Update cursor based on tool
         switch (tool) {
-            case 'windowing':
-                this.activeTool = 'windowing';
-                this.updateStatus('Window/Level tool activated');
+            case 'window':
+                this.canvas.style.cursor = 'crosshair';
                 break;
-                
-            case 'pan':
-                this.activeTool = 'pan';
-                this.updateStatus('Pan tool activated');
-                break;
-                
             case 'zoom':
-                this.activeTool = 'zoom';
-                this.updateStatus('Zoom tool activated');
+                this.canvas.style.cursor = 'zoom-in';
                 break;
-                
+            case 'pan':
+                this.canvas.style.cursor = 'grab';
+                break;
             case 'measure':
-                this.activeTool = 'measure';
-                this.updateStatus('Measurement tool activated');
+                this.canvas.style.cursor = 'crosshair';
                 break;
-                
-            case 'crosshair':
-                this.toggleCrosshair();
+            case 'ellipse':
+                this.canvas.style.cursor = 'crosshair';
                 break;
-                
-            case 'invert':
-                this.invertImage();
+            case 'annotate':
+                this.canvas.style.cursor = 'text';
                 break;
-                
-            case 'reset':
-                this.resetView();
-                break;
-                
-            case 'preset':
-                this.showPresetDropdown();
-                break;
-                
-            case 'enhance':
-                this.toggleEnhancementPanel();
-                break;
-                
-            case 'ai':
-                this.performAIAnalysis();
-                break;
-                
-            case '3d':
-                this.toggle3DOptions();
-                break;
-                
-            case 'series':
-                this.toggleSeriesSelector();
-                break;
-                
-            case 'report':
-                this.generateReport();
-                break;
-                
             default:
-                console.log('Unknown tool:', tool);
+                this.canvas.style.cursor = 'default';
         }
         
-        this.updateDisplay();
+        console.log('Active tool changed to:', tool);
     }
     
     toggleCrosshair() {
         this.crosshair = !this.crosshair;
         const crosshairElement = document.getElementById('crosshair');
+        const statusElement = document.getElementById('crosshair-status');
+        
         if (crosshairElement) {
             crosshairElement.style.display = this.crosshair ? 'block' : 'none';
         }
-        this.updateStatus(this.crosshair ? 'Crosshair enabled' : 'Crosshair disabled');
+        
+        if (statusElement) {
+            statusElement.textContent = this.crosshair ? 'ON' : 'OFF';
+        }
+        
+        this.updateDisplay();
     }
     
     invertImage() {
         this.inverted = !this.inverted;
         this.updateDisplay();
-        this.updateStatus(this.inverted ? 'Image inverted' : 'Image normal');
     }
     
-    resetView() {
-        this.zoomFactor = 1.0;
-        this.panX = 0;
-        this.panY = 0;
-        this.windowWidth = 1500;
-        this.windowLevel = -600;
-        this.inverted = false;
-        this.crosshair = false;
+    toggleEnhancement(type) {
+        const toggle = document.getElementById(type + '-toggle');
+        const status = document.getElementById(type + '-status');
         
-        // Update sliders
-        const windowWidthSlider = document.getElementById('window-width-slider');
-        const windowLevelSlider = document.getElementById('window-level-slider');
-        const zoomSlider = document.getElementById('zoom-slider');
-        
-        if (windowWidthSlider) windowWidthSlider.value = this.windowWidth;
-        if (windowLevelSlider) windowLevelSlider.value = this.windowLevel;
-        if (zoomSlider) zoomSlider.value = this.zoomFactor * 100;
-        
-        this.updateDisplay();
-        this.updateOverlayLabels();
-        this.updateStatus('View reset');
-    }
-    
-    showPresetDropdown() {
-        // Create preset dropdown
-        const dropdown = document.createElement('div');
-        dropdown.className = 'dropdown-content show';
-        dropdown.style.position = 'absolute';
-        dropdown.style.top = '100%';
-        dropdown.style.left = '0';
-        dropdown.style.zIndex = '1000';
-        dropdown.style.background = 'linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%)';
-        dropdown.style.border = '1px solid rgba(0, 255, 0, 0.3)';
-        dropdown.style.borderRadius = '8px';
-        dropdown.style.padding = '10px';
-        dropdown.style.minWidth = '200px';
-        
-        Object.keys(this.windowPresets).forEach(presetName => {
-            const preset = this.windowPresets[presetName];
-            const item = document.createElement('div');
-            item.className = 'dropdown-item';
-            item.style.padding = '8px 12px';
-            item.style.cursor = 'pointer';
-            item.style.color = '#00ff00';
-            item.style.borderBottom = '1px solid rgba(0, 255, 0, 0.1)';
-            item.textContent = `${presetName.charAt(0).toUpperCase() + presetName.slice(1)} (${preset.ww}/${preset.wl})`;
+        if (toggle && status) {
+            toggle.classList.toggle('active');
+            const isActive = toggle.classList.contains('active');
+            status.textContent = isActive ? 'On' : 'Off';
             
-            item.addEventListener('click', () => {
-                this.applyPreset(presetName);
-                dropdown.remove();
-            });
+            // Apply enhancement based on type
+            switch (type) {
+                case 'density':
+                    this.density_enhancement = isActive ? 'true' : 'false';
+                    break;
+                case 'highres':
+                    this.high_quality = isActive ? 'true' : 'false';
+                    break;
+                case 'contrast':
+                    this.contrast_optimization = isActive ? 'medical' : 'conservative';
+                    break;
+            }
             
-            dropdown.appendChild(item);
-        });
-        
-        const presetBtn = document.getElementById('preset-btn');
-        if (presetBtn) {
-            presetBtn.appendChild(dropdown);
-            
-            // Remove dropdown when clicking outside
-            setTimeout(() => {
-                document.addEventListener('click', function removeDropdown() {
-                    dropdown.remove();
-                    document.removeEventListener('click', removeDropdown);
-                });
-            }, 100);
+            this.updateDisplay();
         }
+    }
+    
+    updateWindowLevelDisplay() {
+        const wwValue = document.getElementById('window-width-value');
+        const wlValue = document.getElementById('window-level-value');
+        const wwDisplay = document.getElementById('ww-display');
+        const wlDisplay = document.getElementById('wl-display');
+        
+        if (wwValue) wwValue.textContent = this.windowWidth;
+        if (wlValue) wlValue.textContent = this.windowLevel;
+        if (wwDisplay) wwDisplay.textContent = this.windowWidth;
+        if (wlDisplay) wlDisplay.textContent = this.windowLevel;
     }
     
     applyPreset(presetName) {
@@ -492,43 +445,61 @@ class DicomViewer {
             this.windowLevel = preset.wl;
             
             // Update sliders
-            const windowWidthSlider = document.getElementById('window-width-slider');
-            const windowLevelSlider = document.getElementById('window-level-slider');
+            const wwSlider = document.getElementById('window-width-slider');
+            const wlSlider = document.getElementById('window-level-slider');
             
-            if (windowWidthSlider) windowWidthSlider.value = this.windowWidth;
-            if (windowLevelSlider) windowLevelSlider.value = this.windowLevel;
+            if (wwSlider) wwSlider.value = this.windowWidth;
+            if (wlSlider) wlSlider.value = this.windowLevel;
             
+            this.updateWindowLevelDisplay();
             this.updateDisplay();
-            this.updateOverlayLabels();
-            this.updateStatus(`Applied ${presetName} preset`);
+            
+            this.showSuccessNotification(`Applied ${presetName} preset`);
         }
     }
     
-    toggleEnhancementPanel() {
-        const panel = document.getElementById('enhancement-panel');
-        if (panel) {
-            panel.classList.toggle('show');
-            this.updateStatus(panel.classList.contains('show') ? 'Enhancement panel opened' : 'Enhancement panel closed');
+    previousSlice() {
+        if (this.currentImageIndex > 0) {
+            this.currentImageIndex--;
+            this.loadCurrentImage();
         }
     }
     
-    performAIAnalysis() {
-        if (!this.currentImage) {
-            this.showError('No image loaded for AI analysis');
-            return;
+    nextSlice() {
+        if (this.currentImageIndex < this.currentImages.length - 1) {
+            this.currentImageIndex++;
+            this.loadCurrentImage();
         }
-        
-        this.updateStatus('Performing AI analysis...');
-        // Simulate AI analysis
-        setTimeout(() => {
-            this.updateStatus('AI analysis completed');
-            this.showSuccessNotification('AI analysis completed successfully');
-        }, 2000);
     }
     
-    toggle3DOptions() {
-        this.updateStatus('3D reconstruction options');
-        // Implement 3D options
+    clearMeasurements() {
+        this.measurements = [];
+        this.updateMeasurementDisplay();
+        this.updateDisplay();
+        this.showSuccessNotification('All measurements cleared');
+    }
+    
+    clearAnnotations() {
+        this.annotations = [];
+        this.updateAnnotationDisplay();
+        this.updateDisplay();
+        this.showSuccessNotification('All annotations cleared');
+    }
+    
+    updateMeasurementDisplay() {
+        const countElement = document.getElementById('measurement-count');
+        if (countElement) {
+            countElement.textContent = this.measurements.length > 0 ? 
+                `${this.measurements.length} measurement(s)` : 'No measurements';
+        }
+    }
+    
+    updateAnnotationDisplay() {
+        const countElement = document.getElementById('annotation-count');
+        if (countElement) {
+            countElement.textContent = this.annotations.length > 0 ? 
+                `${this.annotations.length} annotation(s)` : 'No annotations';
+        }
     }
     
     toggleSeriesSelector() {
@@ -541,99 +512,51 @@ class DicomViewer {
         }
     }
     
-    generateReport() {
-        if (!this.currentImage) {
-            this.showError('No image loaded for report generation');
-            return;
-        }
-        
-        this.updateStatus('Generating report...');
-        // Implement report generation
-        setTimeout(() => {
-            this.updateStatus('Report generated');
-            this.showSuccessNotification('Report generated successfully');
-        }, 1500);
-    }
-    
     setupUploadModal() {
-        const modal = document.getElementById('upload-modal');
-        const closeBtn = document.getElementById('close-upload-modal');
+        const dropArea = document.getElementById('upload-drop-area');
+        const folderDropArea = document.getElementById('folder-drop-area');
         const fileInput = document.getElementById('file-input');
         const folderInput = document.getElementById('folder-input');
-        const uploadDropArea = document.getElementById('upload-drop-area');
-        const folderDropArea = document.getElementById('folder-drop-area');
         
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-                if (modal) modal.style.display = 'none';
+        // File upload
+        if (dropArea && fileInput) {
+            dropArea.addEventListener('click', () => fileInput.click());
+            dropArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropArea.style.borderColor = '#00ff00';
+            });
+            dropArea.addEventListener('dragleave', () => {
+                dropArea.style.borderColor = 'rgba(0, 255, 0, 0.3)';
+            });
+            dropArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropArea.style.borderColor = 'rgba(0, 255, 0, 0.3)';
+                this.uploadFiles(e.dataTransfer.files);
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                this.uploadFiles(e.target.files);
             });
         }
         
-        if (uploadDropArea) {
-            uploadDropArea.addEventListener('click', () => {
-                if (fileInput) fileInput.click();
-            });
-            
-            uploadDropArea.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                uploadDropArea.style.borderColor = '#00ff00';
-                uploadDropArea.style.background = 'rgba(0, 255, 0, 0.1)';
-            });
-            
-            uploadDropArea.addEventListener('dragleave', (e) => {
-                e.preventDefault();
-                uploadDropArea.style.borderColor = 'rgba(0, 255, 0, 0.3)';
-                uploadDropArea.style.background = 'transparent';
-            });
-            
-            uploadDropArea.addEventListener('drop', (e) => {
-                e.preventDefault();
-                uploadDropArea.style.borderColor = 'rgba(0, 255, 0, 0.3)';
-                uploadDropArea.style.background = 'transparent';
-                
-                const files = Array.from(e.dataTransfer.files);
-                this.uploadFiles(files);
-            });
-        }
-        
-        if (folderDropArea) {
-            folderDropArea.addEventListener('click', () => {
-                if (folderInput) folderInput.click();
-            });
-            
+        // Folder upload
+        if (folderDropArea && folderInput) {
+            folderDropArea.addEventListener('click', () => folderInput.click());
             folderDropArea.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 folderDropArea.style.borderColor = '#00ff00';
-                folderDropArea.style.background = 'rgba(0, 255, 0, 0.1)';
             });
-            
-            folderDropArea.addEventListener('dragleave', (e) => {
-                e.preventDefault();
+            folderDropArea.addEventListener('dragleave', () => {
                 folderDropArea.style.borderColor = 'rgba(0, 255, 0, 0.3)';
-                folderDropArea.style.background = 'transparent';
             });
-            
             folderDropArea.addEventListener('drop', (e) => {
                 e.preventDefault();
                 folderDropArea.style.borderColor = 'rgba(0, 255, 0, 0.3)';
-                folderDropArea.style.background = 'transparent';
-                
-                const files = Array.from(e.dataTransfer.files);
-                this.uploadFolder(files);
+                this.uploadFolder(e.dataTransfer.files);
             });
-        }
-        
-        if (fileInput) {
-            fileInput.addEventListener('change', (e) => {
-                const files = Array.from(e.target.files);
-                this.uploadFiles(files);
-            });
-        }
-        
-        if (folderInput) {
+            
             folderInput.addEventListener('change', (e) => {
-                const files = Array.from(e.target.files);
-                this.uploadFolder(files);
+                this.uploadFolder(e.target.files);
             });
         }
     }
@@ -645,18 +568,25 @@ class DicomViewer {
         }
     }
     
+    hideUploadModal() {
+        const modal = document.getElementById('upload-modal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
+    
     async uploadFiles(files) {
-        if (files.length === 0) return;
+        if (!files || files.length === 0) return;
         
-        this.showLoadingState('Uploading files...');
+        this.showLoadingState('Uploading DICOM files...');
         
         const formData = new FormData();
-        files.forEach(file => {
+        for (let file of files) {
             formData.append('files', file);
-        });
+        }
         
         try {
-            const response = await fetch('/api/upload-dicom-files/', {
+            const response = await fetch('/upload/', {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -666,34 +596,36 @@ class DicomViewer {
             
             if (response.ok) {
                 const result = await response.json();
-                this.hideLoadingState();
-                this.showSuccessNotification(`Successfully uploaded ${files.length} files`);
+                this.hideUploadModal();
+                this.showSuccessNotification('Files uploaded successfully');
                 
-                // Load the uploaded study if available
+                // Load the uploaded study
                 if (result.study_id) {
                     await this.loadStudy(result.study_id);
                 }
             } else {
-                throw new Error(`Upload failed: ${response.statusText}`);
+                throw new Error('Upload failed');
             }
         } catch (error) {
+            console.error('Upload error:', error);
+            this.showError('Upload failed: ' + error.message);
+        } finally {
             this.hideLoadingState();
-            this.showError(`Upload failed: ${error.message}`);
         }
     }
     
     async uploadFolder(files) {
-        if (files.length === 0) return;
+        if (!files || files.length === 0) return;
         
-        this.showLoadingState('Uploading folder contents...');
+        this.showLoadingState('Uploading DICOM folder...');
         
         const formData = new FormData();
-        files.forEach(file => {
+        for (let file of files) {
             formData.append('files', file);
-        });
+        }
         
         try {
-            const response = await fetch('/api/upload-dicom-folder/', {
+            const response = await fetch('/upload/', {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -703,71 +635,114 @@ class DicomViewer {
             
             if (response.ok) {
                 const result = await response.json();
-                this.hideLoadingState();
-                this.showSuccessNotification(`Successfully uploaded folder with ${files.length} files`);
+                this.hideUploadModal();
+                this.showSuccessNotification('Folder uploaded successfully');
                 
-                // Load the uploaded study if available
+                // Load the uploaded study
                 if (result.study_id) {
                     await this.loadStudy(result.study_id);
                 }
             } else {
-                throw new Error(`Folder upload failed: ${response.statusText}`);
+                throw new Error('Upload failed');
             }
         } catch (error) {
+            console.error('Upload error:', error);
+            this.showError('Upload failed: ' + error.message);
+        } finally {
             this.hideLoadingState();
-            this.showError(`Folder upload failed: ${error.message}`);
         }
     }
     
     async loadStudy(studyId) {
+        this.showLoadingState('Loading study...');
+        
         try {
-            this.showLoadingState('Loading study...');
-            
-            const response = await fetch(`/api/get-study-images/${studyId}/`);
-            if (!response.ok) {
-                throw new Error('Failed to load study');
-            }
+            const response = await fetch(`/api/study/${studyId}/`);
+            if (!response.ok) throw new Error('Failed to load study');
             
             const studyData = await response.json();
             this.currentStudy = studyData;
-            this.currentImages = studyData.images || [];
-            this.currentImageIndex = 0;
             
-            if (this.currentImages.length > 0) {
-                await this.loadCurrentImage();
+            // Update patient information display
+            this.updatePatientInfo(studyData);
+            
+            // Load first series
+            if (studyData.series && studyData.series.length > 0) {
+                await this.loadSeries(studyData.series[0]);
             }
             
-            this.updatePatientInfo();
-            this.updateSeriesDisplay();
             this.hideLoadingState();
+            this.showSuccessNotification('Study loaded successfully');
             
         } catch (error) {
+            console.error('Error loading study:', error);
+            this.showError('Failed to load study: ' + error.message);
             this.hideLoadingState();
-            this.showError(`Failed to load study: ${error.message}`);
+        }
+    }
+    
+    updatePatientInfo(studyData) {
+        const patientName = document.getElementById('patient-name');
+        const studyDate = document.getElementById('study-date');
+        const modality = document.getElementById('modality');
+        
+        if (patientName) patientName.textContent = studyData.patient_name || '-';
+        if (studyDate) studyDate.textContent = studyData.study_date || '-';
+        if (modality) modality.textContent = studyData.modality || '-';
+    }
+    
+    async loadSeries(seriesData) {
+        this.currentSeries = seriesData;
+        this.currentImages = seriesData.images || [];
+        this.currentImageIndex = 0;
+        
+        // Update slice slider
+        const sliceSlider = document.getElementById('slice-slider');
+        if (sliceSlider) {
+            sliceSlider.max = this.currentImages.length;
+            sliceSlider.value = 1;
+        }
+        
+        // Update slice info
+        this.updateSliceInfo();
+        
+        if (this.currentImages.length > 0) {
+            await this.loadCurrentImage();
+        }
+    }
+    
+    updateSliceInfo() {
+        const sliceInfo = document.getElementById('slice-info');
+        if (sliceInfo) {
+            sliceInfo.textContent = `Slice ${this.currentImageIndex + 1}/${this.currentImages.length}`;
+        }
+        
+        const sliceDisplay = document.getElementById('slice-display');
+        if (sliceDisplay) {
+            sliceDisplay.textContent = `${this.currentImageIndex + 1}/${this.currentImages.length}`;
         }
     }
     
     async loadCurrentImage() {
-        if (this.currentImages.length === 0) return;
+        if (!this.currentImages || this.currentImageIndex >= this.currentImages.length) {
+            return;
+        }
         
         const imageData = this.currentImages[this.currentImageIndex];
-        if (!imageData) return;
         
         try {
-            const response = await fetch(`/api/get-image-data/${imageData.id}/`);
-            if (!response.ok) {
-                throw new Error('Failed to load image data');
-            }
+            const response = await fetch(`/api/image/${imageData.id}/`);
+            if (!response.ok) throw new Error('Failed to load image');
             
             const imageResult = await response.json();
             this.currentImage = imageResult;
             
+            this.updateSliceInfo();
             this.updateDisplay();
-            this.updateOverlayLabels();
-            this.updateStatus(`Image ${this.currentImageIndex + 1} of ${this.currentImages.length}`);
             
         } catch (error) {
-            this.showError(`Failed to load image: ${error.message}`);
+            console.error('Error loading image:', error);
+            this.showError('Failed to load image: ' + error.message);
         }
     }
     
@@ -778,71 +753,89 @@ class DicomViewer {
         this.ctx.fillStyle = '#000';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // Apply window/level transformation
-        const imageData = this.currentImage.image_data;
-        if (imageData) {
-            // Create ImageData from base64
-            const img = new Image();
-            img.onload = () => {
-                // Apply transformations
-                this.ctx.save();
-                
-                // Apply zoom and pan
-                this.ctx.translate(this.panX, this.panY);
-                this.ctx.scale(this.zoomFactor, this.zoomFactor);
-                
-                // Apply window/level
-                this.applyWindowLevel(img);
-                
-                // Apply inversion if needed
-                if (this.inverted) {
-                    this.ctx.filter = 'invert(1)';
-                }
-                
-                // Draw image
-                this.ctx.drawImage(img, 0, 0);
-                
-                this.ctx.restore();
-                
-                // Draw overlays
-                this.drawOverlays();
-            };
-            img.src = imageData;
-        }
+        // Load and display image
+        const img = new Image();
+        img.onload = () => {
+            // Apply window/level
+            const processedImg = this.applyWindowLevel(img);
+            
+            // Calculate display dimensions
+            const canvasWidth = this.canvas.width;
+            const canvasHeight = this.canvas.height;
+            const imgWidth = processedImg.width;
+            const imgHeight = processedImg.height;
+            
+            // Calculate scaling to fit canvas
+            const scaleX = canvasWidth / imgWidth;
+            const scaleY = canvasHeight / imgHeight;
+            const scale = Math.min(scaleX, scaleY) * this.zoomFactor;
+            
+            const displayWidth = imgWidth * scale;
+            const displayHeight = imgHeight * scale;
+            
+            // Center the image
+            const x = (canvasWidth - displayWidth) / 2 + this.panX;
+            const y = (canvasHeight - displayHeight) / 2 + this.panY;
+            
+            // Draw image
+            this.ctx.drawImage(processedImg, x, y, displayWidth, displayHeight);
+            
+            // Draw overlays
+            this.drawOverlays();
+            
+            // Update zoom display
+            const zoomDisplay = document.getElementById('zoom-display');
+            if (zoomDisplay) {
+                zoomDisplay.textContent = `${Math.round(this.zoomFactor * 100)}%`;
+            }
+        };
+        
+        img.src = this.currentImage.image_url;
     }
     
     applyWindowLevel(img) {
-        // Apply window/level transformation to the image
-        // This is a simplified version - in a real implementation,
-        // you would apply the window/level transformation to the pixel data
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+        // Create a temporary canvas for window/level processing
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
         
-        canvas.width = img.width;
-        canvas.height = img.height;
+        tempCanvas.width = img.width;
+        tempCanvas.height = img.height;
         
-        ctx.drawImage(img, 0, 0);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        // Draw original image
+        tempCtx.drawImage(img, 0, 0);
+        
+        // Get image data for processing
+        const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
         const data = imageData.data;
         
         // Apply window/level transformation
+        const min = this.windowLevel - this.windowWidth / 2;
+        const max = this.windowLevel + this.windowWidth / 2;
+        
         for (let i = 0; i < data.length; i += 4) {
-            const pixelValue = data[i];
-            const normalizedValue = (pixelValue - this.windowLevel + this.windowWidth / 2) / this.windowWidth;
-            const clampedValue = Math.max(0, Math.min(255, normalizedValue * 255));
+            let value = data[i]; // Use red channel for grayscale
             
-            data[i] = clampedValue;     // Red
-            data[i + 1] = clampedValue; // Green
-            data[i + 2] = clampedValue; // Blue
-            // Alpha remains unchanged
+            // Apply window/level
+            if (value < min) value = 0;
+            else if (value > max) value = 255;
+            else value = ((value - min) / (max - min)) * 255;
+            
+            // Apply inversion if enabled
+            if (this.inverted) {
+                value = 255 - value;
+            }
+            
+            data[i] = data[i + 1] = data[i + 2] = value;
         }
         
-        ctx.putImageData(imageData, 0, 0);
-        return canvas;
+        // Put processed data back
+        tempCtx.putImageData(imageData, 0, 0);
+        
+        return tempCanvas;
     }
     
     drawOverlays() {
-        // Draw crosshair if enabled
+        // Draw crosshair
         if (this.crosshair) {
             this.drawCrosshair();
         }
@@ -858,7 +851,7 @@ class DicomViewer {
         const centerX = this.canvas.width / 2;
         const centerY = this.canvas.height / 2;
         
-        this.ctx.strokeStyle = '#00ff00';
+        this.ctx.strokeStyle = '#00ffff';
         this.ctx.lineWidth = 1;
         this.ctx.setLineDash([5, 5]);
         
@@ -878,18 +871,14 @@ class DicomViewer {
     }
     
     drawMeasurements() {
-        // Draw measurement lines and annotations
+        // Draw existing measurements
         this.measurements.forEach(measurement => {
             this.ctx.strokeStyle = '#00ff00';
             this.ctx.lineWidth = 2;
-            this.ctx.setLineDash([5, 5]);
-            
             this.ctx.beginPath();
             this.ctx.moveTo(measurement.start.x, measurement.start.y);
             this.ctx.lineTo(measurement.end.x, measurement.end.y);
             this.ctx.stroke();
-            
-            this.ctx.setLineDash([]);
             
             // Draw measurement text
             this.ctx.fillStyle = '#00ff00';
@@ -899,238 +888,92 @@ class DicomViewer {
     }
     
     drawAnnotations() {
-        // Draw annotations
+        // Draw existing annotations
         this.annotations.forEach(annotation => {
-            this.ctx.fillStyle = '#ffff00';
-            this.ctx.font = '14px Arial';
+            this.ctx.fillStyle = annotation.color;
+            this.ctx.font = `${annotation.fontSize}px Arial`;
             this.ctx.fillText(annotation.text, annotation.x, annotation.y);
         });
     }
     
-    updateOverlayLabels() {
-        // Update window/level info
-        const wwValue = document.getElementById('ww-value');
-        const wlValue = document.getElementById('wl-value');
-        const zoomValue = document.getElementById('zoom-value');
-        
-        if (wwValue) wwValue.textContent = this.windowWidth;
-        if (wlValue) wlValue.textContent = this.windowLevel;
-        if (zoomValue) zoomValue.textContent = `${Math.round(this.zoomFactor * 100)}%`;
-    }
-    
-    updatePatientInfo() {
-        if (!this.currentStudy) return;
-        
-        const patientName = document.getElementById('patient-name');
-        const patientId = document.getElementById('patient-id');
-        const studyDescription = document.getElementById('study-description');
-        const studyDate = document.getElementById('study-date');
-        const modality = document.getElementById('modality');
-        const imageCount = document.getElementById('image-count');
-        
-        if (patientName) patientName.textContent = this.currentStudy.patient_name || '-';
-        if (patientId) patientId.textContent = this.currentStudy.patient_id || '-';
-        if (studyDescription) studyDescription.textContent = this.currentStudy.study_description || '-';
-        if (studyDate) studyDate.textContent = this.currentStudy.study_date || '-';
-        if (modality) modality.textContent = this.currentStudy.modality || '-';
-        if (imageCount) imageCount.textContent = this.currentImages.length || '-';
-    }
-    
-    updateSeriesDisplay() {
-        const seriesGrid = document.getElementById('series-grid');
-        if (!seriesGrid || !this.currentStudy) return;
-        
-        seriesGrid.innerHTML = '';
-        
-        const series = this.currentStudy.series || [];
-        series.forEach((seriesData, index) => {
-            const seriesItem = document.createElement('div');
-            seriesItem.className = 'series-item';
-            seriesItem.addEventListener('click', () => this.selectSeries(index));
-            
-            seriesItem.innerHTML = `
-                <div class="series-thumbnail">
-                    <i class="fas fa-image"></i>
-                </div>
-                <div class="series-info">
-                    <div class="series-name">Series ${index + 1}</div>
-                    <div class="series-details">${seriesData.images?.length || 0} images</div>
-                </div>
-            `;
-            
-            seriesGrid.appendChild(seriesItem);
-        });
-        
-        // Update series counter
-        const seriesCounter = document.getElementById('series-counter');
-        if (seriesCounter) {
-            seriesCounter.textContent = `Series 1 of ${series.length}`;
-        }
-    }
-    
-    selectSeries(seriesIndex) {
-        // Remove active class from all series items
-        const seriesItems = document.querySelectorAll('.series-item');
-        seriesItems.forEach(item => item.classList.remove('active'));
-        
-        // Add active class to selected series
-        const selectedItem = seriesItems[seriesIndex];
-        if (selectedItem) {
-            selectedItem.classList.add('active');
-        }
-        
-        // Load series images
-        if (this.currentStudy && this.currentStudy.series && this.currentStudy.series[seriesIndex]) {
-            this.currentImages = this.currentStudy.series[seriesIndex].images || [];
-            this.currentImageIndex = 0;
-            this.loadCurrentImage();
-        }
-    }
-    
-    previousSeries() {
-        if (this.currentImageIndex > 0) {
-            this.currentImageIndex--;
-            this.loadCurrentImage();
-        }
-    }
-    
-    nextSeries() {
-        if (this.currentImageIndex < this.currentImages.length - 1) {
-            this.currentImageIndex++;
-            this.loadCurrentImage();
-        }
-    }
-    
-    loadSeriesSelector() {
-        // Load series data for the selector
-        if (this.currentStudy && this.currentStudy.series) {
-            const seriesGrid = document.getElementById('series-grid');
-            if (seriesGrid) {
-                seriesGrid.innerHTML = '';
-                
-                this.currentStudy.series.forEach((seriesData, index) => {
-                    const seriesItem = document.createElement('div');
-                    seriesItem.className = 'series-item';
-                    seriesItem.addEventListener('click', () => {
-                        this.selectSeries(index);
-                        document.getElementById('series-selector').classList.remove('show');
-                    });
-                    
-                    seriesItem.innerHTML = `
-                        <div class="series-thumbnail">
-                            <i class="fas fa-image"></i>
-                        </div>
-                        <div class="series-info">
-                            <div class="series-name">Series ${index + 1}</div>
-                            <div class="series-details">${seriesData.images?.length || 0} images</div>
-                        </div>
-                    `;
-                    
-                    seriesGrid.appendChild(seriesItem);
-                });
-            }
-        }
-    }
-    
     onMouseDown(e) {
-        if (!this.currentImage) return;
-        
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         
-        this.isDragging = true;
-        this.dragStart = { x, y };
-        
         switch (this.activeTool) {
             case 'pan':
+                this.isDragging = true;
+                this.dragStart = { x: x - this.panX, y: y - this.panY };
                 this.canvas.style.cursor = 'grabbing';
-                break;
-            case 'zoom':
-                // Handle zoom
                 break;
             case 'measure':
                 this.startMeasurement(x, y);
+                break;
+            case 'ellipse':
+                this.startEllipse(x, y);
+                break;
+            case 'annotate':
+                this.addAnnotation(x, y);
                 break;
         }
     }
     
     onMouseMove(e) {
-        if (!this.currentImage) return;
-        
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         
-        if (this.isDragging && this.dragStart) {
-            switch (this.activeTool) {
-                case 'pan':
-                    const deltaX = x - this.dragStart.x;
-                    const deltaY = y - this.dragStart.y;
-                    this.panX += deltaX;
-                    this.panY += deltaY;
-                    this.dragStart = { x, y };
-                    this.updateDisplay();
-                    break;
-            }
+        if (this.isDragging && this.activeTool === 'pan') {
+            this.panX = x - this.dragStart.x;
+            this.panY = y - this.dragStart.y;
+            this.updateDisplay();
+        }
+        
+        if (this.activeTool === 'measure' && this.currentMeasurement) {
+            this.currentMeasurement.end = { x, y };
+            this.updateDisplay();
+        }
+        
+        if (this.activeTool === 'ellipse' && this.currentEllipse) {
+            this.currentEllipse.end = { x, y };
+            this.updateDisplay();
         }
     }
     
     onMouseUp(e) {
-        if (!this.currentImage) return;
-        
-        const rect = this.canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        if (this.isDragging && this.dragStart) {
-            switch (this.activeTool) {
-                case 'measure':
-                    this.endMeasurement(x, y);
-                    break;
-            }
+        if (this.isDragging) {
+            this.isDragging = false;
+            this.canvas.style.cursor = 'grab';
         }
         
-        this.isDragging = false;
-        this.dragStart = null;
-        this.canvas.style.cursor = 'default';
+        if (this.activeTool === 'measure' && this.currentMeasurement) {
+            this.endMeasurement();
+        }
+        
+        if (this.activeTool === 'ellipse' && this.currentEllipse) {
+            this.endEllipse();
+        }
     }
     
     onWheel(e) {
-        if (!this.currentImage) return;
-        
-        e.preventDefault();
-        
-        const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        this.zoomFactor *= delta;
-        this.zoomFactor = Math.max(0.1, Math.min(5.0, this.zoomFactor));
-        
-        // Update zoom slider
-        const zoomSlider = document.getElementById('zoom-slider');
-        if (zoomSlider) {
-            zoomSlider.value = this.zoomFactor * 100;
+        if (this.activeTool === 'zoom') {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            this.zoomFactor *= delta;
+            this.zoomFactor = Math.max(0.1, Math.min(5.0, this.zoomFactor));
+            this.updateDisplay();
         }
-        
-        this.updateDisplay();
-        this.updateOverlayLabels();
     }
     
     onDoubleClick(e) {
-        if (!this.currentImage) return;
-        
-        // Reset zoom and pan on double click
-        this.zoomFactor = 1.0;
-        this.panX = 0;
-        this.panY = 0;
-        
-        // Update sliders
-        const zoomSlider = document.getElementById('zoom-slider');
-        if (zoomSlider) {
-            zoomSlider.value = 100;
+        if (this.activeTool === 'window') {
+            // Reset view
+            this.zoomFactor = 1.0;
+            this.panX = 0;
+            this.panY = 0;
+            this.updateDisplay();
         }
-        
-        this.updateDisplay();
-        this.updateOverlayLabels();
     }
     
     startMeasurement(x, y) {
@@ -1140,29 +983,71 @@ class DicomViewer {
         };
     }
     
-    endMeasurement(x, y) {
+    endMeasurement() {
         if (this.currentMeasurement) {
-            this.currentMeasurement.end = { x, y };
-            
-            // Calculate distance
-            const dx = this.currentMeasurement.end.x - this.currentMeasurement.start.x;
-            const dy = this.currentMeasurement.end.y - this.currentMeasurement.start.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
+            const distance = Math.sqrt(
+                Math.pow(this.currentMeasurement.end.x - this.currentMeasurement.start.x, 2) +
+                Math.pow(this.currentMeasurement.end.y - this.currentMeasurement.start.y, 2)
+            );
             
             this.currentMeasurement.value = `${distance.toFixed(1)}px`;
             this.measurements.push(this.currentMeasurement);
-            
             this.currentMeasurement = null;
+            
+            this.updateMeasurementDisplay();
+            this.updateDisplay();
+        }
+    }
+    
+    startEllipse(x, y) {
+        this.currentEllipse = {
+            start: { x, y },
+            end: { x, y }
+        };
+    }
+    
+    endEllipse() {
+        if (this.currentEllipse) {
+            // Calculate ellipse parameters
+            const centerX = (this.currentEllipse.start.x + this.currentEllipse.end.x) / 2;
+            const centerY = (this.currentEllipse.start.y + this.currentEllipse.end.y) / 2;
+            const radiusX = Math.abs(this.currentEllipse.end.x - this.currentEllipse.start.x) / 2;
+            const radiusY = Math.abs(this.currentEllipse.end.y - this.currentEllipse.start.y) / 2;
+            
+            this.currentEllipse.center = { x: centerX, y: centerY };
+            this.currentEllipse.radiusX = radiusX;
+            this.currentEllipse.radiusY = radiusY;
+            
+            this.measurements.push(this.currentEllipse);
+            this.currentEllipse = null;
+            
+            this.updateMeasurementDisplay();
+            this.updateDisplay();
+        }
+    }
+    
+    addAnnotation(x, y) {
+        const text = prompt('Enter annotation text:');
+        if (text) {
+            this.annotations.push({
+                x: x,
+                y: y,
+                text: text,
+                color: '#ffff00',
+                fontSize: 14
+            });
+            
+            this.updateAnnotationDisplay();
             this.updateDisplay();
         }
     }
     
     showLoadingState(message = 'Loading...') {
         const overlay = document.getElementById('loading-overlay');
-        const loadingText = document.getElementById('loading-text');
+        const text = document.getElementById('loading-text');
         
         if (overlay) overlay.style.display = 'flex';
-        if (loadingText) loadingText.textContent = message;
+        if (text) text.textContent = message;
     }
     
     hideLoadingState() {
@@ -1171,10 +1056,7 @@ class DicomViewer {
     }
     
     updateStatus(message) {
-        const statusElement = document.getElementById('processing-status');
-        if (statusElement) {
-            statusElement.textContent = message;
-        }
+        console.log('Status:', message);
     }
     
     showSuccessNotification(message) {
@@ -1204,9 +1086,7 @@ class DicomViewer {
         setTimeout(() => {
             notification.classList.remove('show');
             setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.parentNode.removeChild(notification);
-                }
+                container.removeChild(notification);
             }, 300);
         }, 5000);
     }
@@ -1217,7 +1097,6 @@ class DicomViewer {
     }
     
     initializeEnhancedViewer() {
-        // Initialize any enhanced features
         console.log('Enhanced viewer features initialized');
     }
 }
@@ -1225,15 +1104,17 @@ class DicomViewer {
 // Global functions for upload modal
 function switchUploadTab(tabName) {
     // Hide all tab contents
-    const tabContents = document.querySelectorAll('.upload-tab-content');
-    tabContents.forEach(content => content.classList.remove('active'));
+    document.querySelectorAll('.upload-tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
     
     // Remove active class from all tabs
-    const tabs = document.querySelectorAll('.upload-tab');
-    tabs.forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.upload-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
     
     // Show selected tab content
-    const selectedContent = document.getElementById(`${tabName}-tab`);
+    const selectedContent = document.getElementById(tabName + '-tab');
     if (selectedContent) {
         selectedContent.classList.add('active');
     }
@@ -1251,21 +1132,16 @@ function connectToPACS() {
     const ae = document.getElementById('pacs-ae').value;
     
     if (!ip || !port || !ae) {
-        alert('Please fill in all PACS server details');
+        alert('Please fill in all PACS connection fields');
         return;
     }
     
-    // Implement PACS connection
-    console.log('Connecting to PACS server:', ip, port, ae);
+    // Implement PACS connection logic here
+    console.log('Connecting to PACS:', { ip, port, ae });
+    alert('PACS connection feature not implemented yet');
 }
 
 function connectToCloud(provider) {
     console.log('Connecting to cloud provider:', provider);
-    // Implement cloud connection
+    alert(`${provider} cloud connection feature not implemented yet`);
 }
-
-// Initialize the viewer when the page loads
-document.addEventListener('DOMContentLoaded', function() {
-    const viewer = new DicomViewer();
-    viewer.init();
-});
