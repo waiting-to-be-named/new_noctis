@@ -194,3 +194,5 @@ INFO 2025-07-30 06:31:11,984 basehttp 2456 140527011780288 "GET /static/js/dicom
 INFO 2025-07-30 06:31:11,987 basehttp 2456 140527021221568 "GET /viewer/ HTTP/1.1" 200 17424
 INFO 2025-07-31 11:11:48,758 font_manager 3220 140654926369024 Failed to extract font properties from /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf: Can not load face (unknown file format; error code 0x2)
 INFO 2025-07-31 11:11:48,768 font_manager 3220 140654926369024 generated new fontManager
+INFO 2025-08-01 06:35:38,922 font_manager 2969 139769070915840 Failed to extract font properties from /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf: Can not load face (unknown file format; error code 0x2)
+INFO 2025-08-01 06:35:38,928 font_manager 2969 139769070915840 generated new fontManager

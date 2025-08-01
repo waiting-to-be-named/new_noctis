@@ -35,11 +35,17 @@ class WorklistView(LoginRequiredMixin, ListView):
         print(f"Total worklist entries in database: {total_count}")
         
         # Filter by facility if user is facility staff
-        if hasattr(self.request.user, 'facility_staff'):
-            queryset = queryset.filter(facility=self.request.user.facility_staff.facility)
+        if hasattr(self.request.user, 'facility') and self.request.user.facility:
+            # Facility users see only their facility's worklist entries
+            queryset = queryset.filter(facility=self.request.user.facility)
             print(f"Filtered by facility, count: {queryset.count()}")
+        elif self.request.user.groups.filter(name='Facilities').exists():
+            # Facility group members without specific facility see nothing
+            queryset = queryset.none()
+            print(f"No facility assigned, showing no entries")
         else:
-            print(f"No facility filtering, showing all entries: {queryset.count()}")
+            # Admin and radiologists see all worklist entries
+            print(f"Admin/Radiologist access, showing all entries: {queryset.count()}")
         
         # Apply search filters
         search = self.request.GET.get('search')
@@ -91,10 +97,17 @@ def add_clinical_info(request, entry_id):
     """Add clinical information to a worklist entry"""
     entry = get_object_or_404(WorklistEntry, id=entry_id)
     
-    # Check permissions
+    # Check permissions - only radiologists, technicians, and admins can add clinical info
     if not (request.user.is_superuser or 
             request.user.groups.filter(name__in=['Radiologists', 'Technicians']).exists()):
-        return JsonResponse({'error': 'Permission denied'}, status=403)
+        return JsonResponse({'error': 'Permission denied. Only radiologists, technicians, and administrators can add clinical information.'}, status=403)
+    
+    # Check if user can access this worklist entry
+    if not (request.user.is_superuser or 
+            request.user.groups.filter(name='Radiologists').exists() or
+            (hasattr(request.user, 'facility') and 
+             request.user.facility == entry.facility)):
+        return JsonResponse({'error': 'Access denied. You do not have permission to access this worklist entry.'}, status=403)
     
     data = json.loads(request.body)
     clinical_info = data.get('clinical_info', '')
@@ -111,6 +124,13 @@ def add_clinical_info(request, entry_id):
 def view_study_from_worklist(request, entry_id):
     """Launch viewer with images from worklist entry"""
     entry = get_object_or_404(WorklistEntry, id=entry_id)
+    
+    # Check if user can access this worklist entry
+    if not (request.user.is_superuser or 
+            request.user.groups.filter(name='Radiologists').exists() or
+            (hasattr(request.user, 'facility') and 
+             request.user.facility == entry.facility)):
+        return JsonResponse({'error': 'Access denied. You do not have permission to view this study.'}, status=403)
     
     if entry.study:
         # Redirect to viewer with study ID
@@ -130,11 +150,11 @@ class FacilityWorklistView(LoginRequiredMixin, ListView):
         facility_id = self.kwargs.get('facility_id')
         facility = get_object_or_404(Facility, id=facility_id)
         
-        # Check permissions
+        # Check permissions using the new access control system
         if not (self.request.user.is_superuser or 
                 self.request.user.groups.filter(name='Radiologists').exists() or
-                (hasattr(self.request.user, 'facility_staff') and 
-                 self.request.user.facility_staff.facility == facility)):
+                (hasattr(self.request.user, 'facility') and 
+                 self.request.user.facility == facility)):
             return WorklistEntry.objects.none()
         
         return WorklistEntry.objects.filter(facility=facility)
@@ -154,10 +174,17 @@ def create_report(request, study_id):
     """Create or edit a radiology report"""
     study = get_object_or_404(DicomStudy, id=study_id)
     
-    # Check permissions
+    # Check permissions - only radiologists and admins can create reports
     if not (request.user.is_superuser or 
             request.user.groups.filter(name='Radiologists').exists()):
-        return JsonResponse({'error': 'Permission denied'}, status=403)
+        return JsonResponse({'error': 'Permission denied. Only radiologists and administrators can create reports.'}, status=403)
+    
+    # Check if user can access this study
+    if not (request.user.is_superuser or 
+            request.user.groups.filter(name='Radiologists').exists() or
+            (hasattr(request.user, 'facility') and 
+             request.user.facility == study.facility)):
+        return JsonResponse({'error': 'Access denied. You do not have permission to access this study.'}, status=403)
     
     if request.method == 'POST':
         data = json.loads(request.body)
@@ -247,6 +274,13 @@ def print_report(request, report_id):
     """Generate PDF report with facility letterhead"""
     report = get_object_or_404(Report, id=report_id)
     study = report.study
+    
+    # Check if user can access this study
+    if not (request.user.is_superuser or 
+            request.user.groups.filter(name='Radiologists').exists() or
+            (hasattr(request.user, 'facility') and 
+             request.user.facility == study.facility)):
+        return HttpResponse('Access denied. You do not have permission to access this report.', status=403)
     
     # Check permissions - allow all authenticated users to print finalized reports
     if report.status not in ['finalized', 'printed']:
@@ -515,6 +549,14 @@ def api_chat_send(request):
         if facility_id:
             try:
                 facility = Facility.objects.get(id=facility_id)
+                
+                # Check if user can send messages to this facility
+                if not (request.user.is_superuser or 
+                        request.user.groups.filter(name='Radiologists').exists() or
+                        (hasattr(request.user, 'facility') and 
+                         request.user.facility == facility)):
+                    return JsonResponse({'success': False, 'error': 'Access denied. You can only send messages to your own facility.'}, status=403)
+                
                 # Find facility staff to send message to
                 # Get all users associated with this facility
                 if facility.user:
