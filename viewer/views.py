@@ -686,16 +686,8 @@ class DicomViewerView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Filter studies based on user permissions
-        if hasattr(self.request.user, 'facility'):
-            # Facility users see only their facility's studies
-            context['studies'] = DicomStudy.objects.filter(facility=self.request.user.facility)[:10]
-        elif self.request.user.groups.filter(name='Facilities').exists():
-            # Facility group members without specific facility see nothing
-            context['studies'] = DicomStudy.objects.none()
-        else:
-            # Admin and radiologists see all studies
-            context['studies'] = DicomStudy.objects.all()[:10]
+        # Use the new access control system
+        context['studies'] = get_user_study_queryset(self.request.user)[:10]
         
         # Check if we have a study_id parameter
         study_id = kwargs.get('study_id')
@@ -1389,21 +1381,9 @@ def upload_dicom_folder(request):
                     }
                 )
                 
-                # Create notifications for new study uploads
+                # Create notifications for new study uploads using the new system
                 if created:
-                    try:
-                        # Notify radiologists
-                        radiologist_group = Group.objects.get(name='Radiologists')
-                        for radiologist in radiologist_group.user_set.all():
-                            Notification.objects.create(
-                                recipient=radiologist,
-                                notification_type='new_study',
-                                title='New Study Uploaded',
-                                message=f'New {modality} study uploaded for {patient_name} - {study_description}',
-                                related_study=study
-                            )
-                    except Group.DoesNotExist:
-                        pass
+                    notify_new_study_upload(study, request.user)
                 
                 # Create worklist entry if study was created
                 if created:
@@ -1613,16 +1593,8 @@ def get_upload_result(request, upload_id):
 @api_view(['GET'])
 def get_studies(request):
     """Get all studies based on user permissions"""
-    # Check if user is a facility user
-    if hasattr(request.user, 'facility'):
-        # Facility users see only their facility's studies
-        studies = DicomStudy.objects.filter(facility=request.user.facility)[:20]
-    elif request.user.groups.filter(name='Facilities').exists():
-        # Facility group members without specific facility see nothing
-        studies = DicomStudy.objects.none()
-    else:
-        # Admin and radiologists see all studies
-        studies = DicomStudy.objects.all()[:20]
+    # Use the new access control system
+    studies = get_user_study_queryset(request.user)[:20]
     
     serializer = DicomStudySerializer(studies, many=True)
     return Response(serializer.data)
@@ -1633,6 +1605,10 @@ def get_study_images(request, study_id):
     """Get all images for a study"""
     try:
         study = DicomStudy.objects.get(id=study_id)
+        
+        # Check if user can access this study
+        if not can_access_study(request.user, study):
+            return Response({'error': 'Access denied. You do not have permission to view this study.'}, status=403)
         images = DicomImage.objects.filter(series__study=study).order_by('series__series_number', 'instance_number')
         
         images_data = []
@@ -1677,6 +1653,10 @@ def get_image_data(request, image_id):
     try:
         print(f"Attempting to get image data for image_id: {image_id}")
         image = DicomImage.objects.get(id=image_id)
+        
+        # Check if user can access this image's study
+        if not can_access_study(request.user, image.series.study):
+            return Response({'error': 'Access denied. You do not have permission to view this image.'}, status=403)
         print(f"Found image: {image}, file_path: {image.file_path}")
         
         # Get query parameters with optimized defaults for medical imaging
@@ -1745,6 +1725,10 @@ def save_measurement(request):
     try:
         data = json.loads(request.body)
         image = DicomImage.objects.get(id=data['image_id'])
+        
+        # Check if user can access this image's study
+        if not can_access_study(request.user, image.series.study):
+            return JsonResponse({'error': 'Access denied. You do not have permission to access this image.'}, status=403)
         
         measurement_type = data.get('type', 'line')
         coordinates = data['coordinates']
@@ -2120,6 +2104,10 @@ def save_annotation(request):
         data = json.loads(request.body)
         image = DicomImage.objects.get(id=data['image_id'])
         
+        # Check if user can access this image's study
+        if not can_access_study(request.user, image.series.study):
+            return JsonResponse({'error': 'Access denied. You do not have permission to access this image.'}, status=403)
+        
         annotation = Annotation.objects.create(
             image=image,
             x_coordinate=data['x'],
@@ -2138,6 +2126,12 @@ def save_annotation(request):
 def get_measurements(request, image_id):
     """Get measurements for an image"""
     try:
+        image = DicomImage.objects.get(id=image_id)
+        
+        # Check if user can access this image's study
+        if not can_access_study(request.user, image.series.study):
+            return Response({'error': 'Access denied. You do not have permission to access this image.'}, status=403)
+        
         measurements = Measurement.objects.filter(image_id=image_id)
         data = []
         
@@ -2172,6 +2166,12 @@ def get_measurements(request, image_id):
 def get_annotations(request, image_id):
     """Get annotations for an image"""
     try:
+        image = DicomImage.objects.get(id=image_id)
+        
+        # Check if user can access this image's study
+        if not can_access_study(request.user, image.series.study):
+            return Response({'error': 'Access denied. You do not have permission to access this image.'}, status=403)
+        
         annotations = Annotation.objects.filter(image_id=image_id)
         data = [{
             'id': a.id,
@@ -2193,6 +2193,12 @@ def get_annotations(request, image_id):
 def clear_measurements(request, image_id):
     """Clear all measurements and annotations for an image"""
     try:
+        image = DicomImage.objects.get(id=image_id)
+        
+        # Check if user can access this image's study
+        if not can_access_study(request.user, image.series.study):
+            return JsonResponse({'error': 'Access denied. You do not have permission to access this image.'}, status=403)
+        
         Measurement.objects.filter(image_id=image_id).delete()
         Annotation.objects.filter(image_id=image_id).delete()
         return JsonResponse({'message': 'Measurements cleared'})
@@ -4240,3 +4246,89 @@ def update_worklist_entry(request, entry_id):
     except Exception as e:
         logger.error(f"Error updating worklist entry: {e}")
         return JsonResponse({'error': str(e)}, status=400)
+
+# Add this function after the imports and before the existing functions
+def get_user_study_queryset(user):
+    """
+    Get the appropriate study queryset based on user permissions.
+    - Facility users: only their facility's studies
+    - Radiologists and Admins: all studies from all facilities
+    - Others: no studies
+    """
+    if user.is_superuser:
+        # Admins see all studies
+        return DicomStudy.objects.all()
+    elif user.groups.filter(name='Radiologists').exists():
+        # Radiologists see all studies from all facilities
+        return DicomStudy.objects.all()
+    elif hasattr(user, 'facility') and user.facility:
+        # Facility users see only their facility's studies
+        return DicomStudy.objects.filter(facility=user.facility)
+    elif user.groups.filter(name='Facilities').exists():
+        # Facility group members without specific facility see nothing
+        return DicomStudy.objects.none()
+    else:
+        # Other users see nothing
+        return DicomStudy.objects.none()
+
+def can_access_study(user, study):
+    """
+    Check if a user can access a specific study.
+    - Admins and Radiologists: can access any study
+    - Facility users: can only access studies from their facility
+    - Others: cannot access any studies
+    """
+    if user.is_superuser:
+        return True
+    elif user.groups.filter(name='Radiologists').exists():
+        return True
+    elif hasattr(user, 'facility') and user.facility:
+        return study.facility == user.facility
+    else:
+        return False
+
+def notify_new_study_upload(study, uploaded_by_user):
+    """
+    Create notifications for new study uploads.
+    - Notify all radiologists about new study
+    - Notify admins about new study
+    - Notify facility staff about their own uploads (confirmation)
+    """
+    from django.contrib.auth.models import Group
+    
+    # Notify all radiologists
+    try:
+        radiologist_group = Group.objects.get(name='Radiologists')
+        for radiologist in radiologist_group.user_set.all():
+            if radiologist != uploaded_by_user:  # Don't notify the uploader
+                Notification.objects.create(
+                    recipient=radiologist,
+                    notification_type='new_study',
+                    title='New Study Uploaded',
+                    message=f'New {study.modality} study uploaded for {study.patient_name} - {study.study_description or "No description"}',
+                    related_study=study
+                )
+    except Group.DoesNotExist:
+        pass
+    
+    # Notify all admins
+    admin_users = User.objects.filter(is_superuser=True)
+    for admin in admin_users:
+        if admin != uploaded_by_user:  # Don't notify the uploader
+            Notification.objects.create(
+                recipient=admin,
+                notification_type='new_study',
+                title='New Study Uploaded',
+                message=f'New {study.modality} study uploaded by {uploaded_by_user.get_full_name() or uploaded_by_user.username} for {study.patient_name}',
+                related_study=study
+            )
+    
+    # Notify facility staff about their own upload (confirmation)
+    if study.facility and study.facility.user and study.facility.user != uploaded_by_user:
+        Notification.objects.create(
+            recipient=study.facility.user,
+            notification_type='new_study',
+            title='Study Upload Confirmation',
+            message=f'Your {study.modality} study for {study.patient_name} has been successfully uploaded and is ready for review.',
+            related_study=study
+        )
