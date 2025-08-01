@@ -200,3 +200,5 @@ INFO 2025-08-01 06:54:20,699 font_manager 3298 140486108643584 Failed to extract
 INFO 2025-08-01 06:54:20,703 font_manager 3298 140486108643584 generated new fontManager
 INFO 2025-08-01 06:54:27,831 autoreload 3512 140550496096512 Watching for file changes with StatReloader
 INFO 2025-08-01 06:54:31,376 basehttp 3512 140549659559616 "HEAD / HTTP/1.1" 200 0
+INFO 2025-08-01 08:09:14,083 font_manager 5468 140402535219456 Failed to extract font properties from /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf: Can not load face (unknown file format; error code 0x2)
+INFO 2025-08-01 08:09:14,089 font_manager 5468 140402535219456 generated new fontManager
