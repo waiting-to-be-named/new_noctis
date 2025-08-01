@@ -84,9 +84,21 @@ class DicomViewer {
         this.manualBrightness = null; // When null, use auto calculation
         this.manualContrast = null;   // When null, use auto calculation  
         this.manualGamma = null;      // When null, use auto calculation
-        this.densityMultiplier = 1.4; // Enhanced density enhancement for superior tissue visualization
-        this.contrastBoostMultiplier = 1.3; // Increased contrast boost for medical images
+        this.densityMultiplier = 1.3; // Enhanced density enhancement for superior tissue visualization
+        this.contrastBoostMultiplier = 1.25; // Increased contrast boost for medical images
         this.highQualityMode = true;  // Enable high quality mode by default
+        
+        // Enhanced medical imaging optimizations
+        this.high_quality = 'true';
+        this.density_enhancement = 'true';
+        this.contrast_optimization = 'medical';
+        
+        // Medical contrast optimization configuration
+        const medical_contrast_config = {
+            contrast_optimization: 'medical',
+            high_quality: 'true',
+            density_enhancement: 'true'
+        };
         
         this.init();
     }
