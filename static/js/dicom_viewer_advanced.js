@@ -74,6 +74,7 @@ class AdvancedDicomViewer {
         this.currentImages = [];
         this.currentImageIndex = 0;
         this.currentImage = null;
+        this.currentImageMetadata = null;
         this.imageData = null;
         this.originalImageData = null;
 
@@ -250,61 +251,88 @@ class AdvancedDicomViewer {
     }
 
     setupToolButtonEvents() {
-        // Navigation tools
-        document.getElementById('windowing-adv-btn')?.addEventListener('click', () => this.setActiveTool('windowing'));
-        document.getElementById('pan-adv-btn')?.addEventListener('click', () => this.setActiveTool('pan'));
-        document.getElementById('zoom-adv-btn')?.addEventListener('click', () => this.setActiveTool('zoom'));
-        document.getElementById('rotate-btn')?.addEventListener('click', () => this.rotateImage(90));
-        document.getElementById('flip-btn')?.addEventListener('click', () => this.flipImage());
+        // Define tool button mappings
+        const toolButtons = {
+            // Navigation tools
+            'windowing-adv-btn': () => this.setActiveTool('windowing'),
+            'pan-adv-btn': () => this.setActiveTool('pan'),
+            'zoom-adv-btn': () => this.setActiveTool('zoom'),
+            'rotate-btn': () => this.rotateImage(90),
+            'flip-btn': () => this.flipImage(),
 
-        // Measurement tools
-        document.getElementById('measure-distance-btn')?.addEventListener('click', () => this.setActiveTool('measure-distance'));
-        document.getElementById('measure-angle-btn')?.addEventListener('click', () => this.setActiveTool('measure-angle'));
-        document.getElementById('measure-area-btn')?.addEventListener('click', () => this.setActiveTool('measure-area'));
-        document.getElementById('measure-volume-btn')?.addEventListener('click', () => this.setActiveTool('measure-volume'));
-        document.getElementById('hu-measurement-btn')?.addEventListener('click', () => this.setActiveTool('hu-measurement'));
+            // Measurement tools
+            'measure-distance-btn': () => this.setActiveTool('measure-distance'),
+            'measure-angle-btn': () => this.setActiveTool('measure-angle'),
+            'measure-area-btn': () => this.setActiveTool('measure-area'),
+            'measure-volume-btn': () => this.setActiveTool('measure-volume'),
+            'hu-measurement-btn': () => this.setActiveTool('hu-measurement'),
 
-        // Annotation tools
-        document.getElementById('text-annotation-btn')?.addEventListener('click', () => this.setActiveTool('text-annotation'));
-        document.getElementById('arrow-annotation-btn')?.addEventListener('click', () => this.setActiveTool('arrow-annotation'));
-        document.getElementById('circle-annotation-btn')?.addEventListener('click', () => this.setActiveTool('circle-annotation'));
-        document.getElementById('rectangle-annotation-btn')?.addEventListener('click', () => this.setActiveTool('rectangle-annotation'));
+            // Annotation tools
+            'text-annotation-btn': () => this.setActiveTool('text-annotation'),
+            'arrow-annotation-btn': () => this.setActiveTool('arrow-annotation'),
+            'circle-annotation-btn': () => this.setActiveTool('circle-annotation'),
+            'rectangle-annotation-btn': () => this.setActiveTool('rectangle-annotation'),
 
-        // Enhancement tools
-        document.getElementById('invert-adv-btn')?.addEventListener('click', () => this.toggleInvert());
-        document.getElementById('crosshair-adv-btn')?.addEventListener('click', () => this.toggleCrosshair());
-        document.getElementById('magnify-btn')?.addEventListener('click', () => this.toggleMagnify());
-        document.getElementById('sharpen-btn')?.addEventListener('click', () => this.applySharpenFilter());
+            // Enhancement tools
+            'invert-adv-btn': () => this.toggleInvert(),
+            'crosshair-adv-btn': () => this.toggleCrosshair(),
+            'magnify-btn': () => this.toggleMagnify(),
+            'sharpen-btn': () => this.applySharpenFilter(),
 
-        // 3D/MPR tools
-        document.getElementById('mpr-btn')?.addEventListener('click', () => this.enableMPR());
-        document.getElementById('volume-render-btn')?.addEventListener('click', () => this.enableVolumeRendering());
-        document.getElementById('mip-btn')?.addEventListener('click', () => this.enableMIP());
+            // 3D/MPR tools
+            'mpr-btn': () => this.enableMPR(),
+            'volume-render-btn': () => this.enableVolumeRendering(),
+            'mip-btn': () => this.enableMIP(),
 
-        // AI tools
-        document.getElementById('ai-analysis-btn')?.addEventListener('click', () => this.runAIAnalysis());
-        document.getElementById('ai-segment-btn')?.addEventListener('click', () => this.runAISegmentation());
+            // AI tools
+            'ai-analysis-btn': () => this.runAIAnalysis(),
+            'ai-segment-btn': () => this.runAISegmentation(),
 
-        // Utility tools
-        document.getElementById('reset-adv-btn')?.addEventListener('click', () => this.resetView());
-        document.getElementById('fit-to-window-btn')?.addEventListener('click', () => this.fitToWindow());
-        document.getElementById('actual-size-btn')?.addEventListener('click', () => this.actualSize());
+            // Utility tools
+            'reset-adv-btn': () => this.resetView(),
+            'fit-to-window-btn': () => this.fitToWindow(),
+            'actual-size-btn': () => this.actualSize()
+        };
+
+        // Set up event listeners for all tool buttons
+        Object.entries(toolButtons).forEach(([buttonId, handler]) => {
+            const button = document.getElementById(buttonId);
+            if (button) {
+                button.addEventListener('click', handler);
+                console.log(`Set up event listener for ${buttonId}`);
+            } else {
+                console.warn(`Button not found: ${buttonId}`);
+            }
+        });
     }
 
     setupHeaderButtonEvents() {
-        // Header navigation
-        document.getElementById('prev-study-btn')?.addEventListener('click', () => this.previousStudy());
-        document.getElementById('next-study-btn')?.addEventListener('click', () => this.nextStudy());
+        const headerButtons = {
+            // Header navigation
+            'prev-study-btn': () => this.previousStudy(),
+            'next-study-btn': () => this.nextStudy(),
 
-        // Header actions
-        document.getElementById('upload-advanced-btn')?.addEventListener('click', () => this.showUploadModal());
-        document.getElementById('export-btn')?.addEventListener('click', () => this.showExportModal());
-        document.getElementById('settings-btn')?.addEventListener('click', () => this.showSettingsModal());
-        document.getElementById('fullscreen-btn')?.addEventListener('click', () => this.toggleFullscreen());
-        document.getElementById('logout-advanced-btn')?.addEventListener('click', () => this.logout());
+            // Header actions
+            'upload-advanced-btn': () => this.showUploadModal(),
+            'export-btn': () => this.showExportModal(),
+            'settings-btn': () => this.showSettingsModal(),
+            'fullscreen-btn': () => this.toggleFullscreen(),
+            'logout-advanced-btn': () => this.logout(),
 
-        // Patient info toggle
-        document.getElementById('toggle-patient-info')?.addEventListener('click', () => this.togglePatientInfo());
+            // Patient info toggle
+            'toggle-patient-info': () => this.togglePatientInfo()
+        };
+
+        // Set up event listeners for all header buttons
+        Object.entries(headerButtons).forEach(([buttonId, handler]) => {
+            const button = document.getElementById(buttonId);
+            if (button) {
+                button.addEventListener('click', handler);
+                console.log(`Set up header event listener for ${buttonId}`);
+            } else {
+                console.warn(`Header button not found: ${buttonId}`);
+            }
+        });
     }
 
     setupControlPanelEvents() {
@@ -354,23 +382,37 @@ class AdvancedDicomViewer {
             });
         }
 
-        // Viewport layout controls
-        document.getElementById('layout-1x1-btn')?.addEventListener('click', () => this.setViewportLayout('1x1'));
-        document.getElementById('layout-2x2-btn')?.addEventListener('click', () => this.setViewportLayout('2x2'));
-        document.getElementById('layout-1x2-btn')?.addEventListener('click', () => this.setViewportLayout('1x2'));
-        document.getElementById('sync-viewports-btn')?.addEventListener('click', () => this.toggleViewportSync());
+        // Additional control buttons
+        const controlButtons = {
+            // Viewport layout controls
+            'layout-1x1-btn': () => this.setViewportLayout('1x1'),
+            'layout-2x2-btn': () => this.setViewportLayout('2x2'),
+            'layout-1x2-btn': () => this.setViewportLayout('1x2'),
+            'sync-viewports-btn': () => this.toggleViewportSync(),
 
-        // Thumbnail navigator
-        document.getElementById('thumbnail-toggle')?.addEventListener('click', () => this.toggleThumbnails());
+            // Thumbnail navigator
+            'thumbnail-toggle': () => this.toggleThumbnails(),
 
-        // Clear buttons
-        document.getElementById('clear-measurements-btn')?.addEventListener('click', () => this.clearMeasurements());
-        document.getElementById('clear-annotations-btn')?.addEventListener('click', () => this.clearAnnotations());
+            // Clear buttons
+            'clear-measurements-btn': () => this.clearMeasurements(),
+            'clear-annotations-btn': () => this.clearAnnotations(),
 
-        // AI controls
-        document.getElementById('ai-detect-lesions')?.addEventListener('click', () => this.detectLesions());
-        document.getElementById('ai-segment-organs')?.addEventListener('click', () => this.segmentOrgans());
-        document.getElementById('ai-calculate-volume')?.addEventListener('click', () => this.calculateVolume());
+            // AI controls
+            'ai-detect-lesions': () => this.detectLesions(),
+            'ai-segment-organs': () => this.segmentOrgans(),
+            'ai-calculate-volume': () => this.calculateVolume()
+        };
+
+        // Set up event listeners for control panel buttons
+        Object.entries(controlButtons).forEach(([buttonId, handler]) => {
+            const button = document.getElementById(buttonId);
+            if (button) {
+                button.addEventListener('click', handler);
+                console.log(`Set up control panel event listener for ${buttonId}`);
+            } else {
+                console.warn(`Control panel button not found: ${buttonId}`);
+            }
+        });
     }
 
     setupKeyboardShortcuts() {
@@ -587,9 +629,17 @@ class AdvancedDicomViewer {
         });
 
         // Add active class to selected tool button
-        const toolBtn = document.getElementById(`${tool.replace('measure-', 'measure-').replace('-btn', '')}-btn`);
+        const toolBtnId = `${tool}-btn`;
+        const toolBtn = document.getElementById(toolBtnId);
         if (toolBtn) {
             toolBtn.classList.add('active');
+        } else {
+            // Try alternative ID patterns
+            const altId = `${tool.replace('measure-', '').replace('-', '-')}-btn`;
+            const altBtn = document.getElementById(altId);
+            if (altBtn) {
+                altBtn.classList.add('active');
+            }
         }
 
         this.activeTool = tool;
@@ -683,16 +733,22 @@ class AdvancedDicomViewer {
             this.showLoading(true);
             this.updateStatus('Loading study...');
 
-            const response = await fetch(`/viewer/api/studies/${studyId}/`);
+            // Get study info from series endpoint which includes study data
+            const response = await fetch(`/viewer/api/studies/${studyId}/series/`);
             if (!response.ok) {
                 throw new Error(`Failed to load study: ${response.statusText}`);
             }
 
-            this.currentStudy = await response.json();
+            const data = await response.json();
+            this.currentStudy = data.study;
+            this.currentSeries = data.series || [];
             this.updatePatientInfo();
+            this.updateSeriesList(data.series || []);
             
-            // Load series
-            await this.loadSeries();
+            // Load images from first series if available
+            if (this.currentSeries.length > 0) {
+                await this.loadImages(this.currentSeries[0].id);
+            }
             
             this.notyf.success('Study loaded successfully!');
         } catch (error) {
@@ -710,11 +766,12 @@ class AdvancedDicomViewer {
                 throw new Error(`Failed to load series: ${response.statusText}`);
             }
 
-            const series = await response.json();
-            this.updateSeriesList(series);
+            const data = await response.json();
+            this.currentSeries = data.series || [];
+            this.updateSeriesList(data.series || []);
             
-            if (series.length > 0) {
-                await this.loadImages(series[0].id);
+            if (this.currentSeries.length > 0) {
+                await this.loadImages(this.currentSeries[0].id);
             }
         } catch (error) {
             console.error('Error loading series:', error);
@@ -731,7 +788,8 @@ class AdvancedDicomViewer {
                 throw new Error(`Failed to load images: ${response.statusText}`);
             }
 
-            this.currentImages = await response.json();
+            const data = await response.json();
+            this.currentImages = data.images || data || [];
             this.currentImageIndex = 0;
             
             this.updateThumbnails();
@@ -769,12 +827,15 @@ class AdvancedDicomViewer {
                 throw new Error(`Failed to load image: ${response.statusText}`);
             }
 
-            const blob = await response.blob();
-            const imageUrl = URL.createObjectURL(blob);
+            const data = await response.json();
+            if (!data.image_data) {
+                throw new Error('No image data received from server');
+            }
             
             const img = new Image();
             img.onload = () => {
                 this.currentImage = img;
+                this.currentImageMetadata = data.metadata || {};
                 this.cacheImage(cacheKey, img);
                 this.processAndRenderImage();
                 
@@ -782,13 +843,14 @@ class AdvancedDicomViewer {
                 this.performanceMetrics.loadTime = loadTime;
                 this.updatePerformanceDisplay();
                 
-                URL.revokeObjectURL(imageUrl);
+                // Update image info display
+                this.updateImageInfo();
             };
             img.onerror = () => {
+                console.error('Failed to load image data');
                 this.notyf.error('Failed to load image');
-                URL.revokeObjectURL(imageUrl);
             };
-            img.src = imageUrl;
+            img.src = data.image_data;
 
         } catch (error) {
             console.error('Error loading image:', error);
@@ -1561,15 +1623,148 @@ class AdvancedDicomViewer {
     }
 
     updateSeriesList(series) {
-        // Update series list in the UI
+        const seriesList = document.getElementById('series-list');
+        if (!seriesList) return;
+        
+        seriesList.innerHTML = '';
+        
+        if (!series || series.length === 0) {
+            seriesList.innerHTML = '<p class="no-series">No series available</p>';
+            return;
+        }
+        
+        series.forEach((serie, index) => {
+            const seriesItem = document.createElement('div');
+            seriesItem.className = 'series-item';
+            seriesItem.innerHTML = `
+                <div class="series-info">
+                    <h5>Series ${serie.series_number || index + 1}</h5>
+                    <p><strong>Description:</strong> ${serie.series_description || 'N/A'}</p>
+                    <p><strong>Modality:</strong> ${serie.modality || 'N/A'}</p>
+                    <p><strong>Images:</strong> ${serie.image_count || 0}</p>
+                </div>
+                <button class="btn btn-sm btn-primary load-series-btn" data-series-id="${serie.id}">
+                    View Series
+                </button>
+            `;
+            
+            seriesList.appendChild(seriesItem);
+        });
+        
+        // Add event listeners for series selection
+        document.querySelectorAll('.load-series-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const seriesId = e.target.dataset.seriesId;
+                this.loadImages(parseInt(seriesId));
+            });
+        });
     }
 
     updateThumbnails() {
-        // Update thumbnail navigator
+        const thumbnailContainer = document.getElementById('thumbnail-container');
+        if (!thumbnailContainer) return;
+        
+        thumbnailContainer.innerHTML = '';
+        
+        if (!this.currentImages || this.currentImages.length === 0) {
+            thumbnailContainer.innerHTML = '<p class="no-thumbnails">No images available</p>';
+            return;
+        }
+        
+        this.currentImages.forEach((image, index) => {
+            const thumbnail = document.createElement('div');
+            thumbnail.className = 'thumbnail-item';
+            if (index === this.currentImageIndex) {
+                thumbnail.classList.add('active');
+            }
+            
+            thumbnail.innerHTML = `
+                <div class="thumbnail-preview">
+                    <span class="thumbnail-number">${index + 1}</span>
+                    <div class="thumbnail-info">
+                        <small>Instance: ${image.instance_number || index + 1}</small>
+                    </div>
+                </div>
+            `;
+            
+            thumbnail.addEventListener('click', () => {
+                this.loadImage(index);
+                // Update active thumbnail
+                document.querySelectorAll('.thumbnail-item').forEach(t => t.classList.remove('active'));
+                thumbnail.classList.add('active');
+            });
+            
+            thumbnailContainer.appendChild(thumbnail);
+        });
     }
 
     updateImageInfo() {
-        // Update image information panel
+        const imageInfoContent = document.getElementById('image-info-content');
+        if (!imageInfoContent) return;
+        
+        if (!this.currentImage || !this.currentImages || this.currentImages.length === 0) {
+            imageInfoContent.innerHTML = '<p>No image information available</p>';
+            return;
+        }
+        
+        const currentImageInfo = this.currentImages[this.currentImageIndex];
+        const metadata = this.currentImageMetadata || {};
+        
+        imageInfoContent.innerHTML = `
+            <div class="info-section">
+                <h6>Image Properties</h6>
+                <div class="info-row">
+                    <span class="info-label">Instance Number:</span>
+                    <span class="info-value">${currentImageInfo.instance_number || 'N/A'}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Dimensions:</span>
+                    <span class="info-value">${currentImageInfo.columns || 'N/A'} × ${currentImageInfo.rows || 'N/A'}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Pixel Spacing:</span>
+                    <span class="info-value">${currentImageInfo.pixel_spacing_x || 'N/A'} × ${currentImageInfo.pixel_spacing_y || 'N/A'} mm</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Slice Thickness:</span>
+                    <span class="info-value">${currentImageInfo.slice_thickness || 'N/A'} mm</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Window/Level:</span>
+                    <span class="info-value">${currentImageInfo.window_width || 'N/A'} / ${currentImageInfo.window_center || 'N/A'}</span>
+                </div>
+                ${metadata.modality ? `
+                <div class="info-row">
+                    <span class="info-label">Modality:</span>
+                    <span class="info-value">${metadata.modality}</span>
+                </div>
+                ` : ''}
+                ${metadata.body_part ? `
+                <div class="info-row">
+                    <span class="info-label">Body Part:</span>
+                    <span class="info-value">${metadata.body_part}</span>
+                </div>
+                ` : ''}
+            </div>
+        `;
+        
+        // Update slice info
+        const sliceInfo = document.getElementById('slice-info');
+        if (sliceInfo) {
+            sliceInfo.textContent = `Slice: ${this.currentImageIndex + 1}/${this.currentImages.length}`;
+        }
+        
+        // Update series count if available
+        const seriesCount = document.getElementById('series-count');
+        if (seriesCount && this.currentSeries) {
+            seriesCount.textContent = this.currentSeries.length;
+        }
+        
+        // Update image count
+        const imageCount = document.getElementById('image-count-adv');
+        if (imageCount) {
+            imageCount.textContent = this.currentImages.length;
+        }
     }
 
     updateMeasurementsList() {
