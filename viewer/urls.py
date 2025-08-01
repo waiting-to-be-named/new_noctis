@@ -8,6 +8,10 @@ urlpatterns = [
     path('', views.DicomViewerView.as_view(), name='viewer'),
     path('study/<int:study_id>/', views.DicomViewerView.as_view(), name='viewer_with_study'),
     
+    # Advanced viewer
+    path('advanced/', views.AdvancedDicomViewerView.as_view(), name='advanced_viewer'),
+    path('advanced/study/<int:study_id>/', views.AdvancedDicomViewerView.as_view(), name='advanced_viewer_with_study'),
+    
     # Admin functionality
     path('admin/facilities/', views.FacilityListView.as_view(), name='facility_list'),
     path('admin/facilities/new/', views.FacilityCreateView.as_view(), name='facility_create'),
