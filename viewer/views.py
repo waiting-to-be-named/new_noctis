@@ -158,7 +158,12 @@ class EnhancedBulkUploadManager:
                     
                     # Check if it's a DICOM file
                     try:
-                        dicom_data = pydicom.dcmread(io.BytesIO(file_content))
+                        # First try standard DICOM reading
+                        try:
+                            dicom_data = pydicom.dcmread(io.BytesIO(file_content))
+                        except pydicom.errors.InvalidDicomError:
+                            # If it fails due to missing DICM header, try with force=True
+                            dicom_data = pydicom.dcmread(io.BytesIO(file_content), force=True)
                         
                         # Save file temporarily and process
                         temp_path = default_storage.save(
@@ -180,7 +185,7 @@ class EnhancedBulkUploadManager:
                             pass
                             
                     except Exception as dicom_error:
-                        failed_files.append(f"Not a valid DICOM file: {uploaded_file.name}")
+                        failed_files.append(f"Not a valid DICOM file: {uploaded_file.name} - {str(dicom_error)}")
                         
                     # Update progress
                     self.update_progress(
@@ -1337,12 +1342,20 @@ def upload_dicom_folder(request):
                             # Save the bytes
                             file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file_bytes))
                         except Exception as e3:
-                            print(f"Failed to read DICOM file {file.name}: {e1}, {e2}, {e3}")
-                            # Clean up the saved file
                             try:
-                                default_storage.delete(file_path)
-                            except:
-                                pass
+                                # Method 4: Try reading with force=True (handles missing DICM header)
+                                file.seek(0)
+                                file_bytes = file.read()
+                                dicom_data = pydicom.dcmread(io.BytesIO(file_bytes), force=True)
+                                # Save the bytes
+                                file_path = default_storage.save(f'dicom_files/{unique_filename}', ContentFile(file_bytes))
+                            except Exception as e4:
+                                print(f"Failed to read DICOM file {file.name}: {e1}, {e2}, {e3}, {e4}")
+                                # Clean up the saved file
+                                try:
+                                    default_storage.delete(file_path)
+                                except:
+                                    pass
                             errors.append(f"Could not read DICOM data from {file.name}")
                             continue
                 
@@ -1979,7 +1992,7 @@ def measure_hu(request):
         # Load DICOM data
         dicom_data = image.load_dicom_data()
         if not dicom_data:
-            return JsonResponse({'error': 'Could not load DICOM data'}, status=400)
+            return JsonResponse({'error': 'Could not load DICOM data. The file may be corrupted or in an unsupported format.'}, status=400)
         
         pixel_array = image.get_pixel_array()
         if pixel_array is None:
