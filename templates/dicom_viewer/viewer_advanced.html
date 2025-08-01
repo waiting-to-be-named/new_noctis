@@ -625,9 +625,12 @@
     <script>
         // Initialize the advanced DICOM viewer when the page loads
         document.addEventListener('DOMContentLoaded', function() {
-            // Get study ID from URL parameters
-            const urlParams = new URLSearchParams(window.location.search);
-            const studyId = urlParams.get('study_id');
+            // Get study ID from Django context
+            {% if initial_study_id %}
+                const studyId = {{ initial_study_id }};
+            {% else %}
+                const studyId = null;
+            {% endif %}
             
             // Initialize the advanced viewer
             window.advancedViewer = new AdvancedDicomViewer(studyId);
