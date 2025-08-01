@@ -333,8 +333,13 @@ function setupHeaderButtons(viewer) {
         console.log('Showing upload modal');
         const uploadModal = document.getElementById('uploadModal');
         if (uploadModal) {
-            const modal = new bootstrap.Modal(uploadModal);
-            modal.show();
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                const modal = new bootstrap.Modal(uploadModal);
+                modal.show();
+            } else {
+                showNotification('Bootstrap not loaded. Please refresh the page.', 'error');
+                console.error('Bootstrap is not defined. Make sure Bootstrap JS is loaded before this script.');
+            }
         } else {
             showNotification('Upload modal not found', 'error');
         }

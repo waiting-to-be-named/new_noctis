@@ -179,6 +179,7 @@ class AdvancedDicomViewer {
         this.initializeViewer();
         this.setupEventListeners();
         this.setupKeyboardShortcuts();
+        this.setupUploadHandlers();
         this.loadSettings();
 
         // Auto-load study if provided, otherwise load available studies
@@ -476,6 +477,165 @@ class AdvancedDicomViewer {
         };
 
         this.keyboardShortcuts = shortcuts;
+    }
+
+    setupUploadHandlers() {
+        console.log('Setting up upload handlers...');
+        
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const startUploadBtn = document.getElementById('startUpload');
+        
+        if (!uploadArea || !fileInput || !startUploadBtn) {
+            console.warn('Upload elements not found in DOM');
+            return;
+        }
+
+        // Store selected files
+        this.selectedFiles = [];
+
+        // Click to browse files
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // File selection
+        fileInput.addEventListener('change', (e) => {
+            this.handleFileSelection(e.target.files);
+        });
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+
+        uploadArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            this.handleFileSelection(e.dataTransfer.files);
+        });
+
+        // Start upload button
+        startUploadBtn.addEventListener('click', () => {
+            this.startUpload();
+        });
+
+        console.log('Upload handlers setup complete');
+    }
+
+    handleFileSelection(files) {
+        console.log(`Selected ${files.length} files`);
+        
+        // Filter DICOM files
+        const dicomFiles = Array.from(files).filter(file => {
+            const name = file.name.toLowerCase();
+            return name.endsWith('.dcm') || name.endsWith('.dicom') || name.includes('dicom');
+        });
+
+        if (dicomFiles.length === 0) {
+            this.notyf.error('No DICOM files selected. Please select .dcm or .dicom files.');
+            return;
+        }
+
+        this.selectedFiles = dicomFiles;
+        
+        // Update UI
+        const uploadArea = document.getElementById('uploadArea');
+        const startUploadBtn = document.getElementById('startUpload');
+        
+        uploadArea.innerHTML = `
+            <div class="upload-icon">
+                <i class="fas fa-file-medical"></i>
+            </div>
+            <div class="upload-text">
+                <h5>${dicomFiles.length} DICOM file(s) selected</h5>
+                <p>Ready to upload</p>
+            </div>
+        `;
+
+        startUploadBtn.disabled = false;
+        
+        this.notyf.success(`${dicomFiles.length} DICOM file(s) ready for upload`);
+    }
+
+    async startUpload() {
+        if (this.selectedFiles.length === 0) {
+            this.notyf.error('No files selected');
+            return;
+        }
+
+        console.log('Starting upload...');
+        
+        const uploadProgress = document.getElementById('uploadProgress');
+        const uploadArea = document.getElementById('uploadArea');
+        const progressBar = uploadProgress.querySelector('.progress-bar');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const startUploadBtn = document.getElementById('startUpload');
+
+        // Show progress
+        uploadArea.style.display = 'none';
+        uploadProgress.style.display = 'block';
+        startUploadBtn.disabled = true;
+
+        try {
+            const formData = new FormData();
+            
+            // Add files to form data
+            this.selectedFiles.forEach((file, index) => {
+                formData.append('dicom_files', file);
+            });
+
+            // Upload with progress tracking
+            const xhr = new XMLHttpRequest();
+            
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percentComplete = (e.loaded / e.total) * 100;
+                    progressBar.style.width = percentComplete + '%';
+                    uploadStatus.textContent = `Uploading... ${Math.round(percentComplete)}%`;
+                }
+            });
+
+            xhr.addEventListener('load', () => {
+                if (xhr.status === 200) {
+                    const response = JSON.parse(xhr.responseText);
+                    this.notyf.success('Upload completed successfully!');
+                    uploadStatus.textContent = 'Upload completed!';
+                    
+                    // Refresh studies list
+                    setTimeout(() => {
+                        this.loadAvailableStudies();
+                        // Close modal
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
+                        if (modal) modal.hide();
+                    }, 1000);
+                } else {
+                    throw new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`);
+                }
+            });
+
+            xhr.addEventListener('error', () => {
+                throw new Error('Upload failed due to network error');
+            });
+
+            xhr.open('POST', '/viewer/api/upload-dicom-files/');
+            xhr.send(formData);
+
+        } catch (error) {
+            console.error('Upload error:', error);
+            this.notyf.error(`Upload failed: ${error.message}`);
+            
+            // Reset UI
+            uploadArea.style.display = 'block';
+            uploadProgress.style.display = 'none';
+            startUploadBtn.disabled = false;
+        }
     }
 
     handleKeyboardShortcut(event) {
@@ -779,27 +939,62 @@ class AdvancedDicomViewer {
             this.showLoading(true);
             this.updateStatus('Loading study...');
 
-            // Get study info from series endpoint which includes study data
-            const response = await fetch(`/viewer/api/studies/${studyId}/series/`);
-            if (!response.ok) {
-                throw new Error(`Failed to load study: ${response.statusText}`);
+            // Try the study images endpoint first (this includes patient info)
+            const studyResponse = await fetch(`/viewer/api/get-study-images/${studyId}/`);
+            if (!studyResponse.ok) {
+                throw new Error(`Failed to load study: ${studyResponse.status} ${studyResponse.statusText}`);
             }
 
-            const data = await response.json();
-            this.currentStudy = data.study;
-            this.currentSeries = data.series || [];
+            const studyData = await studyResponse.json();
+            this.currentStudy = studyData.study;
+            console.log('Loaded study data:', this.currentStudy);
+            
+            // Get series data
+            const seriesResponse = await fetch(`/viewer/api/studies/${studyId}/series/`);
+            let seriesData = { series: [] };
+            if (seriesResponse.ok) {
+                seriesData = await seriesResponse.json();
+                this.currentSeries = seriesData.series || [];
+            } else {
+                console.warn('Series endpoint not available, using images directly');
+                // Create a default series from the images data
+                if (studyData.images && studyData.images.length > 0) {
+                    const defaultSeries = {
+                        id: studyData.images[0].series_number || 1,
+                        series_number: studyData.images[0].series_number || 1,
+                        series_description: studyData.images[0].series_description || 'Default Series',
+                        images: studyData.images
+                    };
+                    this.currentSeries = [defaultSeries];
+                }
+            }
+
             this.updatePatientInfo();
-            this.updateSeriesList(data.series || []);
+            this.updateSeriesList(this.currentSeries);
             
             // Load images from first series if available
             if (this.currentSeries.length > 0) {
-                await this.loadImages(this.currentSeries[0].id);
+                // If we have images from the study endpoint, use them directly
+                if (studyData.images && studyData.images.length > 0) {
+                    this.currentImages = studyData.images;
+                    this.currentImageIndex = 0;
+                    this.updateThumbnails();
+                    this.updateImageInfo();
+                    if (this.currentImages.length > 0) {
+                        await this.loadImage(0);
+                    }
+                } else {
+                    await this.loadImages(this.currentSeries[0].id);
+                }
+            } else {
+                throw new Error('No series found for this study');
             }
             
             this.notyf.success('Study loaded successfully!');
         } catch (error) {
             console.error('Error loading study:', error);
             this.notyf.error(`Failed to load study: ${error.message}`);
+            this.updateStatus('Error loading study');
         } finally {
             this.showLoading(false);
         }
@@ -1516,15 +1711,22 @@ class AdvancedDicomViewer {
 
     // UI Updates
     updatePatientInfo() {
-        if (!this.currentStudy) return;
+        if (!this.currentStudy) {
+            console.warn('No study data available to update patient info');
+            return;
+        }
+        
+        console.log('Updating patient info with study data:', this.currentStudy);
         
         const elements = {
             'patient-name-adv': this.currentStudy.patient_name,
             'patient-id-adv': this.currentStudy.patient_id,
+            'patient-dob': this.currentStudy.patient_birth_date || this.currentStudy.patient_dob,
             'study-date-adv': this.currentStudy.study_date,
             'study-description-adv': this.currentStudy.study_description,
             'modality-adv': this.currentStudy.modality,
             'institution-name': this.currentStudy.institution_name,
+            'accession-number': this.currentStudy.accession_number,
             'quick-patient-name': this.currentStudy.patient_name,
             'quick-patient-id': this.currentStudy.patient_id,
             'quick-modality': this.currentStudy.modality
@@ -1533,9 +1735,16 @@ class AdvancedDicomViewer {
         Object.entries(elements).forEach(([id, value]) => {
             const element = document.getElementById(id);
             if (element) {
-                element.textContent = value || '-';
+                const displayValue = value || '-';
+                element.textContent = displayValue;
+                console.log(`Updated ${id}: ${displayValue}`);
+            } else {
+                console.warn(`Element with ID '${id}' not found in DOM`);
             }
         });
+        
+        // Update debug info
+        this.updateDebugInfo();
     }
 
     updateStatus(message) {
@@ -1543,6 +1752,23 @@ class AdvancedDicomViewer {
         if (statusText) {
             statusText.textContent = message;
         }
+        console.log('Status update:', message);
+    }
+
+    updateDebugInfo() {
+        // Update debug panel with current state
+        const debugElements = {
+            'debug-study': this.currentStudy ? `Study ${this.currentStudy.id}: ${this.currentStudy.patient_name}` : 'No study loaded',
+            'debug-images': this.currentImages ? `${this.currentImages.length} images` : '0 images',
+            'debug-api': 'API Active'
+        };
+
+        Object.entries(debugElements).forEach(([id, value]) => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = value;
+            }
+        });
     }
 
     updateStatusBar(mousePos) {
@@ -1696,20 +1922,50 @@ class AdvancedDicomViewer {
         this.maxCacheSize = this.settings.cacheSize * 1024 * 1024;
     }
 
-    // Modal management
+    // Modal management with Bootstrap loading check
     showUploadModal() {
-        const modal = new bootstrap.Modal(document.getElementById('uploadModal'));
-        modal.show();
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            const modalElement = document.getElementById('uploadModal');
+            if (modalElement) {
+                const modal = new bootstrap.Modal(modalElement);
+                modal.show();
+            } else {
+                this.notyf.error('Upload modal not found');
+            }
+        } else {
+            this.notyf.error('Bootstrap not loaded. Please refresh the page.');
+            console.error('Bootstrap is not defined. Make sure Bootstrap JS is loaded before this script.');
+        }
     }
 
     showExportModal() {
-        const modal = new bootstrap.Modal(document.getElementById('exportModal'));
-        modal.show();
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            const modalElement = document.getElementById('exportModal');
+            if (modalElement) {
+                const modal = new bootstrap.Modal(modalElement);
+                modal.show();
+            } else {
+                this.notyf.error('Export modal not found');
+            }
+        } else {
+            this.notyf.error('Bootstrap not loaded. Please refresh the page.');
+            console.error('Bootstrap is not defined. Make sure Bootstrap JS is loaded before this script.');
+        }
     }
 
     showSettingsModal() {
-        const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
-        modal.show();
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            const modalElement = document.getElementById('settingsModal');
+            if (modalElement) {
+                const modal = new bootstrap.Modal(modalElement);
+                modal.show();
+            } else {
+                this.notyf.error('Settings modal not found');
+            }
+        } else {
+            this.notyf.error('Bootstrap not loaded. Please refresh the page.');
+            console.error('Bootstrap is not defined. Make sure Bootstrap JS is loaded before this script.');
+        }
     }
 
     // Advanced features (placeholder implementations)

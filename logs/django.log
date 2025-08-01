@@ -214,3 +214,48 @@ INFO 2025-08-01 11:57:20,879 autoreload 4927 139676014813440 Watching for file c
 INFO 2025-08-01 11:57:51,795 autoreload 5503 140138513895680 Watching for file changes with StatReloader
 INFO 2025-08-01 11:59:49,676 font_manager 6476 139808311562496 Failed to extract font properties from /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf: Can not load face (unknown file format; error code 0x2)
 INFO 2025-08-01 11:59:49,680 font_manager 6476 139808311562496 generated new fontManager
+INFO 2025-08-01 13:25:48,359 autoreload 3540 140430970528000 Watching for file changes with StatReloader
+INFO 2025-08-01 13:26:07,871 autoreload 3540 140430970528000 /workspace/venv/lib/python3.13/site-packages/numpy/_core/arrayprint.py changed, reloading.
+INFO 2025-08-01 13:26:08,279 autoreload 3788 140684005011712 Watching for file changes with StatReloader
+INFO 2025-08-01 13:26:45,676 font_manager 4276 140409674998016 Failed to extract font properties from /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf: Can not load face (unknown file format; error code 0x2)
+INFO 2025-08-01 13:26:45,682 font_manager 4276 140409674998016 generated new fontManager
+INFO 2025-08-01 13:27:05,140 autoreload 4584 140464399266048 Watching for file changes with StatReloader
+INFO 2025-08-01 13:27:10,454 basehttp 4584 140463560808128 "HEAD /viewer/ HTTP/1.1" 200 0
+INFO 2025-08-01 13:27:15,463 middleware 4584 140463560808128 API Request: GET /viewer/api/get-study-images/6/
+DEBUG 2025-08-01 13:27:15,466 middleware 4584 140463560808128 Request duration: GET /viewer/api/get-study-images/6/ took 0.003s
+INFO 2025-08-01 13:27:15,466 middleware 4584 140463560808128 API Response: GET /viewer/api/get-study-images/6/ - Status: 403
+DEBUG 2025-08-01 13:27:15,466 middleware 4584 140463560808128 Response size: 73 bytes
+WARNING 2025-08-01 13:27:15,467 log 4584 140463560808128 Forbidden: /viewer/api/get-study-images/6/
+WARNING 2025-08-01 13:27:15,467 basehttp 4584 140463560808128 "GET /viewer/api/get-study-images/6/ HTTP/1.1" 403 73
+INFO 2025-08-01 13:28:06,466 autoreload 3788 140684005011712 /workspace/viewer/views.py changed, reloading.
+INFO 2025-08-01 13:28:06,564 autoreload 4584 140464399266048 /workspace/viewer/views.py changed, reloading.
+INFO 2025-08-01 13:28:06,858 autoreload 5156 140717825523968 Watching for file changes with StatReloader
+INFO 2025-08-01 13:28:06,992 autoreload 5157 139776538161408 Watching for file changes with StatReloader
+INFO 2025-08-01 13:28:10,689 autoreload 5156 140717825523968 /workspace/viewer/views.py changed, reloading.
+INFO 2025-08-01 13:28:11,117 autoreload 5210 140615452061952 Watching for file changes with StatReloader
+INFO 2025-08-01 13:28:15,321 middleware 5210 140614613518016 API Request: GET /viewer/api/get-study-images/6/
+DEBUG 2025-08-01 13:28:15,327 middleware 5210 140614613518016 Request duration: GET /viewer/api/get-study-images/6/ took 0.005s
+INFO 2025-08-01 13:28:15,327 middleware 5210 140614613518016 API Response: GET /viewer/api/get-study-images/6/ - Status: 200
+DEBUG 2025-08-01 13:28:15,327 middleware 5210 140614613518016 Response size: 877 bytes
+INFO 2025-08-01 13:28:15,327 basehttp 5210 140614613518016 "GET /viewer/api/get-study-images/6/ HTTP/1.1" 200 877
+INFO 2025-08-01 13:28:21,100 middleware 5210 140614613518016 API Request: GET /viewer/api/images/5/data/
+DEBUG 2025-08-01 13:28:21,102 middleware 5210 140614613518016 Request duration: GET /viewer/api/images/5/data/ took 0.002s
+INFO 2025-08-01 13:28:21,102 middleware 5210 140614613518016 API Response: GET /viewer/api/images/5/data/ - Status: 500
+DEBUG 2025-08-01 13:28:21,102 middleware 5210 140614613518016 Response size: 70 bytes
+ERROR 2025-08-01 13:28:21,103 log 5210 140614613518016 Internal Server Error: /viewer/api/images/5/data/
+ERROR 2025-08-01 13:28:21,103 basehttp 5210 140614613518016 "GET /viewer/api/images/5/data/ HTTP/1.1" 500 70
+INFO 2025-08-01 13:29:26,487 autoreload 5210 140615452061952 /workspace/viewer/models.py changed, reloading.
+INFO 2025-08-01 13:29:26,903 autoreload 6026 140064998142208 Watching for file changes with StatReloader
+INFO 2025-08-01 13:29:33,265 middleware 6026 140064159659712 API Request: GET /viewer/api/images/5/data/
+DEBUG 2025-08-01 13:29:33,268 middleware 6026 140064159659712 Request duration: GET /viewer/api/images/5/data/ took 0.004s
+INFO 2025-08-01 13:29:33,268 middleware 6026 140064159659712 API Response: GET /viewer/api/images/5/data/ - Status: 200
+DEBUG 2025-08-01 13:29:33,268 middleware 6026 140064159659712 Response size: 5826 bytes
+INFO 2025-08-01 13:29:33,269 basehttp 6026 140064159659712 "GET /viewer/api/images/5/data/ HTTP/1.1" 200 5826
+INFO 2025-08-01 13:29:42,719 autoreload 6026 140064998142208 /workspace/viewer/models.py changed, reloading.
+INFO 2025-08-01 13:29:43,149 autoreload 6215 140381246091520 Watching for file changes with StatReloader
+INFO 2025-08-01 13:29:47,190 middleware 6215 140380407666368 API Request: GET /viewer/api/images/5/data/
+DEBUG 2025-08-01 13:29:47,194 middleware 6215 140380407666368 Request duration: GET /viewer/api/images/5/data/ took 0.004s
+INFO 2025-08-01 13:29:47,194 middleware 6215 140380407666368 API Response: GET /viewer/api/images/5/data/ - Status: 200
+DEBUG 2025-08-01 13:29:47,194 middleware 6215 140380407666368 Response size: 5826 bytes
+INFO 2025-08-01 13:29:47,194 basehttp 6215 140380407666368 "GET /viewer/api/images/5/data/ HTTP/1.1" 200 5826
+INFO 2025-08-01 13:30:56,754 basehttp 6215 140380407666368 "GET /viewer/study/6/ HTTP/1.1" 200 34277
