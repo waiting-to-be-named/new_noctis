@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM Viewer Fix Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+            font-family: Arial, sans-serif;
+        }
+        #canvas-container {
+            width: 800px;
+            height: 600px;
+            background: #000;
+            border: 2px solid #444;
+            position: relative;
+            margin: 20px auto;
+        }
+        #dicom-canvas-advanced {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #0088ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0066cc;
+        }
+        #status {
+            background: #333;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px auto;
+            max-width: 800px;
+            font-family: monospace;
+        }
+        .success { color: #00ff88; }
+        .error { color: #ff4444; }
+        .info { color: #ffaa00; }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center;">DICOM Viewer Fix Test</h1>
+    
+    <div id="status">
+        <div>Status: <span id="viewer-status" class="info">Initializing...</span></div>
+        <div>Study ID: <span id="study-id" class="info">None</span></div>
+        <div>Images: <span id="image-count" class="info">0</span></div>
+        <div>Canvas: <span id="canvas-status" class="info">Not ready</span></div>
+    </div>
+    
+    <div id="canvas-container">
+        <canvas id="dicom-canvas-advanced"></canvas>
+    </div>
+    
+    <div class="controls">
+        <button onclick="testInitialization()">Test Initialization</button>
+        <button onclick="loadTestImage()">Load Test Image</button>
+        <button onclick="previousImage()">Previous</button>
+        <button onclick="nextImage()">Next</button>
+        <button onclick="resetViewer()">Reset Viewer</button>
+    </div>
+    
+    <script>
+        // Set a test study ID
+        window.studyId = 'test-study-123';
+        const urlParams = new URLSearchParams(window.location.search);
+        if (!urlParams.has('study_id')) {
+            urlParams.set('study_id', window.studyId);
+            window.history.replaceState({}, '', `${window.location.pathname}?${urlParams}`);
+        }
+        
+        function updateStatus(element, message, type = 'info') {
+            const el = document.getElementById(element);
+            if (el) {
+                el.textContent = message;
+                el.className = type;
+            }
+        }
+        
+        function testInitialization() {
+            console.log('Testing initialization...');
+            updateStatus('viewer-status', 'Testing...', 'info');
+            
+            if (window.dicomViewerInitFix) {
+                window.dicomViewerInitFix.initialize();
+                setTimeout(() => {
+                    if (window.advancedViewer) {
+                        updateStatus('viewer-status', 'Viewer initialized!', 'success');
+                        updateStatus('study-id', window.advancedViewer.studyId || 'None', 'info');
+                    } else {
+                        updateStatus('viewer-status', 'Viewer not initialized', 'error');
+                    }
+                }, 1000);
+            } else {
+                updateStatus('viewer-status', 'Init fix not loaded', 'error');
+            }
+        }
+        
+        function loadTestImage() {
+            console.log('Loading test image...');
+            
+            // Create a test image on canvas
+            const canvas = document.getElementById('dicom-canvas-advanced');
+            const ctx = canvas.getContext('2d');
+            
+            // Set canvas size
+            canvas.width = 512;
+            canvas.height = 512;
+            
+            // Create a gradient test pattern
+            const gradient = ctx.createLinearGradient(0, 0, 512, 512);
+            gradient.addColorStop(0, '#0088ff');
+            gradient.addColorStop(0.5, '#ffffff');
+            gradient.addColorStop(1, '#ff0088');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 512, 512);
+            
+            // Add text
+            ctx.fillStyle = '#000';
+            ctx.font = '30px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('DICOM Test Image', 256, 256);
+            
+            updateStatus('canvas-status', `${canvas.width}x${canvas.height}`, 'success');
+            updateStatus('image-count', '1', 'success');
+            updateStatus('viewer-status', 'Test image loaded', 'success');
+            
+            // If init fix is available, try to display a real image
+            if (window.dicomViewerInitFix && window.dicomViewerInitFix.displayImage) {
+                // Try to load a sample DICOM image (you'll need to provide a valid URL)
+                // window.dicomViewerInitFix.displayImage('/path/to/sample.dcm');
+            }
+        }
+        
+        function previousImage() {
+            if (window.advancedViewer && window.advancedViewer.previousImage) {
+                window.advancedViewer.previousImage();
+            } else {
+                console.log('Previous image function not available');
+            }
+        }
+        
+        function nextImage() {
+            if (window.advancedViewer && window.advancedViewer.nextImage) {
+                window.advancedViewer.nextImage();
+            } else {
+                console.log('Next image function not available');
+            }
+        }
+        
+        function resetViewer() {
+            location.reload();
+        }
+        
+        // Check canvas status
+        const canvas = document.getElementById('dicom-canvas-advanced');
+        if (canvas) {
+            updateStatus('canvas-status', 'Canvas found', 'success');
+        }
+    </script>
+    
+    <!-- Load the fix scripts -->
+    <script src="/static/js/dicom_viewer_api_fix.js"></script>
+    <script src="/static/js/dicom_viewer_advanced.js"></script>
+    <script src="/static/js/dicom_viewer_init_fix.js"></script>
+</body>
+</html>

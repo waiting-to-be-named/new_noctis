@@ -2439,7 +2439,6 @@ class AdvancedDicomViewer {
             return '';
         }
     }
-}
 
 // Export the class for use
 window.AdvancedDicomViewer = AdvancedDicomViewer;
