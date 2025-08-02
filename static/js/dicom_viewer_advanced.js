@@ -2396,11 +2396,9 @@ class AdvancedDicomViewer {
             this.saveAnnotation(annotation);
         }
     }
-}
 
-
-        // Enhanced API call with better error handling
-        async makeAPICall(url, options = {}) {
+    // Enhanced API call with better error handling
+    async makeAPICall(url, options = {}) {
             try {
                 console.log(`Making API call to: ${url}`);
                 const response = await fetch(url, {
@@ -2440,5 +2438,8 @@ class AdvancedDicomViewer {
             }
             return '';
         }
-    // Export the class for use
+    }
+}
+
+// Export the class for use
 window.AdvancedDicomViewer = AdvancedDicomViewer;

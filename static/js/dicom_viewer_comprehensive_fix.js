@@ -35,10 +35,10 @@
         // This ensures basic functionality even if main viewer fails
         window.advancedViewer = {
             notyf: {
-                success: (msg) => showNotification(msg, 'success'),
-                error: (msg) => showNotification(msg, 'error'),
-                warning: (msg) => showNotification(msg, 'warning'),
-                info: (msg) => showNotification(msg, 'info')
+                success: (msg) => createFallbackNotification(msg, 'success'),
+                error: (msg) => createFallbackNotification(msg, 'error'),
+                warning: (msg) => createFallbackNotification(msg, 'warning'),
+                info: (msg) => createFallbackNotification(msg, 'info')
             }
         };
     }
@@ -644,32 +644,41 @@
         }
     }
     
+    function createFallbackNotification(message, type = 'info') {
+        // Fallback notification
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type === 'error' ? 'danger' : type === 'warning' ? 'warning' : type === 'success' ? 'success' : 'info'}`;
+        notification.style.cssText = `
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 4px;
+            z-index: 10000;
+            animation: slideIn 0.3s ease-out;
+            max-width: 300px;
+        `;
+        notification.textContent = message;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s ease-in';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    }
+    
     function showNotification(message, type = 'info') {
-        if (window.advancedViewer && window.advancedViewer.notyf) {
-            window.advancedViewer.notyf[type](message);
-        } else {
-            // Fallback notification
-            const notification = document.createElement('div');
-            notification.className = `alert alert-${type === 'error' ? 'danger' : type === 'warning' ? 'warning' : type === 'success' ? 'success' : 'info'}`;
-            notification.style.cssText = `
-                position: fixed;
-                top: 80px;
-                right: 20px;
-                padding: 15px 20px;
-                border-radius: 4px;
-                z-index: 10000;
-                animation: slideIn 0.3s ease-out;
-                max-width: 300px;
-            `;
-            notification.textContent = message;
-            
-            document.body.appendChild(notification);
-            
-            setTimeout(() => {
-                notification.style.animation = 'slideOut 0.3s ease-in';
-                setTimeout(() => notification.remove(), 300);
-            }, 3000);
+        if (window.advancedViewer && window.advancedViewer.notyf && typeof window.advancedViewer.notyf[type] === 'function') {
+            // Check if it's the real notyf instance (not our fallback)
+            const notyfFn = window.advancedViewer.notyf[type];
+            if (notyfFn.toString().indexOf('createFallbackNotification') === -1) {
+                window.advancedViewer.notyf[type](message);
+                return;
+            }
         }
+        // Use fallback notification
+        createFallbackNotification(message, type);
     }
     
     function getCookie(name) {
