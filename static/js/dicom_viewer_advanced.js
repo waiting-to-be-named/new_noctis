@@ -840,7 +840,10 @@ class AdvancedDicomViewer {
         this.activeTool = tool;
         this.canvas.style.cursor = this.getCursorForTool();
         
-        this.notyf.info(`${tool.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())} tool activated`);
+        this.notyf.open({
+            type: 'info',
+            message: `${tool.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())} tool activated`
+        });
     }
 
     // Image loading and management
@@ -1406,7 +1409,10 @@ class AdvancedDicomViewer {
         });
         document.querySelector(`[data-preset="${presetName}"]`)?.classList.add('active');
         
-        this.notyf.info(`Applied ${presetName} preset: W:${preset.ww} L:${preset.wl}`);
+        this.notyf.open({
+            type: 'info',
+            message: `Applied ${presetName} preset: W:${preset.ww} L:${preset.wl}`
+        });
     }
 
     applyWindowLevel() {
@@ -1469,7 +1475,10 @@ class AdvancedDicomViewer {
         this.flipVertical = false;
         this.render();
         this.updateZoomDisplay();
-        this.notyf.info('View reset to default');
+        this.notyf.open({
+            type: 'info',
+            message: 'View reset to default'
+        });
     }
 
     fitToWindow() {
@@ -1488,7 +1497,10 @@ class AdvancedDicomViewer {
         this.panY = 0;
         this.render();
         this.updateZoomDisplay();
-        this.notyf.info('Image fitted to window');
+        this.notyf.open({
+            type: 'info',
+            message: 'Image fitted to window'
+        });
     }
 
     actualSize() {
@@ -1497,23 +1509,35 @@ class AdvancedDicomViewer {
         this.panY = 0;
         this.render();
         this.updateZoomDisplay();
-        this.notyf.info('Image displayed at actual size');
+        this.notyf.open({
+            type: 'info',
+            message: 'Image displayed at actual size'
+        });
     }
 
     // Image transformations
     rotateImage(degrees) {
         this.rotation = (this.rotation + degrees) % 360;
         this.render();
-        this.notyf.info(`Image rotated ${degrees}°`);
+        this.notyf.open({
+            type: 'info',
+            message: `Image rotated ${degrees}°`
+        });
     }
 
     flipImage(direction = 'horizontal') {
         if (direction === 'horizontal') {
             this.flipHorizontal = !this.flipHorizontal;
-            this.notyf.info('Image flipped horizontally');
+            this.notyf.open({
+            type: 'info',
+            message: 'Image flipped horizontally'
+        });
         } else {
             this.flipVertical = !this.flipVertical;
-            this.notyf.info('Image flipped vertically');
+            this.notyf.open({
+            type: 'info',
+            message: 'Image flipped vertically'
+        });
         }
         this.render();
     }
@@ -1527,7 +1551,10 @@ class AdvancedDicomViewer {
             btn.classList.toggle('active', this.inverted);
         }
         
-        this.notyf.info(`Image ${this.inverted ? 'inverted' : 'normal'}`);
+        this.notyf.open({
+            type: 'info',
+            message: `Image ${this.inverted ? 'inverted' : 'normal'}`
+        });
     }
 
     toggleCrosshair() {
@@ -1543,7 +1570,10 @@ class AdvancedDicomViewer {
             if (svg) svg.innerHTML = '';
         }
         
-        this.notyf.info(`Crosshair ${this.crosshair ? 'enabled' : 'disabled'}`);
+        this.notyf.open({
+            type: 'info',
+            message: `Crosshair ${this.crosshair ? 'enabled' : 'disabled'}`
+        });
     }
 
     toggleMagnify() {
@@ -1559,7 +1589,10 @@ class AdvancedDicomViewer {
             if (magnifyOverlay) magnifyOverlay.innerHTML = '';
         }
         
-        this.notyf.info(`Magnify ${this.magnifyEnabled ? 'enabled' : 'disabled'}`);
+        this.notyf.open({
+            type: 'info',
+            message: `Magnify ${this.magnifyEnabled ? 'enabled' : 'disabled'}`
+        });
     }
 
     // Image navigation
@@ -1970,23 +2003,38 @@ class AdvancedDicomViewer {
 
     // Advanced features (placeholder implementations)
     enableMPR() {
-        this.notyf.info('MPR mode will be available in future update');
+        this.notyf.open({
+            type: 'info',
+            message: 'MPR mode will be available in future update'
+        });
     }
 
     enableVolumeRendering() {
-        this.notyf.info('Volume rendering will be available in future update');
+        this.notyf.open({
+            type: 'info',
+            message: 'Volume rendering will be available in future update'
+        });
     }
 
     enableMIP() {
-        this.notyf.info('MIP will be available in future update');
+        this.notyf.open({
+            type: 'info',
+            message: 'MIP will be available in future update'
+        });
     }
 
     runAIAnalysis() {
-        this.notyf.info('AI analysis will be available in future update');
+        this.notyf.open({
+            type: 'info',
+            message: 'AI analysis will be available in future update'
+        });
     }
 
     runAISegmentation() {
-        this.notyf.info('AI segmentation will be available in future update');
+        this.notyf.open({
+            type: 'info',
+            message: 'AI segmentation will be available in future update'
+        });
     }
 
     // Utility functions
@@ -2189,14 +2237,20 @@ class AdvancedDicomViewer {
         this.measurements = [];
         this.updateMeasurementOverlay();
         this.updateMeasurementsList();
-        this.notyf.info('All measurements cleared');
+        this.notyf.open({
+            type: 'info',
+            message: 'All measurements cleared'
+        });
     }
 
     clearAnnotations() {
         this.annotations = [];
         this.updateAnnotationOverlay();
         this.updateAnnotationsList();
-        this.notyf.info('All annotations cleared');
+        this.notyf.open({
+            type: 'info',
+            message: 'All annotations cleared'
+        });
     }
 
     togglePatientInfo() {
@@ -2215,37 +2269,61 @@ class AdvancedDicomViewer {
 
     setViewportLayout(layout) {
         this.viewportLayout = layout;
-        this.notyf.info(`Viewport layout set to ${layout}`);
+        this.notyf.open({
+            type: 'info',
+            message: `Viewport layout set to ${layout}`
+        });
     }
 
     toggleViewportSync() {
         this.syncViewports = !this.syncViewports;
-        this.notyf.info(`Viewport sync ${this.syncViewports ? 'enabled' : 'disabled'}`);
+        this.notyf.open({
+            type: 'info',
+            message: `Viewport sync ${this.syncViewports ? 'enabled' : 'disabled'}`
+        });
     }
 
     // Additional methods for specific tools
     applySharpenFilter() {
-        this.notyf.info('Sharpen filter applied');
+        this.notyf.open({
+            type: 'info',
+            message: 'Sharpen filter applied'
+        });
     }
 
     detectLesions() {
-        this.notyf.info('Lesion detection started');
+        this.notyf.open({
+            type: 'info',
+            message: 'Lesion detection started'
+        });
     }
 
     segmentOrgans() {
-        this.notyf.info('Organ segmentation started');
+        this.notyf.open({
+            type: 'info',
+            message: 'Organ segmentation started'
+        });
     }
 
     calculateVolume() {
-        this.notyf.info('Volume calculation started');
+        this.notyf.open({
+            type: 'info',
+            message: 'Volume calculation started'
+        });
     }
 
     previousStudy() {
-        this.notyf.info('Previous study navigation not implemented');
+        this.notyf.open({
+            type: 'info',
+            message: 'Previous study navigation not implemented'
+        });
     }
 
     nextStudy() {
-        this.notyf.info('Next study navigation not implemented');
+        this.notyf.open({
+            type: 'info',
+            message: 'Next study navigation not implemented'
+        });
     }
 
     toggleCine() {
@@ -2267,7 +2345,10 @@ class AdvancedDicomViewer {
             }
         }, this.cineSpeed);
         
-        this.notyf.info('Cine mode started');
+        this.notyf.open({
+            type: 'info',
+            message: 'Cine mode started'
+        });
     }
 
     stopCine() {
@@ -2276,7 +2357,10 @@ class AdvancedDicomViewer {
             this.cineTimer = null;
         }
         this.cineMode = false;
-        this.notyf.info('Cine mode stopped');
+        this.notyf.open({
+            type: 'info',
+            message: 'Cine mode stopped'
+        });
     }
 
     updateMagnifyGlass(mousePos) {
