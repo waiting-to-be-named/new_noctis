@@ -45,6 +45,7 @@ urlpatterns = [
     path('api/studies/', views.get_studies, name='get_studies'),
     path('api/studies/<int:study_id>/images/', views.get_study_images, name='get_study_images_old'),
     path('api/images/<int:image_id>/data/', views.get_image_data, name='get_image_data_old'),
+    path('api/images/<int:image_id>/fallback/', views.get_image_fallback, name='get_image_fallback'),
     
     # Enhanced image processing
     path('api/images/<int:image_id>/enhanced-data/', views.get_enhanced_image_data, name='get_enhanced_image_data'),
