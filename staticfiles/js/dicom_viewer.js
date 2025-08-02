@@ -645,7 +645,12 @@ class DicomViewer {
                 };
                 img.onerror = () => {
                     console.error('Failed to load image data');
-                    alert('Failed to load image. Please try again.');
+                    // Show a non-intrusive error message instead of alert
+                    if (this.showErrorOnCanvas) {
+                        this.showErrorOnCanvas('Image temporarily unavailable');
+                    } else {
+                        console.log('Image loading failed - showing fallback content');
+                    }
                 };
                 img.src = data.image_data;
             } else {
@@ -654,7 +659,12 @@ class DicomViewer {
             
         } catch (error) {
             console.error('Error loading image:', error);
-            alert('Error loading image: ' + error.message);
+            // Show a non-intrusive error message instead of alert
+            if (this.showErrorOnCanvas) {
+                this.showErrorOnCanvas('Unable to load image: ' + error.message);
+            } else {
+                console.log('Image loading error:', error.message);
+            }
         }
     }
     
