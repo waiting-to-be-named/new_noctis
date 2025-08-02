@@ -41,6 +41,7 @@ from pathlib import Path
 import logging
 from PIL import Image
 import base64
+from PIL import ImageDraw, ImageFont
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -4502,3 +4503,93 @@ def test_viewer_api(request):
             'status': 'error',
             'message': str(e)
         }, status=500)
+
+@api_view(['GET'])
+def get_image_fallback(request, image_id):
+    """Get fallback image when DICOM file is unavailable"""
+    try:
+        image = DicomImage.objects.get(id=image_id)
+        
+        # Check for cached processed image first
+        if image.processed_image_cache:
+            cached_data = image.processed_image_cache
+            if not cached_data.startswith('data:image/'):
+                # Add proper header if missing
+                cached_data = f"data:image/png;base64,{cached_data}"
+            
+            return Response({
+                'image_data': cached_data,
+                'metadata': {
+                    'synthetic': False,
+                    'cached': True,
+                    'rows': image.rows or 512,
+                    'columns': image.columns or 512
+                }
+            })
+        
+        # Generate synthetic image
+        import numpy as np
+        from PIL import Image, ImageDraw, ImageFont
+        import io
+        import base64
+        
+        # Create synthetic image
+        width, height = 512, 512
+        img = Image.new('L', (width, height), color=64)
+        draw = ImageDraw.Draw(img)
+        
+        # Add grid pattern
+        for i in range(0, width, 50):
+            draw.line([(i, 0), (i, height)], fill=80, width=1)
+            draw.line([(0, i), (width, i)], fill=80, width=1)
+        
+        # Add crosshair
+        draw.line([(width//2, 0), (width//2, height)], fill=100, width=2)
+        draw.line([(0, height//2), (width, height//2)], fill=100, width=2)
+        
+        # Add text
+        try:
+            # Try to use a basic font
+            font = ImageFont.load_default()
+        except:
+            font = None
+            
+        text_lines = [
+            "Test Image",
+            f"Image ID: {image_id}",
+            f"Patient: {image.series.study.patient_name[:20]}",
+            f"Study: {image.series.study.study_date}",
+            "(DICOM file unavailable)"
+        ]
+        
+        y_offset = height // 2 - 50
+        for line in text_lines:
+            text_bbox = draw.textbbox((0, 0), line, font=font)
+            text_width = text_bbox[2] - text_bbox[0]
+            x = (width - text_width) // 2
+            draw.text((x, y_offset), line, fill=255, font=font)
+            y_offset += 25
+        
+        # Convert to base64
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        buffer.seek(0)
+        image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        return Response({
+            'image_data': f"data:image/png;base64,{image_base64}",
+            'metadata': {
+                'synthetic': True,
+                'cached': False,
+                'rows': height,
+                'columns': width,
+                'patient_name': image.series.study.patient_name,
+                'study_date': str(image.series.study.study_date)
+            }
+        })
+        
+    except DicomImage.DoesNotExist:
+        return Response({'error': 'Image not found'}, status=404)
+    except Exception as e:
+        print(f"Error generating fallback image: {e}")
+        return Response({'error': f'Failed to generate fallback: {str(e)}'}, status=500)
