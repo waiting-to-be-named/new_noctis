@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('viewer', '0003_alter_notification_notification_type_chatmessage'),
+        ('viewer', '0003_add_test_data_field'),
     ]
 
     operations = [
