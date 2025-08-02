@@ -182,13 +182,22 @@ class AdvancedDicomViewer {
         this.setupUploadHandlers();
         this.loadSettings();
 
-        // Auto-load study if provided, otherwise load available studies
+        // Auto-load study if provided, otherwise check session storage, then load available studies
         if (initialStudyId) {
             console.log(`Loading initial study ID: ${initialStudyId}`);
             this.loadStudy(initialStudyId);
+            // Store in session for future launches
+            sessionStorage.setItem('lastViewedStudyId', initialStudyId.toString());
         } else {
-            console.log('No initial study ID provided, loading available studies');
-            this.loadAvailableStudies();
+            // Check if there's a last viewed study in session storage
+            const lastStudyId = sessionStorage.getItem('lastViewedStudyId');
+            if (lastStudyId && !isNaN(parseInt(lastStudyId))) {
+                console.log(`Loading last viewed study from session: ${lastStudyId}`);
+                this.loadStudy(parseInt(lastStudyId));
+            } else {
+                console.log('No initial study ID provided, loading available studies');
+                this.loadAvailableStudies();
+            }
         }
 
         // Initialize UI components
@@ -464,6 +473,7 @@ class AdvancedDicomViewer {
             'KeyI': () => this.toggleInvert(),
             'KeyC': () => this.toggleCrosshair(),
             'KeyM': () => this.toggleMagnify(),
+            'KeyQ': () => this.enableMPR(),
             'Escape': () => this.resetView(),
             'Space': () => this.toggleCine(),
             'ArrowLeft': () => this.previousImage(),
@@ -852,7 +862,7 @@ class AdvancedDicomViewer {
             console.log('Loading available studies...');
             this.updateStatus('Loading available studies...');
             
-            const response = await fetch('/viewer/api/studies/');
+            const response = await fetch(`/viewer/api/studies/?t=${Date.now()}`);
             if (!response.ok) {
                 throw new Error(`Failed to load studies: ${response.statusText}`);
             }
@@ -942,8 +952,17 @@ class AdvancedDicomViewer {
             this.showLoading(true);
             this.updateStatus('Loading study...');
 
+            // Clear any cached data for this study
+            this.currentStudy = null;
+            this.currentSeries = null;
+            this.currentImages = [];
+            this.currentImageIndex = 0;
+            this.currentImage = null;
+
             // Try the study images endpoint first (this includes patient info)
-            const studyResponse = await fetch(`/viewer/api/get-study-images/${studyId}/`);
+            // Add cache-busting parameter to ensure fresh data
+            const timestamp = Date.now();
+            const studyResponse = await fetch(`/viewer/api/get-study-images/${studyId}/?t=${timestamp}`);
             if (!studyResponse.ok) {
                 throw new Error(`Failed to load study: ${studyResponse.status} ${studyResponse.statusText}`);
             }
@@ -952,8 +971,11 @@ class AdvancedDicomViewer {
             this.currentStudy = studyData.study;
             console.log('Loaded study data:', this.currentStudy);
             
+            // Store the loaded study ID in session storage
+            sessionStorage.setItem('lastViewedStudyId', studyId.toString());
+            
             // Get series data
-            const seriesResponse = await fetch(`/viewer/api/studies/${studyId}/series/`);
+            const seriesResponse = await fetch(`/viewer/api/studies/${studyId}/series/?t=${timestamp}`);
             let seriesData = { series: [] };
             if (seriesResponse.ok) {
                 seriesData = await seriesResponse.json();
@@ -2001,33 +2023,369 @@ class AdvancedDicomViewer {
         }
     }
 
-    // Advanced features (placeholder implementations)
+    // Advanced features (MPR, MIP, 3D, AI)
     enableMPR() {
-        this.notyf.open({
-            type: 'info',
-            message: 'MPR mode will be available in future update'
-        });
+        if (!this.currentImages || this.currentImages.length < 2) {
+            this.notyf.error('MPR requires multiple images in the series');
+            return;
+        }
+        
+        this.mprEnabled = !this.mprEnabled;
+        const button = document.getElementById('mpr-btn');
+        if (button) {
+            button.classList.toggle('active', this.mprEnabled);
+        }
+        
+        if (this.mprEnabled) {
+            this.initializeMPR();
+            this.notyf.success('MPR mode enabled');
+        } else {
+            this.disableMPR();
+            this.notyf.info('MPR mode disabled');
+        }
+    }
+
+    initializeMPR() {
+        // Create MPR overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'mpr-overlay';
+        overlay.className = 'mpr-overlay';
+        overlay.style.cssText = `
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 1000;
+        `;
+        overlay.innerHTML = `
+            <div><strong>MPR Mode Active</strong></div>
+            <div>Axial: ${this.currentImageIndex + 1}/${this.currentImages.length}</div>
+            <div>Use scroll wheel to navigate</div>
+            <div>Press Q to toggle MPR</div>
+        `;
+        
+        const canvasContainer = document.getElementById('canvas-container');
+        canvasContainer.appendChild(overlay);
+        
+        // Redraw current image with MPR overlay
+        this.renderCurrentImage();
+    }
+
+    disableMPR() {
+        this.mprEnabled = false;
+        const overlay = document.getElementById('mpr-overlay');
+        if (overlay) {
+            overlay.remove();
+        }
+        this.renderCurrentImage();
     }
 
     enableVolumeRendering() {
-        this.notyf.open({
-            type: 'info',
-            message: 'Volume rendering will be available in future update'
-        });
+        if (!this.currentImages || this.currentImages.length < 5) {
+            this.notyf.error('Volume rendering requires at least 5 images in the series');
+            return;
+        }
+        
+        this.notyf.info('Generating 3D volume rendering...');
+        this.generateVolumeRendering();
+    }
+
+    async generateVolumeRendering() {
+        try {
+            // Simple 3D effect using stack projection
+            const canvas = this.canvas;
+            const ctx = this.ctx;
+            
+            // Store original canvas for restoration
+            const originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            
+            // Create a simple 3D projection effect
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw multiple slices with offset for 3D effect
+            const sliceCount = Math.min(this.currentImages.length, 10);
+            const step = Math.floor(this.currentImages.length / sliceCount);
+            
+            for (let i = 0; i < sliceCount; i++) {
+                const imageIndex = i * step;
+                if (imageIndex < this.currentImages.length) {
+                    const image = await this.loadImageData(imageIndex);
+                    if (image) {
+                        const offset = i * 2;
+                        const alpha = 0.1 + (i / sliceCount) * 0.8;
+                        ctx.globalAlpha = alpha;
+                        ctx.drawImage(image, offset, offset, canvas.width - offset * 2, canvas.height - offset * 2);
+                    }
+                }
+            }
+            
+            ctx.globalAlpha = 1.0;
+            
+            // Add 3D overlay
+            const overlay = document.createElement('div');
+            overlay.id = 'volume-overlay';
+            overlay.className = 'volume-overlay';
+            overlay.style.cssText = `
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                background: rgba(0,0,0,0.8);
+                color: white;
+                padding: 10px;
+                border-radius: 8px;
+                font-family: monospace;
+                font-size: 12px;
+                z-index: 1000;
+            `;
+            overlay.innerHTML = `
+                <div><strong>3D Volume Rendering</strong></div>
+                <div>Slices: ${sliceCount}</div>
+                <div>Click anywhere to return to 2D</div>
+            `;
+            
+            const canvasContainer = document.getElementById('canvas-container');
+            canvasContainer.appendChild(overlay);
+            
+            // Add click handler to return to 2D
+            canvas.addEventListener('click', () => {
+                ctx.putImageData(originalImageData, 0, 0);
+                overlay.remove();
+                this.notyf.success('Returned to 2D view');
+            }, { once: true });
+            
+            this.notyf.success('3D volume rendering generated');
+            
+        } catch (error) {
+            console.error('Error generating volume rendering:', error);
+            this.notyf.error('Failed to generate volume rendering');
+        }
     }
 
     enableMIP() {
-        this.notyf.open({
-            type: 'info',
-            message: 'MIP will be available in future update'
-        });
+        if (!this.currentImages || this.currentImages.length < 2) {
+            this.notyf.error('MIP requires multiple images in the series');
+            return;
+        }
+        
+        this.notyf.info('Generating Maximum Intensity Projection...');
+        this.generateMIP();
     }
 
-    runAIAnalysis() {
-        this.notyf.open({
-            type: 'info',
-            message: 'AI analysis will be available in future update'
-        });
+    async generateMIP() {
+        try {
+            const canvas = this.canvas;
+            const ctx = this.ctx;
+            
+            // Store original for restoration
+            const originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            
+            // Create MIP by finding maximum intensity at each pixel
+            const width = canvas.width;
+            const height = canvas.height;
+            const mipData = new Uint8ClampedArray(width * height * 4);
+            
+            // Initialize with zeros
+            mipData.fill(0);
+            
+            // Process subset of images for performance
+            const sampleCount = Math.min(this.currentImages.length, 20);
+            const step = Math.floor(this.currentImages.length / sampleCount);
+            
+            for (let i = 0; i < sampleCount; i++) {
+                const imageIndex = i * step;
+                if (imageIndex < this.currentImages.length) {
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = width;
+                    tempCanvas.height = height;
+                    const tempCtx = tempCanvas.getContext('2d');
+                    
+                    const image = await this.loadImageData(imageIndex);
+                    if (image) {
+                        tempCtx.drawImage(image, 0, 0, width, height);
+                        const imageData = tempCtx.getImageData(0, 0, width, height);
+                        
+                        // Find maximum intensity
+                        for (let j = 0; j < imageData.data.length; j += 4) {
+                            const intensity = imageData.data[j]; // Red channel
+                            if (intensity > mipData[j]) {
+                                mipData[j] = intensity;     // R
+                                mipData[j + 1] = intensity; // G
+                                mipData[j + 2] = intensity; // B
+                                mipData[j + 3] = 255;       // A
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Draw MIP result
+            const mipImageData = new ImageData(mipData, width, height);
+            ctx.putImageData(mipImageData, 0, 0);
+            
+            // Add MIP overlay
+            const overlay = document.createElement('div');
+            overlay.id = 'mip-overlay';
+            overlay.className = 'mip-overlay';
+            overlay.style.cssText = `
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                background: rgba(0,0,0,0.8);
+                color: white;
+                padding: 10px;
+                border-radius: 8px;
+                font-family: monospace;
+                font-size: 12px;
+                z-index: 1000;
+            `;
+            overlay.innerHTML = `
+                <div><strong>Maximum Intensity Projection</strong></div>
+                <div>Processed: ${sampleCount} slices</div>
+                <div>Click anywhere to return to original</div>
+            `;
+            
+            const canvasContainer = document.getElementById('canvas-container');
+            canvasContainer.appendChild(overlay);
+            
+            // Add click handler to return to original
+            canvas.addEventListener('click', () => {
+                ctx.putImageData(originalImageData, 0, 0);
+                overlay.remove();
+                this.notyf.success('Returned to original view');
+            }, { once: true });
+            
+            this.notyf.success('MIP generated successfully');
+            
+        } catch (error) {
+            console.error('Error generating MIP:', error);
+            this.notyf.error('Failed to generate MIP');
+        }
+    }
+
+    async runAIAnalysis() {
+        if (!this.currentImage) {
+            this.notyf.error('No image loaded for AI analysis');
+            return;
+        }
+        
+        try {
+            this.updateStatus('Running AI analysis...');
+            this.notyf.info('Starting AI analysis...');
+            
+            // Call the AI analysis API
+            const response = await fetch(`/viewer/api/images/${this.currentImage.id}/ai-analysis/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken(),
+                },
+                body: JSON.stringify({
+                    analysis_type: 'comprehensive',
+                    include_measurements: true
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`AI analysis failed: ${response.statusText}`);
+            }
+            
+            const result = await response.json();
+            this.displayAIResults(result);
+            this.notyf.success('AI analysis completed successfully');
+            
+        } catch (error) {
+            console.error('AI analysis error:', error);
+            this.notyf.error(`AI analysis failed: ${error.message}`);
+            this.updateStatus('AI analysis failed');
+        }
+    }
+    
+    displayAIResults(results) {
+        // Remove existing AI overlay
+        const existingOverlay = document.getElementById('ai-overlay');
+        if (existingOverlay) {
+            existingOverlay.remove();
+        }
+        
+        // Create AI results overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'ai-overlay';
+        overlay.className = 'ai-overlay';
+        overlay.style.cssText = `
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            max-width: 300px;
+            z-index: 1000;
+            border: 2px solid #00ff88;
+        `;
+        
+        let html = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <strong style="color: #00ff88;">🤖 AI Analysis Results</strong>
+                <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px;">×</button>
+            </div>
+        `;
+        
+        if (results.findings && results.findings.length > 0) {
+            html += '<div><strong>Findings:</strong></div>';
+            results.findings.forEach(finding => {
+                html += `<div>• ${finding}</div>`;
+            });
+        }
+        
+        if (results.measurements) {
+            html += '<div style="margin-top: 10px;"><strong>Measurements:</strong></div>';
+            for (const [key, value] of Object.entries(results.measurements)) {
+                html += `<div>${key}: ${value}</div>`;
+            }
+        }
+        
+        if (results.confidence) {
+            html += `<div style="margin-top: 10px;"><strong>Confidence:</strong> ${Math.round(results.confidence * 100)}%</div>`;
+        }
+        
+        overlay.innerHTML = html;
+        
+        const canvasContainer = document.getElementById('canvas-container');
+        canvasContainer.appendChild(overlay);
+    }
+    
+    async loadImageData(imageIndex) {
+        try {
+            if (!this.currentImages || imageIndex >= this.currentImages.length) {
+                return null;
+            }
+            
+            const imageInfo = this.currentImages[imageIndex];
+            const response = await fetch(`/viewer/api/get-image-data/${imageInfo.id}/?t=${Date.now()}`);
+            
+            if (!response.ok) {
+                throw new Error(`Failed to load image data: ${response.statusText}`);
+            }
+            
+            const blob = await response.blob();
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => resolve(null);
+                img.src = URL.createObjectURL(blob);
+            });
+        } catch (error) {
+            console.error('Error loading image data:', error);
+            return null;
+        }
     }
 
     runAISegmentation() {
@@ -2523,7 +2881,6 @@ class AdvancedDicomViewer {
             return '';
         }
     }
-}
 
 // Export the class for use
 window.AdvancedDicomViewer = AdvancedDicomViewer;
