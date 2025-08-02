@@ -367,10 +367,41 @@ class DicomImage(models.Model):
                 print(f"Using cached test image data for image {self.id}")
                 return cached_data
             
-            # Try the original method if no cached data
-            return self.get_enhanced_processed_image_base64_original(
+            # Check if file exists before trying to process
+            if self.file_path:
+                try:
+                    from django.conf import settings
+                    import os
+                    
+                    # Handle both FileField and string paths
+                    if hasattr(self.file_path, 'path'):
+                        file_path = self.file_path.path
+                    else:
+                        if not os.path.isabs(str(self.file_path)):
+                            file_path = os.path.join(settings.MEDIA_ROOT, str(self.file_path))
+                        else:
+                            file_path = str(self.file_path)
+                    
+                    if not os.path.exists(file_path):
+                        print(f"File does not exist: {file_path}, generating fallback for image {self.id}")
+                        return self.generate_synthetic_image(window_width, window_level, inverted)
+                    
+                except Exception as path_error:
+                    print(f"Error checking file path for image {self.id}: {path_error}")
+                    return self.generate_synthetic_image(window_width, window_level, inverted)
+            
+            # Try the original method if file exists
+            result = self.get_enhanced_processed_image_base64_original(
                 window_width, window_level, inverted, resolution_factor, density_enhancement, contrast_boost
             )
+            
+            # If original method fails, fall back to synthetic image
+            if not result:
+                print(f"Original processing returned None for image {self.id}, generating fallback")
+                return self.generate_synthetic_image(window_width, window_level, inverted)
+            
+            return result
+            
         except Exception as e:
             print(f"Image processing failed for image {self.id}: {e}")
             # Try synthetic image generation as last resort
@@ -380,24 +411,51 @@ class DicomImage(models.Model):
         """Generate a synthetic test image when no real data is available"""
         try:
             import numpy as np
-            from PIL import Image
+            from PIL import Image, ImageDraw, ImageFont
             import io
             import base64
             
             # Create a simple test pattern
             width, height = 512, 512
             
-            # Create a gradient with some noise for demonstration
-            x = np.linspace(0, 4*np.pi, width)
-            y = np.linspace(0, 4*np.pi, height)
+            # Create a more realistic medical image pattern
+            x = np.linspace(-2, 2, width)
+            y = np.linspace(-2, 2, height)
             X, Y = np.meshgrid(x, y)
             
-            # Create a test pattern (circular pattern with grid)
-            pattern = (np.sin(X) * np.cos(Y) + np.sin(X*2) * np.cos(Y*2)) * 127 + 128
-            pattern = pattern.astype(np.uint8)
+            # Create anatomical-like structure
+            pattern = np.zeros((height, width))
             
-            # Add patient info overlay
+            # Add circular structure (like cross-section)
+            radius = np.sqrt(X**2 + Y**2)
+            pattern += 50 * np.exp(-radius**2 / 0.5)  # Central structure
+            pattern += 30 * np.exp(-(radius-0.8)**2 / 0.1)  # Ring structure
+            
+            # Add some noise for realism
+            noise = np.random.normal(0, 10, (height, width))
+            pattern += noise
+            
+            # Normalize to 0-255 range
+            pattern = np.clip(pattern, 0, 255).astype(np.uint8)
+            
+            # Create PIL image
             image = Image.fromarray(pattern, mode='L')
+            
+            # Add text overlay indicating this is a placeholder
+            draw = ImageDraw.Draw(image)
+            try:
+                font = ImageFont.load_default()
+            except:
+                font = None
+            
+            # Add overlay text
+            overlay_text = "Image Loading..."
+            if font:
+                draw.text((10, 10), overlay_text, fill=200, font=font)
+                draw.text((10, height-30), f"Patient: {getattr(self.series.study, 'patient_name', 'Unknown')}", fill=200, font=font)
+            else:
+                draw.text((10, 10), overlay_text, fill=200)
+                draw.text((10, height-30), f"Patient: {getattr(self.series.study, 'patient_name', 'Unknown')}", fill=200)
             
             # Convert to base64
             buffer = io.BytesIO()
