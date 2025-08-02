@@ -172,6 +172,11 @@ class DicomImage(models.Model):
     
     def load_dicom_data(self):
         """Load and return pydicom dataset"""
+        # Check for cached data first (for test images)
+        if self.processed_image_cache:
+            print(f"Image {self.id} has cached data, skipping file load")
+            return None
+            
         if not self.file_path:
             print(f"No file path for DicomImage {self.id}")
             return None
@@ -236,6 +241,11 @@ class DicomImage(models.Model):
     def get_pixel_array(self):
         """Get pixel array from DICOM file"""
         try:
+            # If we have cached data, we don't need pixel array
+            if self.processed_image_cache:
+                print(f"Image {self.id} has cached data, no pixel array needed")
+                return None
+                
             dicom_data = self.load_dicom_data()
             if dicom_data and hasattr(dicom_data, 'pixel_array'):
                 return dicom_data.pixel_array
@@ -516,6 +526,12 @@ class DicomImage(models.Model):
                                           resolution_factor=2.0, density_enhancement=True, contrast_boost=1.5, thumbnail_size=None):
         """Get enhanced processed image with superior diagnostic quality for medical imaging"""
         try:
+            # Check for cached data first to avoid file access errors
+            cached_data = self.get_fallback_image_data()
+            if cached_data:
+                print(f"Using cached data in original method for image {self.id}")
+                return cached_data
+            
             # Get pixel data
             pixel_array = self.get_pixel_array()
             if pixel_array is None:
