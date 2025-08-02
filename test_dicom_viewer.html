@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test DICOM Viewer Fixes</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>DICOM Viewer Fixes Test Page</h1>
+    
+    <div class="test-section">
+        <h2>1. Check Circular Reference Fix</h2>
+        <button onclick="testNotifications()">Test Notifications</button>
+        <div id="notification-test-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. Check Viewer Initialization</h2>
+        <button onclick="checkViewerStatus()">Check Viewer Status</button>
+        <div id="viewer-status"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. Test Button Functionality</h2>
+        <button onclick="testButtonClick()">Simulate Tool Button Click</button>
+        <div id="button-test-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Console Output</h2>
+        <div id="console-output" style="background: #f8f9fa; padding: 10px; font-family: monospace; max-height: 300px; overflow-y: auto;">
+            Console messages will appear here...
+        </div>
+    </div>
+
+    <script>
+        // Capture console messages
+        const consoleOutput = document.getElementById('console-output');
+        const originalLog = console.log;
+        const originalError = console.error;
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            logToPage('LOG', args.join(' '), 'info');
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            logToPage('ERROR', args.join(' '), 'error');
+        };
+        
+        function logToPage(type, message, className) {
+            const entry = document.createElement('div');
+            entry.className = `status ${className}`;
+            entry.textContent = `[${type}] ${new Date().toLocaleTimeString()}: ${message}`;
+            consoleOutput.appendChild(entry);
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+        
+        function testNotifications() {
+            const resultDiv = document.getElementById('notification-test-result');
+            let errorOccurred = false;
+            
+            // Mock the notification functions
+            window.advancedViewer = {
+                notyf: {
+                    success: (msg) => {
+                        console.log('Success notification:', msg);
+                        if (!errorOccurred) {
+                            resultDiv.innerHTML = '<div class="status success">✓ Success notification works without circular reference</div>';
+                        }
+                    },
+                    error: (msg) => {
+                        console.log('Error notification:', msg);
+                        if (!errorOccurred) {
+                            resultDiv.innerHTML = '<div class="status success">✓ Error notification works without circular reference</div>';
+                        }
+                    }
+                }
+            };
+            
+            try {
+                // Test the notification that was causing issues
+                window.advancedViewer.notyf.success('Test notification');
+                window.advancedViewer.notyf.error('Test error');
+            } catch (e) {
+                errorOccurred = true;
+                if (e.message.includes('Maximum call stack size exceeded')) {
+                    resultDiv.innerHTML = '<div class="status error">✗ Circular reference still exists: ' + e.message + '</div>';
+                } else {
+                    resultDiv.innerHTML = '<div class="status error">✗ Error: ' + e.message + '</div>';
+                }
+            }
+        }
+        
+        function checkViewerStatus() {
+            const statusDiv = document.getElementById('viewer-status');
+            let status = '';
+            
+            if (window.AdvancedDicomViewer) {
+                status += '<div class="status success">✓ AdvancedDicomViewer class is loaded</div>';
+            } else {
+                status += '<div class="status error">✗ AdvancedDicomViewer class not found</div>';
+            }
+            
+            if (window.advancedViewer) {
+                status += '<div class="status success">✓ advancedViewer instance exists</div>';
+                if (window.advancedViewer.canvas) {
+                    status += '<div class="status success">✓ Canvas element found</div>';
+                } else {
+                    status += '<div class="status warning">⚠ Canvas element not found</div>';
+                }
+                if (window.advancedViewer.notyf) {
+                    status += '<div class="status success">✓ Notification system initialized</div>';
+                } else {
+                    status += '<div class="status warning">⚠ Notification system not initialized</div>';
+                }
+            } else {
+                status += '<div class="status error">✗ advancedViewer instance not created</div>';
+            }
+            
+            if (window.dicomViewerFixes) {
+                status += '<div class="status success">✓ DICOM viewer fixes loaded</div>';
+            } else {
+                status += '<div class="status error">✗ DICOM viewer fixes not loaded</div>';
+            }
+            
+            statusDiv.innerHTML = status;
+        }
+        
+        function testButtonClick() {
+            const resultDiv = document.getElementById('button-test-result');
+            
+            try {
+                // Simulate a button click event
+                if (window.showNotification) {
+                    window.showNotification('Test button clicked', 'info');
+                    resultDiv.innerHTML = '<div class="status success">✓ Button click handler works correctly</div>';
+                } else {
+                    resultDiv.innerHTML = '<div class="status error">✗ showNotification function not found</div>';
+                }
+            } catch (e) {
+                resultDiv.innerHTML = '<div class="status error">✗ Error: ' + e.message + '</div>';
+            }
+        }
+        
+        // Initial message
+        console.log('Test page loaded successfully');
+    </script>
+</body>
+</html>

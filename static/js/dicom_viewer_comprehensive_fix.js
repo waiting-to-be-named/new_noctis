@@ -13,6 +13,28 @@
     function initializeFixes() {
         initAttempts++;
         
+        // First check if AdvancedDicomViewer class is loaded
+        if (!window.AdvancedDicomViewer && initAttempts < maxAttempts) {
+            console.log(`Waiting for AdvancedDicomViewer class... (attempt ${initAttempts}/${maxAttempts})`);
+            setTimeout(initializeFixes, 500);
+            return;
+        }
+        
+        // If class exists but no instance, create one
+        if (window.AdvancedDicomViewer && !window.advancedViewer) {
+            console.log('Creating AdvancedDicomViewer instance...');
+            try {
+                window.advancedViewer = new window.AdvancedDicomViewer(null);
+                console.log('✓ Created viewer instance successfully');
+            } catch (error) {
+                console.error('Error creating viewer:', error);
+                // Check if Notyf is loaded
+                if (!window.Notyf) {
+                    console.error('Notyf library not loaded!');
+                }
+            }
+        }
+        
         if (!window.advancedViewer && initAttempts < maxAttempts) {
             console.log(`Waiting for viewer to initialize... (attempt ${initAttempts}/${maxAttempts})`);
             setTimeout(initializeFixes, 500);
@@ -23,11 +45,18 @@
             console.error('Advanced viewer not found after maximum attempts');
             // Try to create a minimal viewer instance
             createMinimalViewer();
+            applyAllFixes();
             return;
         }
         
         console.log('Viewer found, applying comprehensive fixes...');
         applyAllFixes();
+        
+        // Auto-load studies if available
+        setTimeout(() => {
+            console.log('Checking for available studies...');
+            window.loadDicomFromServer();
+        }, 500);
     }
     
     function createMinimalViewer() {
@@ -35,10 +64,10 @@
         // This ensures basic functionality even if main viewer fails
         window.advancedViewer = {
             notyf: {
-                success: (msg) => createFallbackNotification(msg, 'success'),
-                error: (msg) => createFallbackNotification(msg, 'error'),
-                warning: (msg) => createFallbackNotification(msg, 'warning'),
-                info: (msg) => createFallbackNotification(msg, 'info')
+                success: (msg) => createDirectNotification(msg, 'success'),
+                error: (msg) => createDirectNotification(msg, 'error'),
+                warning: (msg) => createDirectNotification(msg, 'warning'),
+                info: (msg) => createDirectNotification(msg, 'info')
             }
         };
     }
@@ -131,6 +160,8 @@
                 // Store files for upload
                 uploadArea.dataset.files = JSON.stringify(dicomFiles.map(f => f.name));
                 window.selectedDicomFiles = dicomFiles;
+                
+                // Note: Files will be loaded after upload to server
             } else {
                 showNotification('Please select DICOM files (.dcm or .dicom)', 'error');
             }
@@ -184,6 +215,11 @@
                     
                     if (response.ok) {
                         showNotification('Upload successful!', 'success');
+                        
+                        // Load studies from server after upload
+                        console.log('Loading studies from server after upload...');
+                        await window.loadDicomFromServer();
+                        
                         // Close modal
                         const modal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
                         if (modal) modal.hide();
@@ -644,6 +680,47 @@
         }
     }
     
+    function createDirectNotification(message, type = 'info') {
+        // Direct notification without triggering any other notification systems
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type === 'error' ? 'danger' : type === 'warning' ? 'warning' : type === 'success' ? 'success' : 'info'}`;
+        notification.style.cssText = `
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 4px;
+            z-index: 10000;
+            animation: slideIn 0.3s ease-out;
+            max-width: 300px;
+        `;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        
+        // Add animation styles if not already present
+        if (!document.getElementById('notification-animations')) {
+            const style = document.createElement('style');
+            style.id = 'notification-animations';
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        // Auto-remove after 3 seconds
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s ease-in';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    }
+    
     function createFallbackNotification(message, type = 'info') {
         // Fallback notification
         const notification = document.createElement('div');
@@ -738,6 +815,64 @@
     `;
     document.head.appendChild(style);
     
+    // Add global function to load DICOM images from server
+    window.loadDicomFromServer = async function() {
+        console.log('Loading DICOM images from server...');
+        
+        if (!window.advancedViewer) {
+            console.error('Viewer not initialized');
+            showNotification('Viewer not ready. Please refresh the page.', 'error');
+            return;
+        }
+        
+        try {
+            // Load studies list
+            if (window.advancedViewer.loadStudies) {
+                await window.advancedViewer.loadStudies();
+                showNotification('Studies loaded successfully', 'success');
+            } else {
+                // Manually trigger study loading
+                console.log('Fetching studies from API...');
+                const response = await fetch('/viewer/api/studies/');
+                if (response.ok) {
+                    const studies = await response.json();
+                    console.log('Studies fetched:', studies);
+                    
+                    if (studies.length > 0) {
+                        // Load the first study
+                        const firstStudy = studies[0];
+                        if (window.advancedViewer.loadStudy) {
+                            await window.advancedViewer.loadStudy(firstStudy.id);
+                        } else {
+                            // Update UI to show study is available
+                            updateStudyList(studies);
+                        }
+                        showNotification(`Loaded ${studies.length} studies`, 'success');
+                    } else {
+                        showNotification('No studies found. Please upload DICOM files.', 'info');
+                    }
+                } else {
+                    throw new Error('Failed to fetch studies');
+                }
+            }
+        } catch (error) {
+            console.error('Error loading studies:', error);
+            showNotification('Failed to load studies: ' + error.message, 'error');
+        }
+    };
+    
+    function updateStudyList(studies) {
+        const studyList = document.querySelector('.study-list');
+        if (studyList && studies.length > 0) {
+            studyList.innerHTML = studies.map(study => `
+                <div class="study-item" data-study-id="${study.id}">
+                    <h6>${study.patient_name || 'Unknown Patient'}</h6>
+                    <p>${study.study_date || 'No date'}</p>
+                </div>
+            `).join('');
+        }
+    }
+    
     // Start initialization
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initializeFixes);
@@ -750,7 +885,8 @@
         initializeFixes,
         applyAllFixes,
         showNotification,
-        updateDebugInfo
+        updateDebugInfo,
+        loadDicomFromServer: window.loadDicomFromServer
     };
     
 })();
