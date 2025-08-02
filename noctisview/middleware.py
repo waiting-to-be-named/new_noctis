@@ -137,10 +137,10 @@ class SecurityHeadersMiddleware(MiddlewareMixin):
         # Add Content Security Policy for better security
         csp_policy = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-            "style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net/; "
+            "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com/ https://cdn.jsdelivr.net/; "
             "img-src 'self' data: blob:; "
-            "font-src 'self'; "
+            "font-src 'self' https://cdnjs.cloudflare.com/; "
             "connect-src 'self'; "
             "media-src 'self' blob:; "
             "object-src 'none'; "

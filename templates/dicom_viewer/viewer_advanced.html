@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.js"></script>
 </head>
 <body>
     <div class="dicom-viewer-advanced">
@@ -635,20 +637,40 @@
     <script>
         // Initialize the advanced DICOM viewer when the page loads
         document.addEventListener('DOMContentLoaded', function() {
-            // Get study ID from Django context
-            {% if initial_study_id %}
-                const studyId = {{ initial_study_id }};
-            {% else %}
-                const studyId = null;
-            {% endif %}
-            
-            // Initialize the advanced viewer
-            window.advancedViewer = new AdvancedDicomViewer(studyId);
-            
-            // Set up global keyboard shortcuts
-            document.addEventListener('keydown', function(e) {
-                window.advancedViewer.handleKeyboardShortcut(e);
-            });
+            // Wait a moment for all scripts to fully load
+            setTimeout(() => {
+                // Get study ID from Django context
+                {% if initial_study_id %}
+                    const studyId = {{ initial_study_id }};
+                {% else %}
+                    const studyId = null;
+                {% endif %}
+                
+                // Check if AdvancedDicomViewer is available
+                if (typeof AdvancedDicomViewer !== 'undefined') {
+                    // Initialize the advanced viewer
+                    window.advancedViewer = new AdvancedDicomViewer(studyId);
+                    
+                    // Set up global keyboard shortcuts
+                    document.addEventListener('keydown', function(e) {
+                        if (window.advancedViewer && window.advancedViewer.handleKeyboardShortcut) {
+                            window.advancedViewer.handleKeyboardShortcut(e);
+                        }
+                    });
+                } else {
+                    console.error('AdvancedDicomViewer class not found! Check if dicom_viewer_advanced.js loaded correctly.');
+                    // Try to reload the script
+                    const script = document.createElement('script');
+                    script.src = "{% static 'js/dicom_viewer_advanced.js' %}";
+                    script.onload = function() {
+                        console.log('Script reloaded, trying initialization again...');
+                        if (typeof AdvancedDicomViewer !== 'undefined') {
+                            window.advancedViewer = new AdvancedDicomViewer(studyId);
+                        }
+                    };
+                    document.head.appendChild(script);
+                }
+            }, 100);
         });
     </script>
 
