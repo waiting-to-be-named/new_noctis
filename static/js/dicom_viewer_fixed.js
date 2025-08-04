@@ -28,7 +28,7 @@ class FixedDicomViewer {
 
         // Core canvas elements
         this.canvas = document.getElementById('dicom-canvas-advanced');
-        this.ctx = this.canvas ? this.canvas.getContext('2d') : null;
+        this.ctx = this.canvas ? this.canvas.getContext('2d', { willReadFrequently: true }) : null;
         
         if (!this.canvas || !this.ctx) {
             this.createCanvas();
@@ -39,6 +39,7 @@ class FixedDicomViewer {
 
         // State management
         this.currentStudy = null;
+        this.currentStudyId = null;
         this.currentSeries = null;
         this.currentImages = [];
         this.currentImageIndex = 0;
@@ -105,7 +106,7 @@ class FixedDicomViewer {
             this.canvas.style.border = '1px solid #333';
             this.canvas.style.backgroundColor = '#000';
             canvasContainer.appendChild(this.canvas);
-            this.ctx = this.canvas.getContext('2d');
+            this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
         }
     }
 
@@ -278,7 +279,7 @@ class FixedDicomViewer {
                 container.appendChild(canvas);
                 
                 this.mprViews[viewType].canvas = canvas;
-                this.mprViews[viewType].ctx = canvas.getContext('2d');
+                this.mprViews[viewType].ctx = canvas.getContext('2d', { willReadFrequently: true });
             }
         });
     }
@@ -735,6 +736,12 @@ class FixedDicomViewer {
     setupUploadHandlers() {
         console.log('Setting up upload handlers...');
         
+        // Prevent duplicate setup
+        if (this.uploadHandlersSetup) {
+            console.log('Upload handlers already set up, skipping...');
+            return;
+        }
+        
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
         const startUploadBtn = document.getElementById('startUpload');
@@ -788,6 +795,8 @@ class FixedDicomViewer {
             this.startUpload();
         });
         
+        // Mark as set up to prevent duplicates
+        this.uploadHandlersSetup = true;
         console.log('Upload handlers setup complete');
     }
     
@@ -872,6 +881,12 @@ class FixedDicomViewer {
     // Fixed implementation for loading studies and images
     async loadStudy(studyId) {
         try {
+            // Prevent loading the same study multiple times
+            if (this.currentStudyId === studyId && this.currentImages && this.currentImages.length > 0) {
+                console.log('Study', studyId, 'already loaded, skipping...');
+                return;
+            }
+            
             console.log('Loading study:', studyId);
             
             // Get study images
@@ -886,9 +901,10 @@ class FixedDicomViewer {
             if (response.ok) {
                 const data = await response.json();
                 if (data.images && data.images.length > 0) {
-                    this.currentImages = data.images;
-                    this.currentImageIndex = 0;
-                    this.currentImage = this.currentImages[0];
+                                this.currentStudyId = studyId;
+            this.currentImages = data.images;
+            this.currentImageIndex = 0;
+            this.currentImage = this.currentImages[0];
                     
                     // Load the first image
                     await this.loadImage(this.currentImage.id);
@@ -910,6 +926,12 @@ class FixedDicomViewer {
 
     async loadImage(imageId) {
         try {
+            // Prevent loading the same image multiple times
+            if (this.currentImage && this.currentImage.id === imageId) {
+                console.log('Image', imageId, 'already loaded, skipping...');
+                return;
+            }
+            
             console.log('Loading image:', imageId);
             
             // Set the current image

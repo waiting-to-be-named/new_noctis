@@ -676,8 +676,11 @@
                 
                 // Check if FixedDicomViewer is available
                 if (typeof FixedDicomViewer !== 'undefined') {
-                    // Initialize the fixed viewer
-                    window.fixedViewer = new FixedDicomViewer(studyId);
+                    // Check if viewer is already initialized to prevent duplicates
+                    if (!window.fixedViewer) {
+                        // Initialize the fixed viewer
+                        window.fixedViewer = new FixedDicomViewer(studyId);
+                    }
                     
                     // Set up global keyboard shortcuts
                     document.addEventListener('keydown', function(e) {
@@ -702,7 +705,7 @@
                     script.src = "{% static 'js/dicom_viewer_fixed.js' %}";
                     script.onload = function() {
                         console.log('Script reloaded, trying initialization again...');
-                        if (typeof FixedDicomViewer !== 'undefined') {
+                        if (typeof FixedDicomViewer !== 'undefined' && !window.fixedViewer) {
                             window.fixedViewer = new FixedDicomViewer(studyId);
                         }
                     };
