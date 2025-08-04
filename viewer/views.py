@@ -1843,7 +1843,7 @@ def get_image_data(request, image_id):
             contrast_boost=contrast_boost
         )
         
-        if image_base64:
+        if image_base64 and image_base64.strip():
             print(f"Successfully processed diagnostic image {image_id} with superior quality")
             return Response({
                 'image_data': image_base64,
@@ -1867,7 +1867,8 @@ def get_image_data(request, image_id):
             print(f"Failed to process diagnostic image {image_id}, generating fallback")
             try:
                 fallback_image = image.generate_synthetic_image(window_width, window_level, inverted)
-                if fallback_image:
+                if fallback_image and fallback_image.strip():
+                    print(f"Successfully generated fallback image for {image_id}")
                     return Response({
                         'image_data': fallback_image,
                         'metadata': {
@@ -1886,10 +1887,21 @@ def get_image_data(request, image_id):
                             'is_fallback': True
                         }
                     })
+                else:
+                    print(f"Fallback image generation returned empty data for {image_id}")
             except Exception as fallback_error:
                 print(f"Fallback image generation failed: {fallback_error}")
             
-            return Response({'error': 'Could not process image - file may be missing or corrupted'}, status=404)
+            # If all else fails, return a minimal valid response with error info
+            print(f"All image processing methods failed for {image_id}, returning error response")
+            return Response({
+                'error': 'Could not process image - file may be missing or corrupted',
+                'image_data': None,
+                'metadata': {
+                    'error': True,
+                    'message': 'Image processing failed'
+                }
+            }, status=404)
             
     except DicomImage.DoesNotExist:
         print(f"Image not found: {image_id}")

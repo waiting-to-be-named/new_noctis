@@ -403,29 +403,65 @@ class FixedDicomViewer {
 
             if (response.ok) {
                 const data = await response.json();
-                if (data.image_data) {
-                    await this.displayProcessedImage(data.image_data);
-                    
-                    // Update MPR views if enabled
-                    if (this.mprEnabled) {
-                        this.renderMPRViews();
+                if (data.image_data && data.image_data.trim() !== '') {
+                    try {
+                        await this.displayProcessedImage(data.image_data);
+                        
+                        // Update MPR views if enabled
+                        if (this.mprEnabled) {
+                            this.renderMPRViews();
+                        }
+                    } catch (displayError) {
+                        console.error('Error displaying image:', displayError);
+                        this.notyf.error('Error displaying image data');
+                        
+                        // Show a placeholder or error image
+                        this.showErrorPlaceholder();
                     }
                 } else {
-                    console.error('No image data received');
-                    this.notyf.error('No image data received from server');
+                    console.error('No image data received or empty data');
+                    this.notyf.error('No valid image data received from server');
+                    this.showErrorPlaceholder();
                 }
             } else {
                 console.error('Failed to load image:', response.status);
                 this.notyf.error('Failed to load image from server');
+                this.showErrorPlaceholder();
             }
         } catch (error) {
             console.error('Error refreshing image:', error);
             this.notyf.error('Error loading image');
+            this.showErrorPlaceholder();
         }
     }
 
     async displayProcessedImage(base64Data) {
         return new Promise((resolve, reject) => {
+            // Validate base64 data
+            if (!base64Data || typeof base64Data !== 'string' || base64Data.trim() === '') {
+                console.error('Invalid or empty base64 data received');
+                this.notyf.error('Invalid image data received from server');
+                reject(new Error('Invalid base64 data'));
+                return;
+            }
+            
+            // Clean the base64 data - remove any data URL prefix if present
+            let cleanBase64 = base64Data;
+            if (base64Data.startsWith('data:image/')) {
+                const commaIndex = base64Data.indexOf(',');
+                if (commaIndex !== -1) {
+                    cleanBase64 = base64Data.substring(commaIndex + 1);
+                }
+            }
+            
+            // Validate base64 format
+            if (!/^[A-Za-z0-9+/]*={0,2}$/.test(cleanBase64)) {
+                console.error('Invalid base64 format');
+                this.notyf.error('Invalid image data format');
+                reject(new Error('Invalid base64 format'));
+                return;
+            }
+            
             const img = new Image();
             img.onload = () => {
                 this.clearCanvas();
@@ -465,14 +501,48 @@ class FixedDicomViewer {
                 this.imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
                 resolve();
             };
-            img.onerror = reject;
-            img.src = `data:image/png;base64,${base64Data}`;
+            img.onerror = (error) => {
+                console.error('Failed to load image from base64 data:', error);
+                this.notyf.error('Failed to load image data');
+                reject(error);
+            };
+            img.src = `data:image/png;base64,${cleanBase64}`;
         });
     }
 
     clearCanvas() {
         this.ctx.fillStyle = '#000000';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+
+    showErrorPlaceholder() {
+        this.clearCanvas();
+        
+        // Draw error message
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = '16px Arial';
+        this.ctx.textAlign = 'center';
+        
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        
+        // Draw error icon (simple X)
+        this.ctx.strokeStyle = '#ff4444';
+        this.ctx.lineWidth = 3;
+        const iconSize = 40;
+        this.ctx.beginPath();
+        this.ctx.moveTo(centerX - iconSize/2, centerY - iconSize/2 - 30);
+        this.ctx.lineTo(centerX + iconSize/2, centerY + iconSize/2 - 30);
+        this.ctx.moveTo(centerX + iconSize/2, centerY - iconSize/2 - 30);
+        this.ctx.lineTo(centerX - iconSize/2, centerY + iconSize/2 - 30);
+        this.ctx.stroke();
+        
+        // Draw error text
+        this.ctx.fillText('Image Loading Error', centerX, centerY + 10);
+        this.ctx.font = '14px Arial';
+        this.ctx.fillStyle = '#cccccc';
+        this.ctx.fillText('Unable to load image data', centerX, centerY + 35);
+        this.ctx.fillText('Please try refreshing or contact support', centerX, centerY + 55);
     }
 
     setupEventListeners() {
