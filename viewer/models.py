@@ -1780,3 +1780,84 @@ class ChatMessage(models.Model):
         except Exception as e:
             print(f"Error in adaptive tissue contrast: {e}")
             return pixel_array
+
+
+class AttachedStudy(models.Model):
+    """Model for attaching previous studies for comparison and follow-up"""
+    ATTACHMENT_TYPES = [
+        ('comparison', 'Comparison Study'),
+        ('followup', 'Follow-up Study'),
+        ('baseline', 'Baseline Study'),
+        ('reference', 'Reference Study'),
+    ]
+    
+    # Current study
+    current_study = models.ForeignKey(DicomStudy, related_name='attached_studies', on_delete=models.CASCADE)
+    
+    # Previous study (can be another DICOM study or external)
+    previous_study = models.ForeignKey(DicomStudy, related_name='referenced_by', on_delete=models.CASCADE, null=True, blank=True)
+    
+    # External study files (for non-DICOM studies)
+    external_dicom_file = models.FileField(upload_to='attached_studies/dicom/', null=True, blank=True)
+    external_report_file = models.FileField(upload_to='attached_studies/reports/', null=True, blank=True)
+    
+    # Metadata
+    attachment_type = models.CharField(max_length=20, choices=ATTACHMENT_TYPES, default='comparison')
+    study_date = models.DateField(null=True, blank=True)
+    study_description = models.CharField(max_length=200, blank=True)
+    modality = models.CharField(max_length=10, blank=True)
+    institution_name = models.CharField(max_length=200, blank=True)
+    notes = models.TextField(blank=True, help_text="Notes about this attachment")
+    
+    # Timestamps
+    attached_at = models.DateTimeField(auto_now_add=True)
+    attached_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    
+    class Meta:
+        ordering = ['-attached_at']
+        verbose_name = "Attached Study"
+        verbose_name_plural = "Attached Studies"
+    
+    def __str__(self):
+        if self.previous_study:
+            return f"{self.get_attachment_type_display()}: {self.previous_study.patient_name} - {self.previous_study.study_date}"
+        else:
+            return f"{self.get_attachment_type_display()}: External Study - {self.study_date}"
+    
+    @property
+    def has_dicom_files(self):
+        """Check if this attachment has DICOM files available"""
+        return bool(self.previous_study or self.external_dicom_file)
+    
+    @property
+    def has_report(self):
+        """Check if this attachment has a report available"""
+        if self.previous_study and self.previous_study.reports.exists():
+            return True
+        return bool(self.external_report_file)
+
+
+class StudyComparison(models.Model):
+    """Model for storing study comparison sessions"""
+    primary_study = models.ForeignKey(DicomStudy, related_name='primary_comparisons', on_delete=models.CASCADE)
+    comparison_study = models.ForeignKey(DicomStudy, related_name='comparison_sessions', on_delete=models.CASCADE)
+    
+    # Comparison settings
+    comparison_mode = models.CharField(max_length=20, choices=[
+        ('side_by_side', 'Side by Side'),
+        ('overlay', 'Overlay'),
+        ('toggle', 'Toggle'),
+        ('linked', 'Linked Viewing'),
+    ], default='side_by_side')
+    
+    # Session metadata
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True)
+    
+    class Meta:
+        unique_together = ['primary_study', 'comparison_study', 'created_by']
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Comparison: {self.primary_study.patient_name} vs {self.comparison_study.patient_name}"
