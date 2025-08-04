@@ -216,6 +216,28 @@ body {
     color: #000;
 }
 
+.image-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    background: rgba(0, 255, 0, 0.1);
+    border: 1px solid rgba(0, 255, 0, 0.3);
+    border-radius: 4px;
+    font-size: 12px;
+    color: #00ff00;
+    font-weight: 500;
+}
+
+.image-count i {
+    font-size: 10px;
+}
+
+.image-count:hover {
+    background: rgba(0, 255, 0, 0.2);
+    border-color: rgba(0, 255, 0, 0.5);
+}
+
 .notification-badge {
     position: fixed;
     top: 20px;

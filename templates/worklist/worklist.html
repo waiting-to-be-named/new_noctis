@@ -98,6 +98,7 @@
                             <th>Patient ID</th>
                             <th>Accession #</th>
                             <th>Modality</th>
+                            <th>Images</th>
                             <th>Scheduled Date/Time</th>
                             <th>Status</th>
                             <th>Facility</th>
@@ -111,6 +112,17 @@
                             <td>{{ entry.patient_id }}</td>
                             <td>{{ entry.accession_number }}</td>
                             <td>{{ entry.modality }}</td>
+                            <td>
+                                {% if entry.study %}
+                                    <span class="image-count" title="Total images in study">
+                                        <i class="fas fa-image"></i> {{ entry.study.total_images|default:"0" }}
+                                    </span>
+                                {% else %}
+                                    <span class="image-count" title="No study uploaded">
+                                        <i class="fas fa-image"></i> 0
+                                    </span>
+                                {% endif %}
+                            </td>
                             <td>{{ entry.scheduled_procedure_step_start_date|date:"Y-m-d" }} {{ entry.scheduled_procedure_step_start_time|time:"H:i" }}</td>
                             <td>
                                 <span class="status-badge status-{{ entry.status }}">
