@@ -123,6 +123,7 @@ class FixedDicomViewer {
             this.setupKeyboardShortcuts();
             this.setupWindowingControls();
             this.setupMPRControls();
+            this.setupUploadHandlers(); // Setup upload handlers
             
             if (studyId) {
                 await this.loadStudy(studyId);
@@ -729,6 +730,143 @@ class FixedDicomViewer {
     handleTouchEnd(e) {
         e.preventDefault();
         this.handleMouseUp(e);
+    }
+
+    setupUploadHandlers() {
+        console.log('Setting up upload handlers...');
+        
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const startUploadBtn = document.getElementById('startUpload');
+        const uploadProgress = document.getElementById('uploadProgress');
+        const uploadStatus = document.getElementById('uploadStatus');
+        
+        if (!uploadArea || !fileInput || !startUploadBtn) {
+            console.warn('Upload elements not found in DOM');
+            return;
+        }
+        
+        // File input change handler
+        fileInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length > 0) {
+                this.selectedFiles = files;
+                startUploadBtn.disabled = false;
+                uploadStatus.textContent = `${files.length} file(s) selected`;
+            }
+        });
+        
+        // Upload area click handler
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        // Drag and drop handlers
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+        
+        uploadArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            const files = Array.from(e.dataTransfer.files);
+            if (files.length > 0) {
+                this.selectedFiles = files;
+                startUploadBtn.disabled = false;
+                uploadStatus.textContent = `${files.length} file(s) selected`;
+            }
+        });
+        
+        // Start upload button
+        startUploadBtn.addEventListener('click', () => {
+            this.startUpload();
+        });
+        
+        console.log('Upload handlers setup complete');
+    }
+    
+    async startUpload() {
+        if (!this.selectedFiles || this.selectedFiles.length === 0) {
+            this.notyf.error('No files selected for upload');
+            return;
+        }
+        
+        const uploadProgress = document.getElementById('uploadProgress');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const startUploadBtn = document.getElementById('startUpload');
+        
+        try {
+            // Show progress
+            uploadProgress.style.display = 'block';
+            uploadStatus.textContent = 'Uploading files...';
+            startUploadBtn.disabled = true;
+            
+            // Create FormData
+            const formData = new FormData();
+            this.selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+            
+            // Get CSRF token
+            const csrfToken = this.getCSRFToken();
+            
+            // Upload files
+            const response = await fetch('/viewer/api/upload/', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result.error) {
+                throw new Error(result.error);
+            }
+            
+            // Success
+            this.notyf.success(`Successfully uploaded ${result.uploaded_files ? result.uploaded_files.length : 0} files`);
+            
+            // Reload studies if we have a study ID
+            if (result.study_id) {
+                await this.loadStudy(result.study_id);
+            } else {
+                // Refresh the current view
+                await this.refreshCurrentImage();
+            }
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
+            if (modal) {
+                modal.hide();
+            }
+            
+        } catch (error) {
+            console.error('Upload error:', error);
+            this.notyf.error(`Upload failed: ${error.message}`);
+        } finally {
+            // Hide progress
+            uploadProgress.style.display = 'none';
+            uploadStatus.textContent = '';
+            startUploadBtn.disabled = false;
+            this.selectedFiles = null;
+        }
+    }
+    
+    showUploadModal() {
+        const modal = new bootstrap.Modal(document.getElementById('uploadModal'));
+        modal.show();
     }
 
     // Fixed implementation for loading studies and images

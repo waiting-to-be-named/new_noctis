@@ -1261,7 +1261,9 @@ def upload_dicom_files(request):
         response_data = {
             'message': f'Uploaded {len(uploaded_files)} files successfully',
             'uploaded_files': uploaded_files,
-            'study_id': study.id if study else None
+            'study_id': study.id if study else None,
+            'successful_files': uploaded_files,
+            'total_studies': 1 if study else 0
         }
         
         if errors:

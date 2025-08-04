@@ -350,3 +350,69 @@ WARNING 2025-08-04 07:51:50,126 log 6190 140269231640832 Bad Request: /worklist/
 INFO 2025-08-04 07:52:20,439 autoreload 6438 140613223997696 Watching for file changes with StatReloader
 INFO 2025-08-04 13:43:47,359 autoreload 2338 140389065904384 Watching for file changes with StatReloader
 INFO 2025-08-04 13:44:25,645 autoreload 2825 140119399059712 Watching for file changes with StatReloader
+ERROR 2025-08-04 14:03:19,740 exception 2428 139697266348288 Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/http/request.py", line 150, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+INFO 2025-08-04 14:03:20,282 font_manager 2428 139697266348288 Failed to extract font properties from /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf: Can not load face (unknown file format; error code 0x2)
+INFO 2025-08-04 14:03:20,287 font_manager 2428 139697266348288 generated new fontManager
+WARNING 2025-08-04 14:03:20,451 log 2428 139697266348288 Bad Request: /viewer/api/upload/
+ERROR 2025-08-04 14:03:20,456 exception 2428 139697266348288 Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/http/request.py", line 150, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+WARNING 2025-08-04 14:03:20,465 log 2428 139697266348288 Bad Request: /viewer/api/studies/
+ERROR 2025-08-04 14:03:20,465 exception 2428 139697266348288 Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/utils/deprecation.py", line 133, in __call__
+    response = self.process_request(request)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/django/http/request.py", line 150, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+WARNING 2025-08-04 14:03:20,473 log 2428 139697266348288 Bad Request: /viewer/advanced/
+INFO 2025-08-04 14:03:29,219 middleware 2589 140184819724544 API Request: POST /viewer/api/upload/
+DEBUG 2025-08-04 14:03:29,220 middleware 2589 140184819724544 Request body size: 131872 bytes
+DEBUG 2025-08-04 14:03:29,860 middleware 2589 140184819724544 Request duration: POST /viewer/api/upload/ took 0.640s
+INFO 2025-08-04 14:03:29,860 middleware 2589 140184819724544 API Response: POST /viewer/api/upload/ - Status: 200
+DEBUG 2025-08-04 14:03:29,860 middleware 2589 140184819724544 Response size: 179 bytes
+INFO 2025-08-04 14:03:29,863 middleware 2589 140184819724544 API Request: GET /viewer/api/image/1/
+DEBUG 2025-08-04 14:03:29,870 middleware 2589 140184819724544 Request duration: GET /viewer/api/image/1/ took 0.006s
+INFO 2025-08-04 14:03:29,870 middleware 2589 140184819724544 API Response: GET /viewer/api/image/1/ - Status: 404
+DEBUG 2025-08-04 14:03:29,870 middleware 2589 140184819724544 Response size: 13717 bytes
+WARNING 2025-08-04 14:03:29,870 log 2589 140184819724544 Not Found: /viewer/api/image/1/
+INFO 2025-08-04 14:03:29,870 middleware 2589 140184819724544 API Request: GET /viewer/api/studies/
+DEBUG 2025-08-04 14:03:29,872 middleware 2589 140184819724544 Request duration: GET /viewer/api/studies/ took 0.001s
+INFO 2025-08-04 14:03:29,872 middleware 2589 140184819724544 API Response: GET /viewer/api/studies/ - Status: 200
+DEBUG 2025-08-04 14:03:29,872 middleware 2589 140184819724544 Response size: 2 bytes
+INFO 2025-08-04 14:03:48,852 middleware 2761 139945832927488 API Request: POST /viewer/api/upload/
+DEBUG 2025-08-04 14:03:48,852 middleware 2761 139945832927488 Request body size: 131872 bytes
+DEBUG 2025-08-04 14:03:49,576 middleware 2761 139945832927488 Request duration: POST /viewer/api/upload/ took 0.724s
+INFO 2025-08-04 14:03:49,576 middleware 2761 139945832927488 API Response: POST /viewer/api/upload/ - Status: 200
+DEBUG 2025-08-04 14:03:49,576 middleware 2761 139945832927488 Response size: 179 bytes
+INFO 2025-08-04 14:03:49,580 middleware 2761 139945832927488 API Request: GET /viewer/api/images/1/data/
+DEBUG 2025-08-04 14:03:49,621 middleware 2761 139945832927488 Request duration: GET /viewer/api/images/1/data/ took 0.042s
+INFO 2025-08-04 14:03:49,622 middleware 2761 139945832927488 API Response: GET /viewer/api/images/1/data/ - Status: 200
+DEBUG 2025-08-04 14:03:49,622 middleware 2761 139945832927488 Response size: 350715 bytes
+INFO 2025-08-04 14:03:49,623 middleware 2761 139945832927488 API Request: GET /viewer/api/studies/
+DEBUG 2025-08-04 14:03:49,625 middleware 2761 139945832927488 Request duration: GET /viewer/api/studies/ took 0.002s
+INFO 2025-08-04 14:03:49,625 middleware 2761 139945832927488 API Response: GET /viewer/api/studies/ - Status: 200
+DEBUG 2025-08-04 14:03:49,625 middleware 2761 139945832927488 Response size: 2 bytes
+INFO 2025-08-04 14:04:27,424 autoreload 3019 139865912746240 Watching for file changes with StatReloader
