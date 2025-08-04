@@ -348,3 +348,5 @@ Traceback (most recent call last):
 django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
 WARNING 2025-08-04 07:51:50,126 log 6190 140269231640832 Bad Request: /worklist/
 INFO 2025-08-04 07:52:20,439 autoreload 6438 140613223997696 Watching for file changes with StatReloader
+INFO 2025-08-04 13:43:47,359 autoreload 2338 140389065904384 Watching for file changes with StatReloader
+INFO 2025-08-04 13:44:25,645 autoreload 2825 140119399059712 Watching for file changes with StatReloader
