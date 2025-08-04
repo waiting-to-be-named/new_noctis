@@ -652,6 +652,7 @@
                 // Get study ID from Django context or URL parameters
                 {% if initial_study_id %}
                     let studyId = {{ initial_study_id }};
+                    console.log('Study ID from Django context:', studyId);
                 {% else %}
                     let studyId = null;
                 {% endif %}
@@ -659,17 +660,25 @@
                 // Also check URL parameters for study ID (for standalone launches)
                 const urlParams = new URLSearchParams(window.location.search);
                 const urlStudyId = urlParams.get('study_id') || urlParams.get('studyId');
-                if (urlStudyId && !studyId) {
-                    studyId = parseInt(urlStudyId);
-                    console.log('Found study ID in URL parameters:', studyId);
+                if (urlStudyId) {
+                    const parsedUrlStudyId = parseInt(urlStudyId);
+                    if (!isNaN(parsedUrlStudyId)) {
+                        studyId = parsedUrlStudyId;
+                        console.log('Found study ID in URL parameters:', studyId);
+                    }
                 }
                 
                 // Check if study ID is in the path (for URLs like /viewer/study/123/)
                 const pathMatch = window.location.pathname.match(/\/study\/(\d+)\//);
-                if (pathMatch && !studyId) {
-                    studyId = parseInt(pathMatch[1]);
-                    console.log('Found study ID in URL path:', studyId);
+                if (pathMatch) {
+                    const parsedPathStudyId = parseInt(pathMatch[1]);
+                    if (!isNaN(parsedPathStudyId)) {
+                        studyId = parsedPathStudyId;
+                        console.log('Found study ID in URL path:', studyId);
+                    }
                 }
+                
+                console.log('Final resolved study ID:', studyId);
                 
                 // Check if AdvancedDicomViewer is available
                 if (typeof AdvancedDicomViewer !== 'undefined') {

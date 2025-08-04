@@ -185,6 +185,12 @@ class AdvancedDicomViewer {
         // Auto-load study if provided, otherwise check session storage, then load available studies
         if (initialStudyId) {
             console.log(`Loading initial study ID: ${initialStudyId}`);
+            // Clear any cached data when a new study ID is explicitly provided
+            const lastStudyId = sessionStorage.getItem('lastViewedStudyId');
+            if (lastStudyId !== initialStudyId.toString()) {
+                console.log('New study ID detected, clearing cached data');
+                this.clearCachedData();
+            }
             this.loadStudy(initialStudyId);
             // Store in session for future launches
             sessionStorage.setItem('lastViewedStudyId', initialStudyId.toString());
@@ -946,18 +952,61 @@ class AdvancedDicomViewer {
         });
     }
 
+    clearCachedData() {
+        console.log('Clearing all cached data...');
+        // Clear current state
+        this.currentStudy = null;
+        this.currentSeries = null;
+        this.currentImages = [];
+        this.currentImageIndex = 0;
+        this.currentImage = null;
+        this.currentImageMetadata = null;
+        this.imageData = null;
+        this.originalImageData = null;
+        
+        // Clear canvas
+        if (this.ctx && this.canvas) {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+        
+        // Clear patient info displays
+        this.clearPatientInfo();
+        
+        // Clear series list
+        this.updateSeriesList([]);
+        
+        // Clear thumbnails
+        this.updateThumbnails();
+        
+        console.log('Cached data cleared successfully');
+    }
+
+    clearPatientInfo() {
+        // Clear patient information displays
+        const patientNameElements = ['patient-name-adv', 'quick-patient-name'];
+        const patientIdElements = ['patient-id-adv', 'quick-patient-id'];
+        const modalityElements = ['modality-adv', 'quick-modality'];
+        const dobElements = ['patient-dob'];
+        const studyDateElements = ['study-date-adv'];
+        const studyDescElements = ['study-description-adv'];
+        
+        [...patientNameElements, ...patientIdElements, ...modalityElements, 
+         ...dobElements, ...studyDateElements, ...studyDescElements].forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = '-';
+            }
+        });
+    }
+
     async loadStudy(studyId) {
         console.log(`Loading study: ${studyId}`);
         try {
             this.showLoading(true);
             this.updateStatus('Loading study...');
 
-            // Clear any cached data for this study
-            this.currentStudy = null;
-            this.currentSeries = null;
-            this.currentImages = [];
-            this.currentImageIndex = 0;
-            this.currentImage = null;
+            // Clear any cached data for this study (redundant but ensures clean state)
+            this.clearCachedData();
 
             // Try the study images endpoint first (this includes patient info)
             // Add cache-busting parameter to ensure fresh data
