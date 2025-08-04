@@ -171,12 +171,8 @@ class DicomImage(models.Model):
         return f"Image {self.instance_number}"
     
     def load_dicom_data(self):
-        """Load and return pydicom dataset"""
-        # Check for cached data first (for test images)
-        if self.processed_image_cache:
-            print(f"Image {self.id} has cached data, skipping file load")
-            return None
-            
+        """Load and return pydicom dataset - PRIORITIZE ACTUAL DICOM FILES"""
+        # ALWAYS try to load actual DICOM files first, ignore cached data
         if not self.file_path:
             print(f"No file path for DicomImage {self.id}")
             return None
@@ -213,25 +209,24 @@ class DicomImage(models.Model):
                     print(f"File not found in any of the attempted paths: {alt_paths}")
                     return None
                 
-            # Try reading with multiple methods
+            # ALWAYS use force=True to handle files without proper DICOM headers
             try:
-                # Method 1: Standard reading
-                return pydicom.dcmread(file_path)
+                # Method 1: Force reading (most permissive)
+                dicom_data = pydicom.dcmread(file_path, force=True)
+                print(f"✅ Successfully loaded DICOM data for image {self.id} using force=True")
+                return dicom_data
             except Exception as e1:
-                print(f"Standard DICOM reading failed: {e1}")
+                print(f"Force DICOM reading failed: {e1}")
                 try:
-                    # Method 2: Force reading (more permissive)
-                    return pydicom.dcmread(file_path, force=True)
+                    # Method 2: Read as bytes with force
+                    with open(file_path, 'rb') as f:
+                        file_bytes = f.read()
+                    dicom_data = pydicom.dcmread(io.BytesIO(file_bytes), force=True)
+                    print(f"✅ Successfully loaded DICOM data for image {self.id} using bytes method")
+                    return dicom_data
                 except Exception as e2:
-                    print(f"Force DICOM reading failed: {e2}")
-                    try:
-                        # Method 3: Read as bytes
-                        with open(file_path, 'rb') as f:
-                            file_bytes = f.read()
-                        return pydicom.dcmread(io.BytesIO(file_bytes), force=True)
-                    except Exception as e3:
-                        print(f"Bytes DICOM reading failed: {e3}")
-                        return None
+                    print(f"Bytes DICOM reading failed: {e2}")
+                    return None
                         
         except Exception as e:
             print(f"Error loading DICOM from {self.file_path}: {e}")
@@ -239,21 +234,20 @@ class DicomImage(models.Model):
             return None
     
     def get_pixel_array(self):
-        """Get pixel array from DICOM file"""
+        """Get pixel array from DICOM file - CRITICAL FIX: ALWAYS load actual DICOM data"""
         try:
-            # If we have cached data, we don't need pixel array
-            if self.processed_image_cache:
-                print(f"Image {self.id} has cached data, no pixel array needed")
-                return None
-                
+            # CRITICAL FIX: Always try to load actual DICOM data, ignore cached data
+            print(f"🔄 Loading actual DICOM pixel array for image {self.id}")
             dicom_data = self.load_dicom_data()
             if dicom_data and hasattr(dicom_data, 'pixel_array'):
-                return dicom_data.pixel_array
+                pixel_array = dicom_data.pixel_array
+                print(f"✅ Successfully loaded pixel array for image {self.id}, shape: {pixel_array.shape}")
+                return pixel_array
             else:
-                print(f"No pixel array found in DICOM data for image {self.id}")
+                print(f"❌ No pixel array found in DICOM data for image {self.id}")
                 return None
         except Exception as e:
-            print(f"Error getting pixel array for image {self.id}: {e}")
+            print(f"❌ Error getting pixel array for image {self.id}: {e}")
             return None
     
     def apply_windowing(self, pixel_array, window_width=None, window_level=None, inverted=False):
@@ -359,9 +353,9 @@ class DicomImage(models.Model):
     
     def get_enhanced_processed_image_base64(self, window_width=None, window_level=None, inverted=False, 
                                                    resolution_factor=1.0, density_enhancement=True, contrast_boost=1.0):
-        """Enhanced version with priority for actual DICOM files over cached test data"""
+        """CRITICAL FIX: ALWAYS prioritize actual DICOM files over any cached test data"""
         try:
-            # FIRST: Always try to load actual DICOM file if it exists
+            # FIRST: ALWAYS try to load actual DICOM file if it exists - IGNORE CACHED DATA
             if self.file_path:
                 try:
                     from django.conf import settings
@@ -377,35 +371,43 @@ class DicomImage(models.Model):
                             file_path = str(self.file_path)
                     
                     if os.path.exists(file_path):
-                        print(f"Loading actual DICOM file for image {self.id}: {file_path}")
-                        # Try the original method with actual DICOM file
-                        result = self.get_enhanced_processed_image_base64_original(
-                            window_width, window_level, inverted, resolution_factor, density_enhancement, contrast_boost
-                        )
-                        
-                        if result:
-                            print(f"Successfully loaded actual DICOM image {self.id}")
-                            return result
+                        print(f"🚨 CRITICAL: Loading ACTUAL DICOM file for image {self.id}: {file_path}")
+                        # Force load actual DICOM data
+                        dicom_data = self.load_dicom_data()
+                        if dicom_data and hasattr(dicom_data, 'pixel_array'):
+                            pixel_array = dicom_data.pixel_array
+                            print(f"✅ SUCCESS: Loaded actual DICOM pixel data for image {self.id}, shape: {pixel_array.shape}")
+                            
+                            # Process the actual DICOM data
+                            result = self.get_enhanced_processed_image_base64_original(
+                                window_width, window_level, inverted, resolution_factor, density_enhancement, contrast_boost
+                            )
+                            
+                            if result and result.startswith('data:image'):
+                                print(f"🎉 SUCCESS: Processed actual DICOM image {self.id}")
+                                return result
+                            else:
+                                print(f"⚠️  Failed to process actual DICOM file for image {self.id}")
                         else:
-                            print(f"Failed to process actual DICOM file for image {self.id}")
+                            print(f"❌ No pixel array in actual DICOM data for image {self.id}")
                     else:
-                        print(f"DICOM file does not exist: {file_path} for image {self.id}")
+                        print(f"❌ DICOM file does not exist: {file_path} for image {self.id}")
                     
                 except Exception as path_error:
-                    print(f"Error processing DICOM file for image {self.id}: {path_error}")
+                    print(f"❌ Error processing DICOM file for image {self.id}: {path_error}")
             
             # SECOND: Only if no file exists or file processing failed, check cached data
             cached_data = self.get_fallback_image_data()
             if cached_data:
-                print(f"Using cached test image data as fallback for image {self.id}")
+                print(f"⚠️  Using cached test image data as fallback for image {self.id}")
                 return cached_data
             
             # THIRD: Generate synthetic image as last resort
-            print(f"Generating synthetic image as last resort for image {self.id}")
+            print(f"⚠️  Generating synthetic image as last resort for image {self.id}")
             return self.generate_synthetic_image(window_width, window_level, inverted)
             
         except Exception as e:
-            print(f"Image processing failed for image {self.id}: {e}")
+            print(f"❌ Image processing failed for image {self.id}: {e}")
             # Try synthetic image generation as absolute last resort
             synthetic_result = self.generate_synthetic_image(window_width, window_level, inverted)
             if synthetic_result:
@@ -604,17 +606,13 @@ class DicomImage(models.Model):
     
     def get_enhanced_processed_image_base64_original(self, window_width=None, window_level=None, inverted=False, 
                                           resolution_factor=2.0, density_enhancement=True, contrast_boost=1.5, thumbnail_size=None):
-        """Get enhanced processed image with superior diagnostic quality for medical imaging"""
+        """Get enhanced processed image with superior diagnostic quality for medical imaging - PRIORITIZE ACTUAL DICOM"""
         try:
-            # Check for cached data first to avoid file access errors
-            cached_data = self.get_fallback_image_data()
-            if cached_data:
-                print(f"Using cached data in original method for image {self.id}")
-                return cached_data
-            
-            # Get pixel data
+            # CRITICAL FIX: Don't check cached data first - always try actual DICOM files
+            # Get pixel data from actual DICOM file
             pixel_array = self.get_pixel_array()
             if pixel_array is None:
+                print(f"❌ No pixel array available for image {self.id}")
                 return None
             
             # Apply diagnostic-grade preprocessing
