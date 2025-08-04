@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM Viewer - Diagnostic Test</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.css">
+    <style>
+        body {
+            background-color: #1e1e1e;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        #dicom-canvas-advanced {
+            border: 2px solid #00ff88;
+            background-color: #000;
+            width: 100%;
+            height: 600px;
+        }
+        
+        .debug-panel {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 9999;
+            max-width: 350px;
+            font-family: monospace;
+            line-height: 1.6;
+        }
+        
+        .status-ok { color: #00ff88; }
+        .status-error { color: #ff3333; }
+        .status-warning { color: #ffaa00; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-12">
+                <h2 class="text-center mb-4">DICOM Viewer - Diagnostic Test</h2>
+                
+                <!-- Connection Status -->
+                <div class="card bg-dark mb-3">
+                    <div class="card-header">
+                        <h5>Connection Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="connection-status" class="status-warning">Testing connectivity...</div>
+                        <button onclick="testFullConnection()" class="btn btn-primary mt-2">Test Connection</button>
+                        <button onclick="loadTestStudy()" class="btn btn-success mt-2">Load Test Study</button>
+                    </div>
+                </div>
+                
+                <!-- Canvas -->
+                <div class="card bg-dark">
+                    <div class="card-header">
+                        <h5>DICOM Viewer Canvas</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="dicom-canvas-advanced"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Patient Info -->
+                <div class="card bg-dark mt-3">
+                    <div class="card-header">
+                        <h5>Patient Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Patient Name:</strong> <span id="patient-name">Not loaded</span></p>
+                                <p><strong>Patient ID:</strong> <span id="patient-id">Not loaded</span></p>
+                                <p><strong>Study Date:</strong> <span id="study-date">Not loaded</span></p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Modality:</strong> <span id="modality">Not loaded</span></p>
+                                <p><strong>Study Description:</strong> <span id="study-description">Not loaded</span></p>
+                                <p><strong>Institution:</strong> <span id="institution-name">Not loaded</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Debug Panel -->
+    <div class="debug-panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <strong style="font-size: 14px;">🔧 Debug Info</strong>
+            <button onclick="this.parentElement.parentElement.style.display='none'" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px;">×</button>
+        </div>
+        <div id="debug-canvas" style="color: #00ff88;">Canvas: Not initialized</div>
+        <div id="debug-study" style="color: #00ff88;">Study: None loaded</div>
+        <div id="debug-images" style="color: #00ff88;">Images: 0</div>
+        <div id="debug-api" style="color: #00ff88;">API Status: Unknown</div>
+        <div id="debug-tool" style="color: #00ff88;">Active Tool: None</div>
+        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444;">
+            <div style="color: #ffaa00;">Quick Actions:</div>
+            <button onclick="window.fixedViewer && window.fixedViewer.updateDebugPanel()" style="margin-top: 5px; padding: 5px 10px; background: #0088ff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">Update Debug</button>
+            <button onclick="location.reload()" style="margin-top: 5px; margin-left: 5px; padding: 5px 10px; background: #ff6b35; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">Reload Page</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.js"></script>
+    <script src="static/js/dicom_viewer_fixed.js"></script>
+    
+    <script>
+        // Test functions
+        async function testFullConnection() {
+            const statusEl = document.getElementById('connection-status');
+            statusEl.textContent = 'Testing...';
+            statusEl.className = 'status-warning';
+            
+            try {
+                // Test Django server
+                const response = await fetch('/viewer/api/studies/', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    statusEl.textContent = `Connected! Found ${data.length || 0} studies.`;
+                    statusEl.className = 'status-ok';
+                } else {
+                    statusEl.textContent = `Server responded with error: ${response.status}`;
+                    statusEl.className = 'status-error';
+                }
+            } catch (error) {
+                statusEl.textContent = `Connection failed: ${error.message}`;
+                statusEl.className = 'status-error';
+                console.error('Connection test failed:', error);
+            }
+        }
+        
+        async function loadTestStudy() {
+            if (window.fixedViewer) {
+                // Try to load a study (assuming study ID 8 from the logs)
+                await window.fixedViewer.loadStudy(8);
+            } else {
+                alert('DICOM Viewer not initialized');
+            }
+        }
+        
+        // Initialize the viewer when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Initializing diagnostic DICOM viewer...');
+            
+            // Get study ID from URL if provided
+            const urlParams = new URLSearchParams(window.location.search);
+            const studyId = urlParams.get('study_id') || urlParams.get('studyId') || 8; // Default to 8 based on logs
+            
+            if (typeof FixedDicomViewer !== 'undefined') {
+                window.fixedViewer = new FixedDicomViewer(studyId);
+                
+                // Run connection test automatically
+                setTimeout(testFullConnection, 1000);
+            } else {
+                console.error('FixedDicomViewer class not found!');
+                document.getElementById('connection-status').textContent = 'FixedDicomViewer class not found!';
+                document.getElementById('connection-status').className = 'status-error';
+            }
+        });
+    </script>
+</body>
+</html>

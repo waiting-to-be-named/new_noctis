@@ -92,6 +92,9 @@ class FixedDicomViewer {
         this.dragStart = null;
         this.lastMousePos = null;
 
+        // Upload handlers setup flag
+        this.uploadHandlersSetup = false;
+
         // Initialize viewer
         this.init(initialStudyId);
     }
@@ -126,14 +129,24 @@ class FixedDicomViewer {
             this.setupMPRControls();
             this.setupUploadHandlers(); // Setup upload handlers
             
+            // Initialize debug panel
+            this.updateDebugPanel();
+            
+            // Test API connectivity
+            await this.testConnectivity();
+            
             if (studyId) {
                 await this.loadStudy(studyId);
+            } else {
+                // Show no data message if no study ID provided
+                this.showNoDataMessage();
             }
             
             this.notyf.success('Fixed DICOM Viewer initialized successfully');
         } catch (error) {
             console.error('Error initializing viewer:', error);
             this.notyf.error('Failed to initialize DICOM viewer');
+            this.showConnectionError();
         }
     }
 
@@ -884,10 +897,12 @@ class FixedDicomViewer {
             // Prevent loading the same study multiple times
             if (this.currentStudyId === studyId && this.currentImages && this.currentImages.length > 0) {
                 console.log('Study', studyId, 'already loaded, skipping...');
+                this.updateDebugPanel();
                 return;
             }
             
             console.log('Loading study:', studyId);
+            this.updateDebugPanel('loading', `Loading study ${studyId}...`);
             
             // Get study images
             const response = await fetch(`/viewer/api/get-study-images/${studyId}/`, {
@@ -898,13 +913,28 @@ class FixedDicomViewer {
                 }
             });
 
+            console.log('API Response status:', response.status);
+            this.updateDebugPanel('api', `API Status: ${response.status}`);
+
             if (response.ok) {
                 const data = await response.json();
+                console.log('Study data received:', data);
+                
+                if (data.study) {
+                    this.currentStudy = data.study;
+                    console.log('Patient data:', data.study);
+                    this.updatePatientInfo(data.study);
+                }
+                
                 if (data.images && data.images.length > 0) {
-                                this.currentStudyId = studyId;
-            this.currentImages = data.images;
-            this.currentImageIndex = 0;
-            this.currentImage = this.currentImages[0];
+                    this.currentStudyId = studyId;
+                    this.currentImages = data.images;
+                    this.currentImageIndex = 0;
+                    this.currentImage = this.currentImages[0];
+                    
+                    console.log(`Study loaded with ${data.images.length} images`);
+                    this.updateDebugPanel('study', `Study ${studyId}: ${data.images.length} images`);
+                    this.updateDebugPanel('images', `Images: ${data.images.length}`);
                     
                     // Load the first image
                     await this.loadImage(this.currentImage.id);
@@ -912,15 +942,23 @@ class FixedDicomViewer {
                     
                     this.notyf.success(`Loaded study with ${this.currentImages.length} images`);
                 } else {
+                    console.warn('No images found in study response:', data);
+                    this.updateDebugPanel('study', 'No images in study');
                     this.notyf.error('No images found in study');
+                    this.showNoDataMessage();
                 }
             } else {
-                console.error('Failed to load study:', response.status);
-                this.notyf.error('Failed to load study');
+                const errorText = await response.text();
+                console.error('Failed to load study:', response.status, errorText);
+                this.updateDebugPanel('api', `API Error: ${response.status}`);
+                this.notyf.error(`Failed to load study: ${response.status}`);
+                this.showConnectionError();
             }
         } catch (error) {
             console.error('Error loading study:', error);
+            this.updateDebugPanel('api', `Connection Error: ${error.message}`);
             this.notyf.error('Error loading study');
+            this.showConnectionError();
         }
     }
 
@@ -947,6 +985,113 @@ class FixedDicomViewer {
         } catch (error) {
             console.error('Error loading image:', error);
             this.notyf.error('Error loading image');
+        }
+    }
+
+    // Debug and utility methods
+    updateDebugPanel(type = null, message = null) {
+        try {
+            if (type && message) {
+                const element = document.getElementById(`debug-${type}`);
+                if (element) {
+                    element.textContent = message;
+                }
+            } else {
+                // Update all debug elements
+                const elements = {
+                    'debug-canvas': this.canvas ? 'Canvas: Ready' : 'Canvas: Not initialized',
+                    'debug-study': this.currentStudy ? `Study: ${this.currentStudy.patient_name || 'Unknown'}` : 'Study: None loaded',
+                    'debug-images': `Images: ${this.currentImages ? this.currentImages.length : 0}`,
+                    'debug-api': 'API Status: Ready',
+                    'debug-tool': `Active Tool: ${this.activeTool || 'None'}`
+                };
+                
+                Object.entries(elements).forEach(([id, text]) => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        element.textContent = text;
+                    }
+                });
+            }
+        } catch (error) {
+            console.warn('Error updating debug panel:', error);
+        }
+    }
+
+    updatePatientInfo(study) {
+        try {
+            // Update patient information display
+            const patientName = document.getElementById('patient-name');
+            const patientId = document.getElementById('patient-id');
+            const studyDate = document.getElementById('study-date');
+            const studyDescription = document.getElementById('study-description');
+            const modality = document.getElementById('modality');
+            const institutionName = document.getElementById('institution-name');
+
+            if (patientName) patientName.textContent = study.patient_name || 'Unknown';
+            if (patientId) patientId.textContent = study.patient_id || 'Unknown';
+            if (studyDate) studyDate.textContent = study.study_date || 'Unknown';
+            if (studyDescription) studyDescription.textContent = study.study_description || 'Unknown';
+            if (modality) modality.textContent = study.modality || 'Unknown';
+            if (institutionName) institutionName.textContent = study.institution_name || 'Unknown';
+
+            console.log('Patient info updated:', study);
+        } catch (error) {
+            console.warn('Error updating patient info:', error);
+        }
+    }
+
+    showNoDataMessage() {
+        this.clearCanvas();
+        this.ctx.fillStyle = '#444444';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = '24px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('No DICOM images found', this.canvas.width / 2, this.canvas.height / 2 - 30);
+        
+        this.ctx.font = '16px Arial';
+        this.ctx.fillText('Please upload DICOM files to view', this.canvas.width / 2, this.canvas.height / 2 + 10);
+    }
+
+    showConnectionError() {
+        this.clearCanvas();
+        this.ctx.fillStyle = '#2d1b1b';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        this.ctx.fillStyle = '#ff6b6b';
+        this.ctx.font = '24px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Connection Error', this.canvas.width / 2, this.canvas.height / 2 - 30);
+        
+        this.ctx.font = '16px Arial';
+        this.ctx.fillText('Unable to connect to DICOM server', this.canvas.width / 2, this.canvas.height / 2 + 10);
+    }
+
+    async testConnectivity() {
+        try {
+            const response = await fetch('/viewer/api/test-connectivity/', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                }
+            });
+
+            if (response.ok) {
+                this.updateDebugPanel('api', 'API Connectivity: OK');
+                this.notyf.success('API connectivity test successful!');
+            } else {
+                const errorText = await response.text();
+                console.error('API connectivity test failed:', response.status, errorText);
+                this.updateDebugPanel('api', `API Connectivity: Failed (${response.status})`);
+                this.notyf.error(`API connectivity test failed: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('API connectivity test failed:', error);
+            this.updateDebugPanel('api', 'API Connectivity: Failed (Network Error)');
+            this.notyf.error('API connectivity test failed: Network Error');
         }
     }
 }
