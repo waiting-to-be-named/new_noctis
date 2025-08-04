@@ -124,6 +124,9 @@
                                     <button class="btn btn-view" onclick="viewStudy({{ entry.id }})">
                                         <i class="fas fa-eye"></i> View
                                     </button>
+                                    <button class="btn btn-attach" onclick="attachPreviousStudies({{ entry.study.id }}, '{{ entry.patient_name }}')" title="Attach Previous Studies">
+                                        <i class="fas fa-paperclip"></i> Attach
+                                    </button>
                                     {% endif %}
                                     <button class="btn btn-clinical" onclick="addClinicalInfo({{ entry.id }})">
                                         <i class="fas fa-file-medical"></i> Clinical
@@ -826,10 +829,501 @@
             checkNotifications();
         }
         
-        // Check notifications every 30 seconds
+                // Check notifications every 30 seconds
         checkNotifications();
         setInterval(checkNotifications, 30000);
         {% endif %}
-    </script>
-</body>
+
+        // Attach Previous Studies Functionality
+        function attachPreviousStudies(studyId, patientName) {
+            const modal = document.getElementById('attach-studies-modal');
+            const patientNameSpan = document.getElementById('attach-patient-name');
+            const studyIdInput = document.getElementById('attach-study-id');
+            
+            patientNameSpan.textContent = patientName;
+            studyIdInput.value = studyId;
+            
+            // Load available studies for this patient
+            loadAvailableStudies(patientName);
+            
+            modal.style.display = 'block';
+        }
+
+        function loadAvailableStudies(patientName) {
+            const studiesContainer = document.getElementById('available-studies-list');
+            studiesContainer.innerHTML = '<div class="loading">Loading previous studies...</div>';
+            
+            fetch(`/worklist/api/patient-studies/?patient_name=${encodeURIComponent(patientName)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.studies) {
+                        displayAvailableStudies(data.studies);
+                    } else {
+                        studiesContainer.innerHTML = '<div class="no-studies">No previous studies found for this patient.</div>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading studies:', error);
+                    studiesContainer.innerHTML = '<div class="error">Error loading studies. Please try again.</div>';
+                });
+        }
+
+        function displayAvailableStudies(studies) {
+            const container = document.getElementById('available-studies-list');
+            
+            if (studies.length === 0) {
+                container.innerHTML = '<div class="no-studies">No previous studies found.</div>';
+                return;
+            }
+            
+            let html = '<div class="studies-grid">';
+            studies.forEach(study => {
+                html += `
+                    <div class="study-card" data-study-id="${study.id}">
+                        <div class="study-header">
+                            <h4>${study.modality} - ${study.study_description}</h4>
+                            <span class="study-date">${study.study_date}</span>
+                        </div>
+                        <div class="study-details">
+                            <p><strong>Institution:</strong> ${study.institution_name || 'N/A'}</p>
+                            <p><strong>Series:</strong> ${study.series_count}</p>
+                            <p><strong>Images:</strong> ${study.total_images}</p>
+                        </div>
+                        <div class="study-actions">
+                            <select class="attachment-type">
+                                <option value="comparison">Comparison</option>
+                                <option value="followup">Follow-up</option>
+                                <option value="baseline">Baseline</option>
+                                <option value="reference">Reference</option>
+                            </select>
+                            <button class="btn btn-small btn-attach-study" onclick="attachStudy(${study.id})">
+                                <i class="fas fa-plus"></i> Attach
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            
+            container.innerHTML = html;
+        }
+
+        function attachStudy(previousStudyId) {
+            const currentStudyId = document.getElementById('attach-study-id').value;
+            const studyCard = document.querySelector(`[data-study-id="${previousStudyId}"]`);
+            const attachmentType = studyCard.querySelector('.attachment-type').value;
+            const notes = document.getElementById('attachment-notes').value;
+            
+            const formData = new FormData();
+            formData.append('current_study_id', currentStudyId);
+            formData.append('previous_study_id', previousStudyId);
+            formData.append('attachment_type', attachmentType);
+            formData.append('notes', notes);
+            formData.append('csrfmiddlewaretoken', getCsrfToken());
+            
+            fetch('/worklist/api/attach-study/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Study attached successfully!');
+                    studyCard.style.opacity = '0.5';
+                    studyCard.querySelector('.btn-attach-study').textContent = 'Attached';
+                    studyCard.querySelector('.btn-attach-study').disabled = true;
+                } else {
+                    alert('Error attaching study: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error attaching study. Please try again.');
+            });
+        }
+
+        function uploadExternalFiles() {
+            const dicomFile = document.getElementById('external-dicom-file').files[0];
+            const reportFile = document.getElementById('external-report-file').files[0];
+            const currentStudyId = document.getElementById('attach-study-id').value;
+            const attachmentType = document.getElementById('external-attachment-type').value;
+            const studyDate = document.getElementById('external-study-date').value;
+            const studyDescription = document.getElementById('external-study-description').value;
+            const modality = document.getElementById('external-modality').value;
+            const notes = document.getElementById('external-notes').value;
+            
+            if (!dicomFile && !reportFile) {
+                alert('Please select at least one file to upload.');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('current_study_id', currentStudyId);
+            formData.append('attachment_type', attachmentType);
+            formData.append('study_date', studyDate);
+            formData.append('study_description', studyDescription);
+            formData.append('modality', modality);
+            formData.append('notes', notes);
+            
+            if (dicomFile) formData.append('external_dicom_file', dicomFile);
+            if (reportFile) formData.append('external_report_file', reportFile);
+            
+            formData.append('csrfmiddlewaretoken', getCsrfToken());
+            
+            fetch('/worklist/api/attach-external-study/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('External study attached successfully!');
+                    document.getElementById('external-files-form').reset();
+                } else {
+                    alert('Error attaching external study: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error uploading external files. Please try again.');
+            });
+        }
+
+        function closeAttachModal() {
+            document.getElementById('attach-studies-modal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('attach-studies-modal');
+            if (event.target == modal) {
+                closeAttachModal();
+            }
+        }
+
+        function getCsrfToken() {
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === 'csrftoken') {
+                    return value;
+                }
+            }
+            return '';
+        }
+        </script>
+
+        <!-- Attach Previous Studies Modal -->
+        <div id="attach-studies-modal" class="modal" style="display: none;">
+            <div class="modal-content attach-modal">
+                <div class="modal-header">
+                    <h3><i class="fas fa-paperclip"></i> Attach Previous Studies</h3>
+                    <span class="close" onclick="closeAttachModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="patient-info">
+                        <h4>Patient: <span id="attach-patient-name"></span></h4>
+                        <input type="hidden" id="attach-study-id" />
+                    </div>
+                    
+                    <div class="attach-tabs">
+                        <button class="tab-btn active" onclick="switchAttachTab('existing')">
+                            <i class="fas fa-database"></i> Existing Studies
+                        </button>
+                        <button class="tab-btn" onclick="switchAttachTab('external')">
+                            <i class="fas fa-upload"></i> Upload External Files
+                        </button>
+                    </div>
+                    
+                    <!-- Existing Studies Tab -->
+                    <div id="existing-tab" class="tab-content active">
+                        <div class="search-studies">
+                            <input type="text" placeholder="Search studies..." id="study-search" onkeyup="filterStudies()">
+                        </div>
+                        <div id="available-studies-list" class="studies-list">
+                            <!-- Studies will be loaded here -->
+                        </div>
+                        <div class="attachment-notes-section">
+                            <label for="attachment-notes">Notes:</label>
+                            <textarea id="attachment-notes" rows="3" placeholder="Add notes about this attachment..."></textarea>
+                        </div>
+                    </div>
+                    
+                    <!-- External Files Tab -->
+                    <div id="external-tab" class="tab-content">
+                        <form id="external-files-form" class="external-upload-form">
+                            <div class="form-group">
+                                <label for="external-dicom-file">DICOM Files (CT/MRI/X-Ray):</label>
+                                <input type="file" id="external-dicom-file" accept=".dcm,.dicom" multiple>
+                                <small>Select DICOM files from previous studies</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="external-report-file">Previous Reports (PDF/Word):</label>
+                                <input type="file" id="external-report-file" accept=".pdf,.doc,.docx">
+                                <small>Upload previous radiology reports</small>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="external-attachment-type">Attachment Type:</label>
+                                    <select id="external-attachment-type">
+                                        <option value="comparison">Comparison Study</option>
+                                        <option value="followup">Follow-up Study</option>
+                                        <option value="baseline">Baseline Study</option>
+                                        <option value="reference">Reference Study</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="external-study-date">Study Date:</label>
+                                    <input type="date" id="external-study-date">
+                                </div>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="external-modality">Modality:</label>
+                                    <select id="external-modality">
+                                        <option value="CT">CT</option>
+                                        <option value="MR">MRI</option>
+                                        <option value="CR">X-Ray</option>
+                                        <option value="DX">Digital X-Ray</option>
+                                        <option value="US">Ultrasound</option>
+                                        <option value="MG">Mammography</option>
+                                        <option value="PT">PET</option>
+                                        <option value="NM">Nuclear Medicine</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="external-study-description">Study Description:</label>
+                                    <input type="text" id="external-study-description" placeholder="e.g., Chest CT with contrast">
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="external-notes">Notes:</label>
+                                <textarea id="external-notes" rows="3" placeholder="Additional notes about this external study..."></textarea>
+                            </div>
+                            
+                            <button type="button" class="btn btn-primary" onclick="uploadExternalFiles()">
+                                <i class="fas fa-upload"></i> Upload and Attach
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <style>
+        .btn-attach {
+            background: #17a2b8;
+            color: white;
+            border: 1px solid #17a2b8;
+            margin: 0 2px;
+        }
+        
+        .btn-attach:hover {
+            background: #138496;
+            border-color: #117a8b;
+        }
+        
+        .attach-modal {
+            max-width: 800px;
+            width: 90%;
+        }
+        
+        .attach-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .tab-btn {
+            background: none;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #6c757d;
+            border-bottom: 2px solid transparent;
+        }
+        
+        .tab-btn.active {
+            color: #007bff;
+            border-bottom-color: #007bff;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .studies-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .study-card {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+        
+        .study-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .study-header h4 {
+            margin: 0 0 5px 0;
+            color: #495057;
+            font-size: 16px;
+        }
+        
+        .study-date {
+            color: #6c757d;
+            font-size: 12px;
+        }
+        
+        .study-details {
+            margin: 10px 0;
+            font-size: 13px;
+        }
+        
+        .study-details p {
+            margin: 3px 0;
+        }
+        
+        .study-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .attachment-type {
+            flex: 1;
+            padding: 5px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        
+        .btn-small {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        
+        .external-upload-form {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .form-group small {
+            color: #6c757d;
+            font-size: 12px;
+        }
+        
+        .loading,
+        .no-studies,
+        .error {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+        
+        .error {
+            color: #dc3545;
+        }
+        
+        .search-studies {
+            margin-bottom: 15px;
+        }
+        
+        .search-studies input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+        }
+        
+        .attachment-notes-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e9ecef;
+        }
+        
+        .attachment-notes-section label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .attachment-notes-section textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        </style>
+
+        <script>
+        function switchAttachTab(tabName) {
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            // Add active class to selected tab
+            event.target.classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+        }
+        
+        function filterStudies() {
+            const searchTerm = document.getElementById('study-search').value.toLowerCase();
+            const studyCards = document.querySelectorAll('.study-card');
+            
+            studyCards.forEach(card => {
+                const text = card.textContent.toLowerCase();
+                card.style.display = text.includes(searchTerm) ? 'block' : 'none';
+            });
+        }
+        </script>
+    </body>
 </html>

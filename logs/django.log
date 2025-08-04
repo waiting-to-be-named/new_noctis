@@ -259,3 +259,5 @@ INFO 2025-08-01 13:29:47,194 middleware 6215 140380407666368 API Response: GET /
 DEBUG 2025-08-01 13:29:47,194 middleware 6215 140380407666368 Response size: 5826 bytes
 INFO 2025-08-01 13:29:47,194 basehttp 6215 140380407666368 "GET /viewer/api/images/5/data/ HTTP/1.1" 200 5826
 INFO 2025-08-01 13:30:56,754 basehttp 6215 140380407666368 "GET /viewer/study/6/ HTTP/1.1" 200 34277
+INFO 2025-08-04 06:39:09,729 font_manager 2582 140717233737984 Failed to extract font properties from /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf: Can not load face (unknown file format; error code 0x2)
+INFO 2025-08-04 06:39:09,733 font_manager 2582 140717233737984 generated new fontManager

@@ -255,20 +255,32 @@ class EnhancedBulkUploadManager:
                 series_instance_uid=series_uid,
                 study=study,
                 defaults={
-                    'series_number': str(dicom_data.get('SeriesNumber', 1)),
+                    'series_number': int(dicom_data.get('SeriesNumber', 1)),
                     'series_description': str(dicom_data.get('SeriesDescription', '')),
                     'modality': str(dicom_data.get('Modality', 'OT')),
-                    'body_part': str(dicom_data.get('BodyPartExamined', ''))
+                    'body_part_examined': str(dicom_data.get('BodyPartExamined', ''))
                 }
             )
             
             # Create image
             image = DicomImage.objects.create(
                 series=series,
-                instance_uid=instance_uid,
+                sop_instance_uid=instance_uid,
                 instance_number=int(dicom_data.get('InstanceNumber', 1)),
-                dicom_file=file_path,
-                file_size=os.path.getsize(default_storage.path(file_path))
+                file_path=file_path,
+                # Extract additional DICOM metadata
+                rows=int(dicom_data.get('Rows', 512)),
+                columns=int(dicom_data.get('Columns', 512)),
+                bits_allocated=int(dicom_data.get('BitsAllocated', 16)),
+                photometric_interpretation=str(dicom_data.get('PhotometricInterpretation', '')),
+                samples_per_pixel=int(dicom_data.get('SamplesPerPixel', 1)),
+                # Window/Level settings for proper display
+                window_width=float(dicom_data.get('WindowWidth', 400)) if dicom_data.get('WindowWidth') else None,
+                window_center=float(dicom_data.get('WindowCenter', 40)) if dicom_data.get('WindowCenter') else None,
+                # Pixel spacing
+                pixel_spacing_x=float(dicom_data.get('PixelSpacing', [1.0, 1.0])[0]) if dicom_data.get('PixelSpacing') else None,
+                pixel_spacing_y=float(dicom_data.get('PixelSpacing', [1.0, 1.0])[1]) if dicom_data.get('PixelSpacing') else None,
+                slice_thickness=float(dicom_data.get('SliceThickness', 1.0)) if dicom_data.get('SliceThickness') else None
             )
             
             return {
