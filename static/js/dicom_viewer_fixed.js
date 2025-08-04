@@ -92,6 +92,9 @@ class FixedDicomViewer {
         this.dragStart = null;
         this.lastMousePos = null;
 
+        // Upload handlers setup flag
+        this.uploadHandlersSetup = false;
+
         // Initialize viewer
         this.init(initialStudyId);
     }
