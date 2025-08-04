@@ -621,7 +621,19 @@ class DicomImage(models.Model):
             image = Image.fromarray(processed_array, mode='L')
             
             # Apply final diagnostic quality enhancements
-            image = self.apply_diagnostic_quality_enhancement(image)
+            try:
+                image = self.apply_diagnostic_quality_enhancement(image)
+            except AttributeError as e:
+                print(f"Warning: apply_diagnostic_quality_enhancement method not found: {e}")
+                # Fallback to basic enhancement
+                try:
+                    from PIL import ImageEnhance
+                    enhancer = ImageEnhance.Contrast(image)
+                    image = enhancer.enhance(1.1)
+                except Exception as fallback_error:
+                    print(f"Fallback enhancement also failed: {fallback_error}")
+                    # Return image as-is if all enhancements fail
+                    pass
             
             # Resize for thumbnail if requested
             if thumbnail_size:
@@ -1388,6 +1400,29 @@ class ChatMessage(models.Model):
             
         except Exception as e:
             print(f"Error in diagnostic quality enhancement: {e}")
+            return image
+    
+    def apply_diagnostic_quality_enhancement_robust(self, image):
+        """Robust version of diagnostic quality enhancement with better error handling"""
+        try:
+            # Check if the method exists
+            if not hasattr(self, 'apply_diagnostic_quality_enhancement'):
+                print("Warning: apply_diagnostic_quality_enhancement method not found, using fallback")
+                return self._apply_basic_enhancement(image)
+            
+            return self.apply_diagnostic_quality_enhancement(image)
+        except Exception as e:
+            print(f"Error in robust diagnostic quality enhancement: {e}")
+            return self._apply_basic_enhancement(image)
+    
+    def _apply_basic_enhancement(self, image):
+        """Basic image enhancement fallback"""
+        try:
+            from PIL import ImageEnhance
+            enhancer = ImageEnhance.Contrast(image)
+            return enhancer.enhance(1.1)
+        except Exception as e:
+            print(f"Basic enhancement failed: {e}")
             return image
     
     def apply_diagnostic_unsharp_masking(self, image):
