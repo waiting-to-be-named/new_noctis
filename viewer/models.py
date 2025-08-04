@@ -353,9 +353,9 @@ class DicomImage(models.Model):
     
     def get_enhanced_processed_image_base64(self, window_width=None, window_level=None, inverted=False, 
                                                    resolution_factor=1.0, density_enhancement=True, contrast_boost=1.0):
-        """CRITICAL FIX: ALWAYS prioritize actual DICOM files over any cached test data"""
+        """CRITICAL FIX: ALWAYS load actual DICOM files - NO SYNTHETIC DATA"""
         try:
-            # FIRST: ALWAYS try to load actual DICOM file if it exists - IGNORE CACHED DATA
+            # ALWAYS try to load actual DICOM file first
             if self.file_path:
                 try:
                     from django.conf import settings
@@ -371,50 +371,42 @@ class DicomImage(models.Model):
                             file_path = str(self.file_path)
                     
                     if os.path.exists(file_path):
-                        print(f"🚨 CRITICAL: Loading ACTUAL DICOM file for image {self.id}: {file_path}")
+                        print(f"🚨 LOADING ACTUAL DICOM FILE: {file_path}")
                         # Force load actual DICOM data
                         dicom_data = self.load_dicom_data()
                         if dicom_data and hasattr(dicom_data, 'pixel_array'):
                             pixel_array = dicom_data.pixel_array
-                            print(f"✅ SUCCESS: Loaded actual DICOM pixel data for image {self.id}, shape: {pixel_array.shape}")
+                            print(f"✅ SUCCESS: Loaded actual DICOM pixel data, shape: {pixel_array.shape}")
                             
-                            # Process the actual DICOM data
+                            # Process the actual DICOM data with diagnostic quality
                             result = self.get_enhanced_processed_image_base64_original(
                                 window_width, window_level, inverted, resolution_factor, density_enhancement, contrast_boost
                             )
                             
                             if result and result.startswith('data:image'):
-                                print(f"🎉 SUCCESS: Processed actual DICOM image {self.id}")
+                                print(f"🎉 SUCCESS: Processed actual DICOM image")
                                 return result
                             else:
-                                print(f"⚠️  Failed to process actual DICOM file for image {self.id}")
+                                print(f"⚠️  Failed to process actual DICOM file")
                         else:
-                            print(f"❌ No pixel array in actual DICOM data for image {self.id}")
+                            print(f"❌ No pixel array in actual DICOM data")
                     else:
-                        print(f"❌ DICOM file does not exist: {file_path} for image {self.id}")
+                        print(f"❌ DICOM file does not exist: {file_path}")
                     
                 except Exception as path_error:
-                    print(f"❌ Error processing DICOM file for image {self.id}: {path_error}")
+                    print(f"❌ Error processing DICOM file: {path_error}")
             
-            # SECOND: Only if no file exists or file processing failed, check cached data
-            cached_data = self.get_fallback_image_data()
-            if cached_data:
-                print(f"⚠️  Using cached test image data as fallback for image {self.id}")
-                return cached_data
+            # If we get here, the actual DICOM file couldn't be loaded
+            print(f"❌ CRITICAL: Could not load actual DICOM file for image {self.id}")
+            print(f"   File path: {self.file_path}")
+            print(f"   This indicates a serious issue with file storage or DICOM processing")
             
-            # THIRD: Generate synthetic image as last resort
-            print(f"⚠️  Generating synthetic image as last resort for image {self.id}")
-            return self.generate_synthetic_image(window_width, window_level, inverted)
+            # Return error response instead of synthetic data
+            return None
             
         except Exception as e:
-            print(f"❌ Image processing failed for image {self.id}: {e}")
-            # Try synthetic image generation as absolute last resort
-            synthetic_result = self.generate_synthetic_image(window_width, window_level, inverted)
-            if synthetic_result:
-                return synthetic_result
-            else:
-                # If even synthetic generation fails, return minimal fallback
-                return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+            print(f"❌ CRITICAL ERROR in image processing: {e}")
+            return None
     
     def generate_synthetic_image(self, window_width=None, window_level=None, inverted=False):
         """Generate a synthetic test image when no real data is available"""

@@ -416,3 +416,16 @@ DEBUG 2025-08-04 14:03:49,625 middleware 2761 139945832927488 Request duration: 
 INFO 2025-08-04 14:03:49,625 middleware 2761 139945832927488 API Response: GET /viewer/api/studies/ - Status: 200
 DEBUG 2025-08-04 14:03:49,625 middleware 2761 139945832927488 Response size: 2 bytes
 INFO 2025-08-04 14:04:27,424 autoreload 3019 139865912746240 Watching for file changes with StatReloader
+INFO 2025-08-04 14:06:05,428 autoreload 3019 139865912746240 /workspace/viewer/models.py changed, reloading.
+INFO 2025-08-04 14:06:05,890 autoreload 3439 140510271099136 Watching for file changes with StatReloader
+INFO 2025-08-04 14:06:34,907 autoreload 3439 140510271099136 /workspace/viewer/views.py changed, reloading.
+INFO 2025-08-04 14:06:35,366 autoreload 3575 140115987562752 Watching for file changes with StatReloader
+INFO 2025-08-04 14:07:43,193 middleware 3946 140359815500032 API Request: POST /viewer/api/upload/
+DEBUG 2025-08-04 14:07:43,193 middleware 3946 140359815500032 Request body size: 525108 bytes
+DEBUG 2025-08-04 14:07:43,900 middleware 3946 140359815500032 Request duration: POST /viewer/api/upload/ took 0.707s
+INFO 2025-08-04 14:07:43,901 middleware 3946 140359815500032 API Response: POST /viewer/api/upload/ - Status: 200
+DEBUG 2025-08-04 14:07:43,901 middleware 3946 140359815500032 Response size: 195 bytes
+INFO 2025-08-04 14:07:43,904 middleware 3946 140359815500032 API Request: GET /viewer/api/images/1/data/
+DEBUG 2025-08-04 14:07:43,935 middleware 3946 140359815500032 Request duration: GET /viewer/api/images/1/data/ took 0.031s
+INFO 2025-08-04 14:07:43,935 middleware 3946 140359815500032 API Response: GET /viewer/api/images/1/data/ - Status: 200
+DEBUG 2025-08-04 14:07:43,935 middleware 3946 140359815500032 Response size: 350738 bytes
