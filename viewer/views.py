@@ -1261,7 +1261,9 @@ def upload_dicom_files(request):
         response_data = {
             'message': f'Uploaded {len(uploaded_files)} files successfully',
             'uploaded_files': uploaded_files,
-            'study_id': study.id if study else None
+            'study_id': study.id if study else None,
+            'successful_files': uploaded_files,
+            'total_studies': 1 if study else 0
         }
         
         if errors:
@@ -1802,40 +1804,37 @@ def generate_placeholder_image():
 
 @api_view(['GET'])
 def get_image_data(request, image_id):
-    """Get processed image data with superior diagnostic quality for all modalities"""
+    """Get processed image data from ACTUAL DICOM files"""
     try:
-        print(f"Attempting to get diagnostic image data for image_id: {image_id}")
+        print(f"Attempting to get ACTUAL DICOM image data for image_id: {image_id}")
         image = DicomImage.objects.get(id=image_id)
         
-        # Check if user can access this image's study (temporarily disabled for debugging)
-        # if not can_access_study(request.user, image.series.study):
-        #     return Response({'error': 'Access denied. You do not have permission to view this image.'}, status=403)
         print(f"Found image: {image}, file_path: {image.file_path}")
         
         # Get query parameters with diagnostic-grade defaults
-        window_width = request.GET.get('window_width', image.window_width or 1500)  # Optimal for lung window
-        window_level = request.GET.get('window_level', image.window_center or -600)  # Optimal for lung level
+        window_width = request.GET.get('window_width', image.window_width or 1500)
+        window_level = request.GET.get('window_level', image.window_center or -600)
         inverted = request.GET.get('inverted', 'false').lower() == 'true'
-        high_quality = request.GET.get('high_quality', 'true').lower() == 'true'  # Always use diagnostic quality
-        resolution_factor = float(request.GET.get('resolution_factor', '2.0'))  # Higher resolution for diagnostic clarity
-        density_enhancement = request.GET.get('density_enhancement', 'true').lower() == 'true'  # Always enable for diagnostic quality
-        contrast_boost = float(request.GET.get('contrast_boost', '1.5'))  # Enhanced contrast for diagnostic imaging
+        high_quality = request.GET.get('high_quality', 'true').lower() == 'true'
+        resolution_factor = float(request.GET.get('resolution_factor', '2.0'))
+        density_enhancement = request.GET.get('density_enhancement', 'true').lower() == 'true'
+        contrast_boost = float(request.GET.get('contrast_boost', '1.5'))
         
         # Convert to appropriate types
         if window_width:
             try:
                 window_width = float(window_width)
             except (ValueError, TypeError):
-                window_width = 1500  # Default to lung window
+                window_width = 1500
         if window_level:
             try:
                 window_level = float(window_level)
             except (ValueError, TypeError):
-                window_level = -600  # Default to lung level
+                window_level = -600
         
-        print(f"Processing diagnostic image with WW: {window_width}, WL: {window_level}, inverted: {inverted}, high_quality: {high_quality}")
+        print(f"Processing ACTUAL DICOM image with WW: {window_width}, WL: {window_level}")
         
-        # Always use diagnostic-grade processing for superior quality
+        # Process the actual DICOM data
         image_base64 = image.get_enhanced_processed_image_base64(
             window_width, window_level, inverted,
             resolution_factor=resolution_factor,
@@ -1844,7 +1843,7 @@ def get_image_data(request, image_id):
         )
         
         if image_base64 and image_base64.strip():
-            print(f"Successfully processed diagnostic image {image_id} with superior quality")
+            print(f"✅ SUCCESS: Processed ACTUAL DICOM image {image_id}")
             return Response({
                 'image_data': image_base64,
                 'metadata': {
@@ -1859,47 +1858,20 @@ def get_image_data(request, image_id):
                     'body_part': image.series.body_part_examined,
                     'diagnostic_quality': True,
                     'tissue_differentiation': True,
-                    'resolution_enhanced': True
+                    'resolution_enhanced': True,
+                    'is_actual_dicom': True
                 }
             })
         else:
-            # Generate fallback image instead of returning 500 error
-            print(f"Failed to process diagnostic image {image_id}, generating fallback")
-            try:
-                fallback_image = image.generate_synthetic_image(window_width, window_level, inverted)
-                if fallback_image and fallback_image.strip():
-                    print(f"Successfully generated fallback image for {image_id}")
-                    return Response({
-                        'image_data': fallback_image,
-                        'metadata': {
-                            'rows': 512,
-                            'columns': 512,
-                            'pixel_spacing_x': 1.0,
-                            'pixel_spacing_y': 1.0,
-                            'slice_thickness': 1.0,
-                            'window_width': window_width or 400,
-                            'window_center': window_level or 40,
-                            'modality': image.series.modality if image.series else 'CT',
-                            'body_part': image.series.body_part_examined if image.series else 'Unknown',
-                            'diagnostic_quality': False,
-                            'tissue_differentiation': False,
-                            'resolution_enhanced': False,
-                            'is_fallback': True
-                        }
-                    })
-                else:
-                    print(f"Fallback image generation returned empty data for {image_id}")
-            except Exception as fallback_error:
-                print(f"Fallback image generation failed: {fallback_error}")
-            
-            # If all else fails, return a minimal valid response with error info
-            print(f"All image processing methods failed for {image_id}, returning error response")
+            # No actual DICOM data available
+            print(f"❌ CRITICAL: No actual DICOM data available for image {image_id}")
             return Response({
-                'error': 'Could not process image - file may be missing or corrupted',
+                'error': 'No actual DICOM data available - file may be missing or corrupted',
                 'image_data': None,
                 'metadata': {
                     'error': True,
-                    'message': 'Image processing failed'
+                    'message': 'Actual DICOM file not found or corrupted',
+                    'file_path': str(image.file_path) if image.file_path else 'None'
                 }
             }, status=404)
             
@@ -1907,7 +1879,7 @@ def get_image_data(request, image_id):
         print(f"Image not found: {image_id}")
         return Response({'error': 'Image not found'}, status=404)
     except Exception as e:
-        print(f"Unexpected error processing diagnostic image {image_id}: {e}")
+        print(f"Unexpected error processing ACTUAL DICOM image {image_id}: {e}")
         import traceback
         traceback.print_exc()
         return Response({'error': f'Server error: {str(e)}'}, status=500)

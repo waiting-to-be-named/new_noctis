@@ -685,6 +685,16 @@
                             window.fixedViewer.handleKeyboardShortcut(e);
                         }
                     });
+                    
+                    // Set up upload button handler
+                    const uploadBtn = document.getElementById('upload-advanced-btn');
+                    if (uploadBtn) {
+                        uploadBtn.addEventListener('click', function() {
+                            if (window.fixedViewer && window.fixedViewer.showUploadModal) {
+                                window.fixedViewer.showUploadModal();
+                            }
+                        });
+                    }
                 } else {
                     console.error('FixedDicomViewer class not found! Check if dicom_viewer_fixed.js loaded correctly.');
                     // Try to reload the script
