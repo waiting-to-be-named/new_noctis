@@ -4523,3 +4523,299 @@ def test_viewer_api(request):
             'status': 'error',
             'message': str(e)
         }, status=500)
+
+@login_required
+@require_http_methods(['POST'])
+def export_study(request, study_id):
+    """Export study in various formats"""
+    try:
+        study = get_object_or_404(DicomStudy, id=study_id)
+        
+        # Check permissions
+        if not (request.user.is_superuser or 
+                request.user.groups.filter(name__in=['Radiologists', 'Technicians', 'Administrators']).exists() or
+                (hasattr(request.user, 'facility') and request.user.facility == study.facility)):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+        data = json.loads(request.body) if request.body else {}
+        export_format = data.get('format', 'dicom')
+        include_measurements = data.get('include_measurements', True)
+        include_annotations = data.get('include_annotations', True)
+        include_metadata = data.get('include_metadata', False)
+        
+        if export_format == 'dicom':
+            return export_dicom_files(study, include_metadata)
+        elif export_format == 'jpeg':
+            return export_images_as_jpeg(study, include_measurements, include_annotations)
+        elif export_format == 'png':
+            return export_images_as_png(study, include_measurements, include_annotations)
+        elif export_format == 'pdf':
+            return export_study_as_pdf(study, include_measurements, include_annotations)
+        else:
+            return JsonResponse({'error': 'Invalid export format'}, status=400)
+            
+    except Exception as e:
+        logger.error(f"Error exporting study {study_id}: {str(e)}")
+        return JsonResponse({'error': f'Export failed: {str(e)}'}, status=500)
+
+
+def export_dicom_files(study, include_metadata=False):
+    """Export original DICOM files as ZIP"""
+    import zipfile
+    import tempfile
+    
+    response = HttpResponse(content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="study_{study.patient_name}_{study.study_date}_dicom.zip"'
+    
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for series in study.series.all():
+                for image in series.images.all():
+                    if image.file_path and os.path.exists(image.file_path):
+                        # Add original DICOM file
+                        filename = f"{series.series_description or 'Series'}_{image.instance_number:04d}.dcm"
+                        zipf.write(image.file_path, filename)
+                        
+                        # Add metadata if requested
+                        if include_metadata:
+                            try:
+                                dicom_data = image.load_dicom_data()
+                                if dicom_data:
+                                    metadata = {}
+                                    for elem in dicom_data:
+                                        try:
+                                            metadata[str(elem.tag)] = str(elem.value)
+                                        except:
+                                            pass
+                                    
+                                    metadata_filename = f"{filename}_metadata.json"
+                                    zipf.writestr(metadata_filename, json.dumps(metadata, indent=2))
+                            except Exception as e:
+                                logger.warning(f"Could not extract metadata for image {image.id}: {e}")
+        
+        tmp.seek(0)
+        response.write(tmp.read())
+    
+    return response
+
+
+def export_images_as_jpeg(study, include_measurements=True, include_annotations=True):
+    """Export processed images as JPEG files in ZIP"""
+    import zipfile
+    import tempfile
+    from PIL import Image as PILImage
+    
+    response = HttpResponse(content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="study_{study.patient_name}_{study.study_date}_jpeg.zip"'
+    
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for series in study.series.all():
+                for image in series.images.all():
+                    try:
+                        # Get processed image data
+                        processed_data = image.get_processed_image_data()
+                        if processed_data and 'image_data' in processed_data:
+                            # Decode base64 image
+                            image_data = base64.b64decode(processed_data['image_data'])
+                            
+                            # Create filename
+                            filename = f"{series.series_description or 'Series'}_{image.instance_number:04d}.jpg"
+                            
+                            # Add to ZIP
+                            zipf.writestr(filename, image_data)
+                            
+                    except Exception as e:
+                        logger.warning(f"Could not process image {image.id} for JPEG export: {e}")
+        
+        tmp.seek(0)
+        response.write(tmp.read())
+    
+    return response
+
+
+def export_images_as_png(study, include_measurements=True, include_annotations=True):
+    """Export processed images as PNG files in ZIP"""
+    import zipfile
+    import tempfile
+    
+    response = HttpResponse(content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="study_{study.patient_name}_{study.study_date}_png.zip"'
+    
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for series in study.series.all():
+                for image in series.images.all():
+                    try:
+                        # Get pixel array
+                        dicom_data = image.load_dicom_data()
+                        if dicom_data and hasattr(dicom_data, 'pixel_array'):
+                            pixel_array = dicom_data.pixel_array
+                            
+                            # Normalize to 8-bit
+                            pixel_array = pixel_array.astype(np.float32)
+                            pixel_array = ((pixel_array - pixel_array.min()) / 
+                                         (pixel_array.max() - pixel_array.min()) * 255).astype(np.uint8)
+                            
+                            # Convert to PIL Image
+                            pil_image = PILImage.fromarray(pixel_array)
+                            
+                            # Save as PNG bytes
+                            png_buffer = io.BytesIO()
+                            pil_image.save(png_buffer, format='PNG')
+                            png_data = png_buffer.getvalue()
+                            
+                            # Create filename
+                            filename = f"{series.series_description or 'Series'}_{image.instance_number:04d}.png"
+                            
+                            # Add to ZIP
+                            zipf.writestr(filename, png_data)
+                            
+                    except Exception as e:
+                        logger.warning(f"Could not process image {image.id} for PNG export: {e}")
+        
+        tmp.seek(0)
+        response.write(tmp.read())
+    
+    return response
+
+
+def export_study_as_pdf(study, include_measurements=True, include_annotations=True):
+    """Export study as PDF report with images"""
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.lib.units import inch
+    from reportlab.lib.utils import ImageReader
+    
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="study_{study.patient_name}_{study.study_date}_report.pdf"'
+    
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    
+    # Title page
+    p.setFont("Helvetica-Bold", 20)
+    p.drawString(inch, height - 2*inch, f"DICOM Study Report")
+    
+    p.setFont("Helvetica", 14)
+    y_position = height - 3*inch
+    
+    # Patient information
+    patient_info = [
+        f"Patient: {study.patient_name}",
+        f"Patient ID: {study.patient_id}",
+        f"Study Date: {study.study_date}",
+        f"Modality: {study.modality}",
+        f"Study Description: {study.study_description or 'N/A'}",
+        f"Facility: {study.facility.name if study.facility else 'N/A'}"
+    ]
+    
+    for info in patient_info:
+        p.drawString(inch, y_position, info)
+        y_position -= 0.3*inch
+    
+    # Add images on new pages
+    for series in study.series.all():
+        for image in series.images.all():
+            try:
+                # Start new page for each image
+                p.showPage()
+                
+                # Add series information
+                p.setFont("Helvetica-Bold", 16)
+                p.drawString(inch, height - inch, f"Series: {series.series_description or 'Unnamed'}")
+                
+                p.setFont("Helvetica", 12)
+                p.drawString(inch, height - 1.5*inch, f"Image {image.instance_number}")
+                
+                # Try to add the image
+                processed_data = image.get_processed_image_data()
+                if processed_data and 'image_data' in processed_data:
+                    try:
+                        # Decode base64 image
+                        image_data = base64.b64decode(processed_data['image_data'])
+                        img_buffer = io.BytesIO(image_data)
+                        
+                        # Add image to PDF (scaled to fit page)
+                        img_width = width - 2*inch
+                        img_height = height - 4*inch
+                        
+                        p.drawImage(ImageReader(img_buffer), inch, height - 4*inch - img_height, 
+                                  width=img_width, height=img_height, preserveAspectRatio=True)
+                        
+                    except Exception as e:
+                        p.drawString(inch, height - 3*inch, f"Could not load image: {str(e)}")
+                
+            except Exception as e:
+                logger.warning(f"Could not add image {image.id} to PDF: {e}")
+    
+    p.save()
+    buffer.seek(0)
+    response.write(buffer.read())
+    
+    return response
+
+
+@login_required
+def save_viewer_settings(request):
+    """Save viewer settings for user"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            
+            # Get or create user profile for settings
+            from django.contrib.auth.models import User
+            user_profile, created = UserProfile.objects.get_or_create(
+                user=request.user,
+                defaults={'settings': {}}
+            )
+            
+            # Update settings
+            current_settings = user_profile.settings or {}
+            current_settings.update({
+                'default_window_preset': data.get('defaultWindowPreset'),
+                'enable_smoothing': data.get('enableSmoothing', False),
+                'show_overlays': data.get('showOverlays', True),
+                'cache_size': data.get('cacheSize', 500),
+                'enable_gpu_acceleration': data.get('enableGPUAcceleration', False),
+                'viewport_layout': data.get('viewportLayout', '1x1')
+            })
+            
+            user_profile.settings = current_settings
+            user_profile.save()
+            
+            return JsonResponse({'success': True, 'message': 'Settings saved successfully'})
+            
+        except Exception as e:
+            logger.error(f"Error saving settings: {str(e)}")
+            return JsonResponse({'error': f'Failed to save settings: {str(e)}'}, status=500)
+    
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+
+@login_required
+def get_viewer_settings(request):
+    """Get viewer settings for user"""
+    try:
+        user_profile = UserProfile.objects.filter(user=request.user).first()
+        settings = user_profile.settings if user_profile else {}
+        
+        # Default settings
+        default_settings = {
+            'default_window_preset': 'soft',
+            'enable_smoothing': False,
+            'show_overlays': True,
+            'cache_size': 500,
+            'enable_gpu_acceleration': False,
+            'viewport_layout': '1x1'
+        }
+        
+        # Merge with user settings
+        default_settings.update(settings)
+        
+        return JsonResponse({'success': True, 'settings': default_settings})
+        
+    except Exception as e:
+        logger.error(f"Error getting settings: {str(e)}")
+        return JsonResponse({'error': f'Failed to get settings: {str(e)}'}, status=500)

@@ -86,4 +86,11 @@ urlpatterns = [
     path('api/worklist/create/', views.create_worklist_entry, name='create_worklist_entry'),
     path('api/worklist/<int:entry_id>/update/', views.update_worklist_entry, name='update_worklist_entry'),
     path('api/test/', views.test_viewer_api, name='test_viewer_api'),
+    
+    # Export functionality
+    path('api/studies/<int:study_id>/export/', views.export_study, name='export_study'),
+    
+    # Settings functionality
+    path('api/settings/save/', views.save_viewer_settings, name='save_viewer_settings'),
+    path('api/settings/', views.get_viewer_settings, name='get_viewer_settings'),
 ]
