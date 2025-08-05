@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoctisView - Advanced DICOM Viewer with AI</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        .viewer-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .main-viewer {
+            flex: 1;
+            position: relative;
+            background: #111;
+        }
+
+        .viewer-canvas {
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+
+        .ai-analysis-panel, .mpr-reconstruction-panel {
+            position: fixed;
+            top: 60px;
+            right: 10px;
+            width: 400px;
+            max-height: 80vh;
+            background: rgba(0, 0, 0, 0.95);
+            border: 1px solid #333;
+            border-radius: 8px;
+            color: white;
+            z-index: 1000;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #333;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+        }
+
+        .panel-header h3 {
+            margin: 0;
+            font-size: 16px;
+        }
+
+        .close-panel {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 5px;
+        }
+
+        .close-panel:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        .ai-analysis-content, .mpr-content {
+            padding: 15px;
+        }
+
+        .analysis-type-selector, .control-group {
+            margin-bottom: 15px;
+        }
+
+        .analysis-type-selector label, .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        .analysis-type-selector select, .control-group select, .control-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background: #222;
+            color: white;
+        }
+
+        .ai-controls {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .btn-ai {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            flex: 1;
+            font-size: 12px;
+        }
+
+        .btn-ai:hover {
+            background: linear-gradient(135deg, #5a6fd8, #6a4190);
+        }
+
+        .btn-secondary {
+            background: #555;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            flex: 1;
+            font-size: 12px;
+        }
+
+        .confidence-score {
+            font-weight: bold;
+            color: #4CAF50;
+            text-align: right;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .findings-section, .summary-section {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #222;
+            border-radius: 4px;
+        }
+
+        .findings-section h5, .summary-section h5 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #4CAF50;
+        }
+
+        .reconstruction-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+
+        .tab-btn {
+            background: #333;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            flex: 1;
+            min-width: 80px;
+            transition: all 0.3s ease;
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+        }
+
+        .tab-btn:hover {
+            background: #555;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .mpr-viewers {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .mpr-view {
+            text-align: center;
+        }
+
+        .mpr-view h5 {
+            margin: 0 0 5px 0;
+            font-size: 12px;
+        }
+
+        .mpr-canvas {
+            width: 100%;
+            height: 100px;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            color: #666;
+        }
+
+        .measurement-grid, .volume-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .measurement-item, .volume-item {
+            background: #222;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .enhanced-toolbar {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .tool-btn-advanced {
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border: 1px solid #333;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            min-width: 120px;
+            text-align: center;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .tool-btn-advanced:hover {
+            background: rgba(0, 123, 255, 0.8);
+            border-color: #007bff;
+            transform: translateY(-2px);
+        }
+
+        .tool-btn-advanced i {
+            display: block;
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+
+        .tool-btn-advanced span {
+            display: block;
+            font-size: 11px;
+        }
+
+        .processing-indicator {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #333;
+            border-top: 2px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .control-group input[type="range"] {
+            width: 70%;
+            display: inline-block;
+        }
+
+        .control-group span {
+            width: 25%;
+            display: inline-block;
+            text-align: right;
+            font-size: 11px;
+            color: #ccc;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #0056b3, #004085);
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            border-radius: 5px;
+            z-index: 2000;
+            display: none;
+        }
+
+        .notification.success {
+            background: #28a745;
+            color: white;
+        }
+
+        .notification.error {
+            background: #dc3545;
+            color: white;
+        }
+
+        .notification.warning {
+            background: #ffc107;
+            color: black;
+        }
+
+        .viewer-info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+
+        .ai-chat-panel {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            width: 350px;
+            height: 400px;
+            background: rgba(0, 0, 0, 0.95);
+            border: 1px solid #333;
+            border-radius: 8px;
+            color: white;
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 10px;
+            border-bottom: 1px solid #333;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .chat-input {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid #333;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background: #222;
+            color: white;
+            margin-right: 10px;
+        }
+
+        .chat-input button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="viewer-container">
+        <div class="main-viewer">
+            <canvas class="viewer-canvas" id="viewerCanvas"></canvas>
+            
+            <div class="viewer-info" id="viewerInfo">
+                <div>Patient: <span id="patientName">--</span></div>
+                <div>Study: <span id="studyDescription">--</span></div>
+                <div>Series: <span id="seriesDescription">--</span></div>
+                <div>Image: <span id="imageInfo">-- / --</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Enhanced toolbar with AI and MPR buttons -->
+    <div class="enhanced-toolbar">
+        <button class="tool-btn-advanced" onclick="toggleAIPanel()" title="AI Analysis Suite">
+            <i class="fas fa-brain"></i>
+            <span>AI Analysis</span>
+        </button>
+        <button class="tool-btn-advanced" onclick="toggleMPRPanel()" title="MPR & 3D Reconstruction">
+            <i class="fas fa-cube"></i>
+            <span>MPR & 3D</span>
+        </button>
+        <button class="tool-btn-advanced" onclick="toggleSmartMeasurements()" title="Smart Measurements">
+            <i class="fas fa-ruler"></i>
+            <span>Smart Measure</span>
+        </button>
+        <button class="tool-btn-advanced" onclick="toggleAIChat()" title="AI Assistant">
+            <i class="fas fa-robot"></i>
+            <span>AI Assistant</span>
+        </button>
+    </div>
+
+    <!-- AI Analysis Panel -->
+    <div class="ai-analysis-panel" id="ai-analysis-panel" style="display: none;">
+        <div class="panel-header">
+            <h3><i class="fas fa-brain"></i> AI Analysis Suite</h3>
+            <button class="close-panel" onclick="toggleAIPanel()">×</button>
+        </div>
+        <div class="ai-analysis-content">
+            <div class="analysis-type-selector">
+                <label>Analysis Type:</label>
+                <select id="analysisType" onchange="updateAnalysisOptions()">
+                    <option value="general">General Analysis</option>
+                    <option value="chest_xray">Chest X-Ray Analysis</option>
+                    <option value="ct_lung">CT Lung Analysis</option>
+                    <option value="bone_fracture">Bone Fracture Detection</option>
+                    <option value="brain_mri">Brain MRI Analysis</option>
+                    <option value="cardiac_analysis">Cardiac Analysis</option>
+                    <option value="pneumonia_detection">Pneumonia Detection</option>
+                    <option value="tumor_detection">Tumor Detection</option>
+                    <option value="vessel_analysis">Vessel Analysis</option>
+                </select>
+            </div>
+            
+            <div class="ai-controls">
+                <button class="btn btn-ai" onclick="performAIAnalysis()">
+                    <i class="fas fa-magic"></i> Run AI Analysis
+                </button>
+                <button class="btn btn-secondary" onclick="clearAIResults()">
+                    <i class="fas fa-eraser"></i> Clear Results
+                </button>
+            </div>
+            
+            <div class="ai-results" id="aiResults" style="display: none;">
+                <div class="results-header">
+                    <h4>Analysis Results</h4>
+                    <div class="confidence-score">
+                        <span>Confidence: </span>
+                        <span id="confidenceScore">--</span>%
+                    </div>
+                </div>
+                <div class="results-content">
+                    <div class="findings-section">
+                        <h5><i class="fas fa-search"></i> Key Findings:</h5>
+                        <div id="aiFindings"></div>
+                    </div>
+                    <div class="summary-section">
+                        <h5><i class="fas fa-file-medical"></i> Summary:</h5>
+                        <div id="aiSummary"></div>
+                    </div>
+                    <div class="highlighted-regions" id="highlightedRegions" style="display: none;">
+                        <h5><i class="fas fa-map-marker-alt"></i> Highlighted Regions:</h5>
+                        <div id="regionsList"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="processing-indicator" id="aiProcessing" style="display: none;">
+                <div class="spinner"></div>
+                <span>AI Analysis in Progress...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- MPR & 3D Reconstruction Panel -->
+    <div class="mpr-reconstruction-panel" id="mpr-panel" style="display: none;">
+        <div class="panel-header">
+            <h3><i class="fas fa-cube"></i> MPR & 3D Reconstruction</h3>
+            <button class="close-panel" onclick="toggleMPRPanel()">×</button>
+        </div>
+        <div class="mpr-content">
+            <div class="reconstruction-tabs">
+                <button class="tab-btn active" data-tab="mpr" onclick="switchReconstructionTab(this, 'mpr')">
+                    <i class="fas fa-th"></i> MPR
+                </button>
+                <button class="tab-btn" data-tab="bone" onclick="switchReconstructionTab(this, 'bone')">
+                    <i class="fas fa-bone"></i> Bone 3D
+                </button>
+                <button class="tab-btn" data-tab="angio" onclick="switchReconstructionTab(this, 'angio')">
+                    <i class="fas fa-heart"></i> Angiogram
+                </button>
+                <button class="tab-btn" data-tab="cardiac" onclick="switchReconstructionTab(this, 'cardiac')">
+                    <i class="fas fa-heartbeat"></i> Cardiac 4D
+                </button>
+                <button class="tab-btn" data-tab="neuro" onclick="switchReconstructionTab(this, 'neuro')">
+                    <i class="fas fa-brain"></i> Neurological
+                </button>
+                <button class="tab-btn" data-tab="ortho" onclick="switchReconstructionTab(this, 'ortho')">
+                    <i class="fas fa-user-md"></i> Orthopedic
+                </button>
+            </div>
+            
+            <!-- MPR Tab Content -->
+            <div class="tab-content active" id="mpr-tab">
+                <div class="mpr-controls">
+                    <div class="control-group">
+                        <label>Slice Position:</label>
+                        <input type="range" id="slicePosition" min="0" max="1" step="0.01" value="0.5" 
+                               onchange="updateMPRSlice()">
+                        <span id="slicePositionValue">50%</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Slice Thickness:</label>
+                        <input type="range" id="sliceThickness" min="0.5" max="5" step="0.1" value="1.0" 
+                               onchange="updateSliceThickness()">
+                        <span id="sliceThicknessValue">1.0mm</span>
+                    </div>
+                </div>
+                
+                <div class="mpr-viewers">
+                    <div class="mpr-view">
+                        <h5>Axial</h5>
+                        <div class="mpr-canvas" id="mprAxial">Axial View</div>
+                    </div>
+                    <div class="mpr-view">
+                        <h5>Sagittal</h5>
+                        <div class="mpr-canvas" id="mprSagittal">Sagittal View</div>
+                    </div>
+                    <div class="mpr-view">
+                        <h5>Coronal</h5>
+                        <div class="mpr-canvas" id="mprCoronal">Coronal View</div>
+                    </div>
+                </div>
+                
+                <button class="btn btn-primary" onclick="generateMPR()">
+                    <i class="fas fa-play"></i> Generate MPR
+                </button>
+            </div>
+            
+            <!-- Bone Reconstruction Tab Content -->
+            <div class="tab-content" id="bone-tab">
+                <div class="bone-controls">
+                    <div class="control-group">
+                        <label>Bone Type:</label>
+                        <select id="boneType">
+                            <option value="skull">Skull</option>
+                            <option value="spine">Spine</option>
+                            <option value="pelvis">Pelvis</option>
+                            <option value="ribs">Rib Cage</option>
+                            <option value="long_bones">Long Bones</option>
+                            <option value="joints">Joints</option>
+                            <option value="dental">Dental/Maxillofacial</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>HU Threshold:</label>
+                        <input type="range" id="huThreshold" min="50" max="500" value="150" 
+                               onchange="updateHUThreshold()">
+                        <span id="huThresholdValue">150 HU</span>
+                    </div>
+                </div>
+                
+                <div class="bone-3d-viewer" id="bone3DViewer" style="height: 200px; background: #111; border: 1px solid #333; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 12px;">
+                    3D Bone Model View
+                </div>
+                
+                <button class="btn btn-primary" onclick="generateBoneReconstruction()">
+                    <i class="fas fa-cube"></i> Generate 3D Bone Model
+                </button>
+            </div>
+            
+            <!-- Angiogram Tab Content -->
+            <div class="tab-content" id="angio-tab">
+                <div class="angio-controls">
+                    <div class="control-group">
+                        <label>Vessel Type:</label>
+                        <select id="vesselType">
+                            <option value="coronary">Coronary Arteries</option>
+                            <option value="cerebral">Cerebral Vessels</option>
+                            <option value="pulmonary">Pulmonary Vessels</option>
+                            <option value="renal">Renal Vessels</option>
+                            <option value="peripheral">Peripheral Vessels</option>
+                            <option value="aorta">Aortic Analysis</option>
+                            <option value="carotid">Carotid Arteries</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Contrast Phase:</label>
+                        <select id="contrastPhase">
+                            <option value="arterial">Arterial Phase</option>
+                            <option value="venous">Venous Phase</option>
+                            <option value="delayed">Delayed Phase</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="vessel-analysis-viewer" id="vesselAnalysisViewer" style="height: 200px; background: #111; border: 1px solid #333; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 12px;">
+                    Vessel Analysis View
+                </div>
+                
+                <button class="btn btn-primary" onclick="generateAngiogramAnalysis()">
+                    <i class="fas fa-search"></i> Analyze Vessels
+                </button>
+            </div>
+            
+            <!-- Cardiac Tab Content -->
+            <div class="tab-content" id="cardiac-tab">
+                <div class="cardiac-controls">
+                    <div class="control-group">
+                        <label>Cardiac Phase:</label>
+                        <select id="cardiacPhase">
+                            <option value="systole">Systolic Phase</option>
+                            <option value="diastole">Diastolic Phase</option>
+                            <option value="full_cycle">Full Cardiac Cycle</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="cardiac-4d-viewer" id="cardiac4DViewer" style="height: 150px; background: #111; border: 1px solid #333; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 12px;">
+                    4D Cardiac View
+                </div>
+                
+                <div class="cardiac-measurements" id="cardiacMeasurements" style="display: none;">
+                    <h5><i class="fas fa-heartbeat"></i> Cardiac Function Analysis</h5>
+                    <div class="measurement-grid">
+                        <div class="measurement-item">
+                            <span>LV Ejection Fraction:</span>
+                            <span id="lvef">--</span>%
+                        </div>
+                        <div class="measurement-item">
+                            <span>LV End-Diastolic Volume:</span>
+                            <span id="lvedv">--</span> ml
+                        </div>
+                        <div class="measurement-item">
+                            <span>LV End-Systolic Volume:</span>
+                            <span id="lvesv">--</span> ml
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="btn btn-primary" onclick="generateCardiacAnalysis()">
+                    <i class="fas fa-heartbeat"></i> Analyze Cardiac Function
+                </button>
+            </div>
+            
+            <!-- Neurological Tab Content -->
+            <div class="tab-content" id="neuro-tab">
+                <div class="neuro-viewer" id="neuroViewer" style="height: 150px; background: #111; border: 1px solid #333; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 12px;">
+                    Brain Analysis View
+                </div>
+                
+                <div class="brain-analysis" id="brainAnalysis" style="display: none;">
+                    <h5><i class="fas fa-brain"></i> Brain Volume Analysis</h5>
+                    <div class="volume-grid">
+                        <div class="volume-item">
+                            <span>Total Brain Volume:</span>
+                            <span id="totalBrainVolume">--</span> cm³
+                        </div>
+                        <div class="volume-item">
+                            <span>Gray Matter:</span>
+                            <span id="grayMatterVolume">--</span> cm³
+                        </div>
+                        <div class="volume-item">
+                            <span>White Matter:</span>
+                            <span id="whiteMatterVolume">--</span> cm³
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="btn btn-primary" onclick="generateNeurologicalAnalysis()">
+                    <i class="fas fa-brain"></i> Analyze Brain Structure
+                </button>
+            </div>
+            
+            <!-- Orthopedic Tab Content -->
+            <div class="tab-content" id="ortho-tab">
+                <div class="ortho-controls">
+                    <div class="control-group">
+                        <label>Joint Type:</label>
+                        <select id="jointType">
+                            <option value="knee">Knee Joint</option>
+                            <option value="hip">Hip Joint</option>
+                            <option value="shoulder">Shoulder Joint</option>
+                            <option value="elbow">Elbow Joint</option>
+                            <option value="wrist">Wrist Joint</option>
+                            <option value="ankle">Ankle Joint</option>
+                            <option value="spine">Spinal Joints</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="joint-analysis-viewer" id="jointAnalysisViewer" style="height: 150px; background: #111; border: 1px solid #333; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 12px;">
+                    Joint Analysis View
+                </div>
+                
+                <div class="joint-measurements" id="jointMeasurements" style="display: none;">
+                    <h5><i class="fas fa-user-md"></i> Joint Space Analysis</h5>
+                    <div class="measurement-grid">
+                        <div class="measurement-item">
+                            <span>Medial Compartment:</span>
+                            <span id="medialSpace">--</span> mm
+                        </div>
+                        <div class="measurement-item">
+                            <span>Lateral Compartment:</span>
+                            <span id="lateralSpace">--</span> mm
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="btn btn-primary" onclick="generateOrthopedicAnalysis()">
+                    <i class="fas fa-user-md"></i> Analyze Joint Structure
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Chat Assistant Panel -->
+    <div class="ai-chat-panel" id="ai-chat-panel">
+        <div class="chat-header">
+            <h4><i class="fas fa-robot"></i> AI Assistant</h4>
+            <button class="close-panel" onclick="toggleAIChat()">×</button>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            <div style="color: #666; text-align: center; padding: 20px;">
+                AI Assistant ready to help with medical image analysis
+            </div>
+        </div>
+        <div class="chat-input">
+            <input type="text" id="chatInput" placeholder="Ask about the current image..." onkeypress="handleChatKeypress(event)">
+            <button onclick="sendChatMessage()"><i class="fas fa-paper-plane"></i></button>
+        </div>
+    </div>
+
+    <!-- Notification container -->
+    <div class="notification" id="notification"></div>
+
+    <script>
+        // Global variables
+        let currentImageId = null;
+        let currentSeriesId = null;
+        let currentStudyId = {{ study.id|default:'null' }};
+
+        // Initialize viewer
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeViewer();
+            if (currentStudyId) {
+                loadStudyData(currentStudyId);
+            }
+        });
+
+        function initializeViewer() {
+            console.log('Initializing Advanced DICOM Viewer with AI');
+            // Initialize canvas and viewer components
+            const canvas = document.getElementById('viewerCanvas');
+            if (canvas) {
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+            }
+        }
+
+        function loadStudyData(studyId) {
+            fetch(`/viewer/api/studies/${studyId}/series/`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.series && data.series.length > 0) {
+                        currentSeriesId = data.series[0].id;
+                        loadSeriesImages(currentSeriesId);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading study data:', error);
+                });
+        }
+
+        function loadSeriesImages(seriesId) {
+            fetch(`/viewer/api/series/${seriesId}/images/`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.images && data.images.length > 0) {
+                        currentImageId = data.images[0].id;
+                        updateViewerInfo(data);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading series images:', error);
+                });
+        }
+
+        function updateViewerInfo(data) {
+            if (data.patient_name) document.getElementById('patientName').textContent = data.patient_name;
+            if (data.study_description) document.getElementById('studyDescription').textContent = data.study_description;
+            if (data.series_description) document.getElementById('seriesDescription').textContent = data.series_description;
+            if (data.images) document.getElementById('imageInfo').textContent = `1 / ${data.images.length}`;
+        }
+
+        // AI Analysis Functions
+        function toggleAIPanel() {
+            const panel = document.getElementById('ai-analysis-panel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function performAIAnalysis() {
+            const analysisType = document.getElementById('analysisType').value;
+            
+            if (!currentImageId) {
+                showNotification('Please select an image first', 'warning');
+                return;
+            }
+            
+            showAIProcessing(true);
+            
+            fetch(`/viewer/api/images/${currentImageId}/ai-analysis/enhanced/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({
+                    analysis_type: analysisType
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                showAIProcessing(false);
+                displayAIResults(data);
+            })
+            .catch(error => {
+                showAIProcessing(false);
+                showNotification('AI Analysis failed: ' + error.message, 'error');
+            });
+        }
+
+        function displayAIResults(results) {
+            document.getElementById('aiResults').style.display = 'block';
+            document.getElementById('confidenceScore').textContent = Math.round(results.confidence_score * 100);
+            document.getElementById('aiFindings').innerHTML = formatFindings(results.findings);
+            document.getElementById('aiSummary').textContent = results.summary;
+            
+            if (results.highlighted_regions && results.highlighted_regions.length > 0) {
+                document.getElementById('highlightedRegions').style.display = 'block';
+                displayHighlightedRegions(results.highlighted_regions);
+            }
+        }
+
+        function formatFindings(findings) {
+            let html = '<ul style="margin: 0; padding-left: 20px; font-size: 11px;">';
+            for (const [key, value] of Object.entries(findings)) {
+                const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                html += `<li><strong>${formattedKey}:</strong> ${typeof value === 'object' ? JSON.stringify(value) : value}</li>`;
+            }
+            html += '</ul>';
+            return html;
+        }
+
+        function clearAIResults() {
+            document.getElementById('aiResults').style.display = 'none';
+            document.getElementById('highlightedRegions').style.display = 'none';
+        }
+
+        function updateAnalysisOptions() {
+            // Update analysis-specific options based on selected type
+            const analysisType = document.getElementById('analysisType').value;
+            console.log('Analysis type changed to:', analysisType);
+        }
+
+        // MPR and 3D Reconstruction Functions
+        function toggleMPRPanel() {
+            const panel = document.getElementById('mpr-panel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function switchReconstructionTab(tabBtn, tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from all tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab and activate button
+            document.getElementById(tabName + '-tab').classList.add('active');
+            tabBtn.classList.add('active');
+        }
+
+        function generateMPR() {
+            if (!currentSeriesId) {
+                showNotification('Please select a series first', 'warning');
+                return;
+            }
+
+            const slicePosition = document.getElementById('slicePosition').value;
+            const sliceThickness = document.getElementById('sliceThickness').value;
+            
+            fetch(`/viewer/api/series/${currentSeriesId}/mpr/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({
+                    slice_position: parseFloat(slicePosition),
+                    slice_thickness: parseFloat(sliceThickness)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayMPRResults(data.mpr_data);
+                    showNotification('MPR reconstruction completed', 'success');
+                } else {
+                    showNotification('MPR generation failed: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('MPR generation failed: ' + error.message, 'error');
+            });
+        }
+
+        function generateBoneReconstruction() {
+            if (!currentSeriesId) {
+                showNotification('Please select a series first', 'warning');
+                return;
+            }
+
+            const boneType = document.getElementById('boneType').value;
+            const huThreshold = document.getElementById('huThreshold').value;
+            
+            fetch(`/viewer/api/series/${currentSeriesId}/bone-reconstruction/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({
+                    bone_type: boneType,
+                    hu_threshold: parseInt(huThreshold)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    display3DBoneModel(data.volume_data);
+                    showNotification(`3D ${boneType} reconstruction completed`, 'success');
+                } else {
+                    showNotification('Bone reconstruction failed: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Bone reconstruction failed: ' + error.message, 'error');
+            });
+        }
+
+        function generateAngiogramAnalysis() {
+            if (!currentSeriesId) {
+                showNotification('Please select a series first', 'warning');
+                return;
+            }
+
+            const vesselType = document.getElementById('vesselType').value;
+            const contrastPhase = document.getElementById('contrastPhase').value;
+            
+            fetch(`/viewer/api/series/${currentSeriesId}/angiogram-analysis/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({
+                    vessel_type: vesselType,
+                    contrast_phase: contrastPhase
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayVesselAnalysis(data);
+                    showNotification(`${vesselType} vessel analysis completed`, 'success');
+                } else {
+                    showNotification('Angiogram analysis failed: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Angiogram analysis failed: ' + error.message, 'error');
+            });
+        }
+
+        function generateCardiacAnalysis() {
+            if (!currentSeriesId) {
+                showNotification('Please select a series first', 'warning');
+                return;
+            }
+
+            const cardiacPhase = document.getElementById('cardiacPhase').value;
+            
+            fetch(`/viewer/api/series/${currentSeriesId}/cardiac-analysis/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({
+                    cardiac_phase: cardiacPhase
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayCardiacMeasurements(data);
+                    showNotification('Cardiac analysis completed', 'success');
+                } else {
+                    showNotification('Cardiac analysis failed: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Cardiac analysis failed: ' + error.message, 'error');
+            });
+        }
+
+        function generateNeurologicalAnalysis() {
+            if (!currentSeriesId) {
+                showNotification('Please select a series first', 'warning');
+                return;
+            }
+            
+            fetch(`/viewer/api/series/${currentSeriesId}/neurological-analysis/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayBrainAnalysis(data);
+                    showNotification('Neurological analysis completed', 'success');
+                } else {
+                    showNotification('Neurological analysis failed: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Neurological analysis failed: ' + error.message, 'error');
+            });
+        }
+
+        function generateOrthopedicAnalysis() {
+            if (!currentSeriesId) {
+                showNotification('Please select a series first', 'warning');
+                return;
+            }
+
+            const jointType = document.getElementById('jointType').value;
+            
+            fetch(`/viewer/api/series/${currentSeriesId}/orthopedic-analysis/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({
+                    joint_type: jointType
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayJointMeasurements(data);
+                    showNotification(`${jointType} joint analysis completed`, 'success');
+                } else {
+                    showNotification('Orthopedic analysis failed: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Orthopedic analysis failed: ' + error.message, 'error');
+            });
+        }
+
+        // Display functions for results
+        function displayMPRResults(mprData) {
+            // Display MPR images in respective canvases
+            if (mprData.axial && mprData.axial.image) {
+                document.getElementById('mprAxial').innerHTML = '<img src="data:image/png;base64,' + mprData.axial.image + '" style="max-width: 100%; max-height: 100%;">';
+            }
+            if (mprData.sagittal && mprData.sagittal.image) {
+                document.getElementById('mprSagittal').innerHTML = '<img src="data:image/png;base64,' + mprData.sagittal.image + '" style="max-width: 100%; max-height: 100%;">';
+            }
+            if (mprData.coronal && mprData.coronal.image) {
+                document.getElementById('mprCoronal').innerHTML = '<img src="data:image/png;base64,' + mprData.coronal.image + '" style="max-width: 100%; max-height: 100%;">';
+            }
+        }
+
+        function display3DBoneModel(volumeData) {
+            document.getElementById('bone3DViewer').innerHTML = 'Bone 3D model loaded successfully';
+        }
+
+        function displayVesselAnalysis(data) {
+            document.getElementById('vesselAnalysisViewer').innerHTML = `Vessel analysis completed for ${data.vessel_type}`;
+        }
+
+        function displayCardiacMeasurements(data) {
+            document.getElementById('cardiacMeasurements').style.display = 'block';
+            document.getElementById('lvef').textContent = data.ejection_fraction;
+            document.getElementById('lvedv').textContent = data.chamber_volumes.left_ventricle.end_diastolic;
+            document.getElementById('lvesv').textContent = data.chamber_volumes.left_ventricle.end_systolic;
+        }
+
+        function displayBrainAnalysis(data) {
+            document.getElementById('brainAnalysis').style.display = 'block';
+            document.getElementById('totalBrainVolume').textContent = data.brain_volumes.total_brain_volume;
+            document.getElementById('grayMatterVolume').textContent = data.brain_volumes.gray_matter_volume;
+            document.getElementById('whiteMatterVolume').textContent = data.brain_volumes.white_matter_volume;
+        }
+
+        function displayJointMeasurements(data) {
+            document.getElementById('jointMeasurements').style.display = 'block';
+            if (data.joint_measurements.medial_compartment) {
+                document.getElementById('medialSpace').textContent = data.joint_measurements.medial_compartment;
+            }
+            if (data.joint_measurements.lateral_compartment) {
+                document.getElementById('lateralSpace').textContent = data.joint_measurements.lateral_compartment;
+            }
+        }
+
+        // AI Chat Functions
+        function toggleAIChat() {
+            const panel = document.getElementById('ai-chat-panel');
+            panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+        }
+
+        function handleChatKeypress(event) {
+            if (event.key === 'Enter') {
+                sendChatMessage();
+            }
+        }
+
+        function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            addChatMessage('user', message);
+            input.value = '';
+            
+            // Simulate AI response
+            setTimeout(() => {
+                addChatMessage('ai', 'I understand you want to know about ' + message + '. Let me analyze the current image and provide insights.');
+            }, 1000);
+        }
+
+        function addChatMessage(type, message) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.style.margin = '10px 0';
+            messageDiv.style.padding = '8px';
+            messageDiv.style.borderRadius = '4px';
+            messageDiv.style.fontSize = '12px';
+            
+            if (type === 'user') {
+                messageDiv.style.background = '#007bff';
+                messageDiv.style.color = 'white';
+                messageDiv.style.textAlign = 'right';
+                messageDiv.innerHTML = `<strong>You:</strong> ${message}`;
+            } else {
+                messageDiv.style.background = '#333';
+                messageDiv.style.color = 'white';
+                messageDiv.innerHTML = `<strong>AI:</strong> ${message}`;
+            }
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Helper functions
+        function showAIProcessing(show) {
+            document.getElementById('aiProcessing').style.display = show ? 'block' : 'none';
+        }
+
+        function updateMPRSlice() {
+            const value = document.getElementById('slicePosition').value;
+            document.getElementById('slicePositionValue').textContent = Math.round(value * 100) + '%';
+        }
+
+        function updateSliceThickness() {
+            const value = document.getElementById('sliceThickness').value;
+            document.getElementById('sliceThicknessValue').textContent = value + 'mm';
+        }
+
+        function updateHUThreshold() {
+            const value = document.getElementById('huThreshold').value;
+            document.getElementById('huThresholdValue').textContent = value + ' HU';
+        }
+
+        function toggleSmartMeasurements() {
+            showNotification('Smart Measurements feature coming soon!', 'info');
+        }
+
+        function showNotification(message, type) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.style.display = 'block';
+            
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function displayHighlightedRegions(regions) {
+            const regionsList = document.getElementById('regionsList');
+            regionsList.innerHTML = regions.map(region => 
+                `<div style="font-size: 11px; margin: 5px 0;">Region: ${region.type || 'Unknown'}</div>`
+            ).join('');
+        }
+    </script>
+</body>
+</html>
