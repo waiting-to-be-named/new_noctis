@@ -429,3 +429,40 @@ INFO 2025-08-04 14:07:43,904 middleware 3946 140359815500032 API Request: GET /v
 DEBUG 2025-08-04 14:07:43,935 middleware 3946 140359815500032 Request duration: GET /viewer/api/images/1/data/ took 0.031s
 INFO 2025-08-04 14:07:43,935 middleware 3946 140359815500032 API Response: GET /viewer/api/images/1/data/ - Status: 200
 DEBUG 2025-08-04 14:07:43,935 middleware 3946 140359815500032 Response size: 350738 bytes
+INFO 2025-08-05 05:33:33,794 autoreload 2408 140688504471808 Watching for file changes with StatReloader
+INFO 2025-08-05 05:33:34,418 font_manager 2408 140688504471808 Failed to extract font properties from /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf: Can not load face (unknown file format; error code 0x2)
+INFO 2025-08-05 05:33:34,429 font_manager 2408 140688504471808 generated new fontManager
+INFO 2025-08-05 05:33:56,427 basehttp 2408 140687675549376 "GET /viewer/ HTTP/1.1" 200 38977
+INFO 2025-08-05 05:34:00,322 basehttp 2408 140687675549376 "GET /worklist/ HTTP/1.1" 302 0
+INFO 2025-08-05 05:35:52,750 basehttp 2408 140687675549376 "GET /worklist/ HTTP/1.1" 302 0
+INFO 2025-08-05 05:35:54,141 middleware 2408 140687675549376 API Request: GET /viewer/api/studies/
+DEBUG 2025-08-05 05:35:54,144 middleware 2408 140687675549376 Request duration: GET /viewer/api/studies/ took 0.003s
+INFO 2025-08-05 05:35:54,144 middleware 2408 140687675549376 API Response: GET /viewer/api/studies/ - Status: 200
+DEBUG 2025-08-05 05:35:54,144 middleware 2408 140687675549376 Response size: 2 bytes
+INFO 2025-08-05 05:35:54,144 basehttp 2408 140687675549376 "GET /viewer/api/studies/ HTTP/1.1" 200 2
+INFO 2025-08-05 05:36:26,078 basehttp 2408 140687675549376 "GET /viewer/ HTTP/1.1" 200 38977
+INFO 2025-08-05 05:36:26,082 basehttp 2408 140687654573760 "GET /worklist/ HTTP/1.1" 302 0
+INFO 2025-08-05 05:36:26,085 basehttp 2408 140687654573760 "GET /accounts/login/?next=/worklist/ HTTP/1.1" 200 6150
+INFO 2025-08-05 05:36:26,128 middleware 2408 140687675549376 API Request: GET /viewer/api/studies/
+DEBUG 2025-08-05 05:36:26,129 middleware 2408 140687675549376 Request duration: GET /viewer/api/studies/ took 0.001s
+INFO 2025-08-05 05:36:26,129 middleware 2408 140687675549376 API Response: GET /viewer/api/studies/ - Status: 200
+DEBUG 2025-08-05 05:36:26,129 middleware 2408 140687675549376 Response size: 2 bytes
+INFO 2025-08-05 05:36:26,129 basehttp 2408 140687675549376 "GET /viewer/api/studies/ HTTP/1.1" 200 2
+INFO 2025-08-05 05:36:26,131 middleware 2408 140687675549376 API Request: GET /viewer/api/get-image-data/1/
+DEBUG 2025-08-05 05:36:26,168 middleware 2408 140687675549376 Request duration: GET /viewer/api/get-image-data/1/ took 0.037s
+INFO 2025-08-05 05:36:26,168 middleware 2408 140687675549376 API Response: GET /viewer/api/get-image-data/1/ - Status: 200
+DEBUG 2025-08-05 05:36:26,168 middleware 2408 140687675549376 Response size: 350738 bytes
+INFO 2025-08-05 05:36:26,169 basehttp 2408 140687675549376 "GET /viewer/api/get-image-data/1/ HTTP/1.1" 200 350738
+INFO 2025-08-05 05:36:30,864 basehttp 2408 140687675549376 "GET /viewer/ HTTP/1.1" 200 38977
+INFO 2025-08-05 05:36:30,866 basehttp 2408 140687654573760 "GET /worklist/ HTTP/1.1" 302 0
+INFO 2025-08-05 05:36:30,868 basehttp 2408 140687654573760 "GET /accounts/login/?next=/worklist/ HTTP/1.1" 200 6150
+INFO 2025-08-05 05:36:30,912 middleware 2408 140687675549376 API Request: GET /viewer/api/studies/
+DEBUG 2025-08-05 05:36:30,913 middleware 2408 140687675549376 Request duration: GET /viewer/api/studies/ took 0.001s
+INFO 2025-08-05 05:36:30,913 middleware 2408 140687675549376 API Response: GET /viewer/api/studies/ - Status: 200
+DEBUG 2025-08-05 05:36:30,913 middleware 2408 140687675549376 Response size: 2 bytes
+INFO 2025-08-05 05:36:30,913 basehttp 2408 140687675549376 "GET /viewer/api/studies/ HTTP/1.1" 200 2
+INFO 2025-08-05 05:36:30,916 middleware 2408 140687675549376 API Request: GET /viewer/api/get-image-data/1/
+DEBUG 2025-08-05 05:36:30,942 middleware 2408 140687675549376 Request duration: GET /viewer/api/get-image-data/1/ took 0.026s
+INFO 2025-08-05 05:36:30,942 middleware 2408 140687675549376 API Response: GET /viewer/api/get-image-data/1/ - Status: 200
+DEBUG 2025-08-05 05:36:30,942 middleware 2408 140687675549376 Response size: 350738 bytes
+INFO 2025-08-05 05:36:30,942 basehttp 2408 140687675549376 "GET /viewer/api/get-image-data/1/ HTTP/1.1" 200 350738
