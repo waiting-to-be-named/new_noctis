@@ -1,0 +1,266 @@
+# NOCTIS DICOM Viewer - Docker Compose for Ubuntu 24.04.2
+# Production-ready deployment with all services
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16
+    container_name: noctis-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: noctis_db
+      POSTGRES_USER: noctis_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-your_secure_password_here}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backup/postgres:/backup
+    ports:
+      - "5432:5432"
+    networks:
+      - noctis-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U noctis_user -d noctis_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: noctis-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - noctis-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Main Application
+  noctis:
+    build:
+      context: .
+      dockerfile: Dockerfile.ubuntu24.04
+    container_name: noctis-app
+    restart: unless-stopped
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${SECRET_KEY:-your_very_secure_secret_key_here}
+      - DB_NAME=noctis_db
+      - DB_USER=noctis_user
+      - DB_PASSWORD=${DB_PASSWORD:-your_secure_password_here}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - REDIS_URL=redis://redis:6379/1
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,your-domain.com}
+      - EMAIL_HOST=${EMAIL_HOST:-smtp.your-provider.com}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER:-your_email@domain.com}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD:-your_email_password}
+      - EMAIL_USE_TLS=True
+      - EMAIL_PORT=587
+      - STATIC_ROOT=/opt/noctis/staticfiles
+      - MEDIA_ROOT=/opt/noctis/media
+      - LOG_LEVEL=INFO
+      - CELERY_BROKER_URL=redis://redis:6379/2
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    volumes:
+      - noctis_media:/opt/noctis/media
+      - noctis_logs:/opt/noctis/logs
+      - noctis_static:/opt/noctis/staticfiles
+      - ./backup:/opt/noctis/backup
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8000:8000"
+      - "11112:11112"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - noctis-network
+    healthcheck:
+      test: ["CMD", "/opt/noctis/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Nginx Reverse Proxy (Optional - for load balancing)
+  nginx-proxy:
+    image: nginx:1.24-alpine
+    container_name: noctis-nginx-proxy
+    restart: unless-stopped
+    volumes:
+      - ./nginx-proxy.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    ports:
+      - "8080:80"
+      - "8443:443"
+    depends_on:
+      - noctis
+    networks:
+      - noctis-network
+    profiles:
+      - proxy
+
+  # Celery Worker (Optional - for background tasks)
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.ubuntu24.04
+    container_name: noctis-celery-worker
+    restart: unless-stopped
+    command: celery -A noctisview worker --loglevel=info
+    environment:
+      - DEBUG=False
+      - DB_NAME=noctis_db
+      - DB_USER=noctis_user
+      - DB_PASSWORD=${DB_PASSWORD:-your_secure_password_here}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/2
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    volumes:
+      - noctis_media:/opt/noctis/media
+      - noctis_logs:/opt/noctis/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - noctis-network
+    profiles:
+      - worker
+
+  # Celery Beat (Optional - for scheduled tasks)
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.ubuntu24.04
+    container_name: noctis-celery-beat
+    restart: unless-stopped
+    command: celery -A noctisview beat --loglevel=info
+    environment:
+      - DEBUG=False
+      - DB_NAME=noctis_db
+      - DB_USER=noctis_user
+      - DB_PASSWORD=${DB_PASSWORD:-your_secure_password_here}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/2
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    volumes:
+      - noctis_media:/opt/noctis/media
+      - noctis_logs:/opt/noctis/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - noctis-network
+    profiles:
+      - worker
+
+  # Backup Service (Optional)
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.ubuntu24.04
+    container_name: noctis-backup
+    restart: "no"
+    command: /opt/noctis/backup.sh
+    environment:
+      - DB_NAME=noctis_db
+      - DB_USER=noctis_user
+      - DB_PASSWORD=${DB_PASSWORD:-your_secure_password_here}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+    volumes:
+      - noctis_media:/opt/noctis/media:ro
+      - ./backup:/backup
+    depends_on:
+      - postgres
+    networks:
+      - noctis-network
+    profiles:
+      - backup
+
+  # Monitoring (Optional - for system monitoring)
+  monitoring:
+    image: prom/prometheus:latest
+    container_name: noctis-monitoring
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - noctis-network
+    profiles:
+      - monitoring
+
+  # Grafana (Optional - for visualization)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: noctis-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - monitoring
+    networks:
+      - noctis-network
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  noctis_media:
+    driver: local
+  noctis_logs:
+    driver: local
+  noctis_static:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  noctis-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
