@@ -3,10 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Noctis - Advanced Medical Imaging</title>
+    <title>Noctis - Premium Medical Imaging Platform</title>
     {% load static %}
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --accent-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --success-gradient: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            --warning-gradient: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #1a1a2e;
+            --bg-tertiary: #16213e;
+            --bg-glass: rgba(255, 255, 255, 0.05);
+            --bg-glass-hover: rgba(255, 255, 255, 0.1);
+            
+            --text-primary: #ffffff;
+            --text-secondary: #b3b3b3;
+            --text-muted: #666666;
+            
+            --border-color: rgba(255, 255, 255, 0.1);
+            --shadow-primary: 0 20px 60px rgba(0, 0, 0, 0.5);
+            --shadow-hover: 0 30px 80px rgba(0, 0, 0, 0.7);
+            
+            --border-radius: 16px;
+            --border-radius-lg: 24px;
+            --transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -14,87 +43,176 @@
         }
         
         body {
-            background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
-            color: #e0e0e0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            background-image: 
+                radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.1) 0%, transparent 50%);
+            color: var(--text-primary);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="%23ffffff" stroke-width="0.5" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+            pointer-events: none;
+            z-index: 0;
         }
         
         .container {
-            text-align: center;
-            padding: 40px;
-            max-width: 1000px;
-            width: 100%;
+            position: relative;
+            z-index: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
         
         .user-info {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 10px 15px;
-            border-radius: 8px;
+            position: fixed;
+            top: 30px;
+            right: 30px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            padding: 15px 25px;
+            border-radius: var(--border-radius);
             font-size: 14px;
+            font-weight: 500;
+            z-index: 1000;
+            transition: var(--transition);
+        }
+
+        .user-info:hover {
+            background: var(--bg-glass-hover);
+            transform: translateY(-2px);
         }
         
         .user-info a {
-            color: #00ff00;
+            color: #4facfe;
             text-decoration: none;
-            margin-left: 10px;
+            margin-left: 12px;
+            font-weight: 600;
+            transition: var(--transition);
         }
         
         .user-info a:hover {
-            text-decoration: underline;
+            color: #00f2fe;
+            text-shadow: 0 0 20px rgba(79, 172, 254, 0.5);
+        }
+        
+        .hero-section {
+            text-align: center;
+            margin-bottom: 80px;
+        }
+
+        .logo-container {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 30px;
         }
         
         .logo {
-            font-size: 72px;
-            color: #00ff00;
-            margin-bottom: 20px;
-            animation: pulse 2s infinite;
+            font-size: 96px;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: logoFloat 6s ease-in-out infinite;
+            position: relative;
+            z-index: 2;
+        }
+
+        .logo::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 120px;
+            height: 120px;
+            background: var(--accent-gradient);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            filter: blur(40px);
+            opacity: 0.3;
+            z-index: -1;
+            animation: pulse 4s ease-in-out infinite;
         }
         
+        @keyframes logoFloat {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            25% { transform: translateY(-10px) rotate(2deg); }
+            50% { transform: translateY(-5px) rotate(0deg); }
+            75% { transform: translateY(-15px) rotate(-2deg); }
+        }
+
         @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
+            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.5; }
         }
         
         h1 {
-            font-size: 48px;
+            font-size: 72px;
+            font-weight: 800;
             margin-bottom: 20px;
-            background: linear-gradient(45deg, #00ff00, #0099ff);
+            background: var(--primary-gradient);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.1;
+            letter-spacing: -2px;
         }
         
         .subtitle {
-            font-size: 24px;
-            color: #999;
-            margin-bottom: 60px;
+            font-size: 28px;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            font-weight: 300;
+            letter-spacing: 0.5px;
+        }
+
+        .description {
+            font-size: 18px;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 0 auto 60px;
+            line-height: 1.6;
         }
         
-        .actions {
+        .main-actions {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 30px;
-            margin-bottom: 60px;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 40px;
+            margin-bottom: 80px;
+            max-width: 1000px;
+            margin-left: auto;
+            margin-right: auto;
         }
         
         .action-card {
-            background: rgba(255, 255, 255, 0.05);
-            border: 2px solid transparent;
-            border-radius: 16px;
-            padding: 40px 30px;
-            transition: all 0.3s ease;
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-lg);
+            padding: 50px 40px;
+            transition: var(--transition);
             cursor: pointer;
             position: relative;
             overflow: hidden;
+            text-align: center;
         }
-        
+
         .action-card::before {
             content: '';
             position: absolute;
@@ -102,92 +220,77 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(45deg, rgba(0, 255, 0, 0.1), rgba(0, 153, 255, 0.1));
+            background: var(--primary-gradient);
             opacity: 0;
-            transition: opacity 0.3s ease;
+            transition: var(--transition);
+        }
+
+        .action-card::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            transition: var(--transition);
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
         }
         
         .action-card:hover {
-            transform: translateY(-10px);
-            border-color: #00ff00;
-            box-shadow: 0 10px 30px rgba(0, 255, 0, 0.3);
+            transform: translateY(-20px);
+            box-shadow: var(--shadow-hover);
+            border-color: rgba(255, 255, 255, 0.3);
         }
-        
+
         .action-card:hover::before {
-            opacity: 1;
+            opacity: 0.1;
+        }
+
+        .action-card:hover::after {
+            width: 300px;
+            height: 300px;
         }
         
         .action-icon {
-            font-size: 64px;
-            margin-bottom: 20px;
-            color: #00ff00;
+            font-size: 80px;
+            margin-bottom: 30px;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            position: relative;
+            z-index: 2;
+            display: block;
         }
         
         .action-title {
-            font-size: 24px;
-            margin-bottom: 10px;
-            color: #fff;
+            font-size: 32px;
+            margin-bottom: 15px;
+            color: var(--text-primary);
+            font-weight: 700;
+            position: relative;
+            z-index: 2;
         }
         
         .action-desc {
             font-size: 16px;
-            color: #ccc;
-            line-height: 1.5;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            position: relative;
+            z-index: 2;
         }
-        
-        .admin-section {
-            margin-top: 40px;
-            padding-top: 40px;
-            border-top: 1px solid #333;
+
+        .launch-section {
+            text-align: center;
+            margin: 60px 0;
         }
-        
-        .admin-section h2 {
-            color: #ff9900;
-            margin-bottom: 30px;
-            font-size: 28px;
-        }
-        
-        .admin-actions {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-        }
-        
-        .admin-card {
-            background: rgba(255, 153, 0, 0.1);
-            border: 2px solid #ff9900;
-            border-radius: 12px;
-            padding: 30px 20px;
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-        
-        .admin-card:hover {
-            background: rgba(255, 153, 0, 0.2);
-            transform: translateY(-5px);
-            box-shadow: 0 8px 20px rgba(255, 153, 0, 0.3);
-        }
-        
-        .admin-card .action-icon {
-            color: #ff9900;
-            font-size: 48px;
-            margin-bottom: 15px;
-        }
-        
-        .admin-card .action-title {
-            font-size: 18px;
-            color: #ff9900;
-        }
-        
-        .admin-card .action-desc {
-            font-size: 14px;
-        }
-        
-        .viewer-options {
+
+        .launch-buttons {
             display: flex;
             gap: 30px;
             justify-content: center;
-            margin-top: 30px;
             flex-wrap: wrap;
         }
         
@@ -199,184 +302,456 @@
             border: none;
             border-radius: 50px;
             font-size: 18px;
-            font-weight: bold;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: var(--transition);
             text-decoration: none;
-            min-width: 200px;
+            min-width: 220px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .launch-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: var(--transition);
+        }
+
+        .launch-btn:hover::before {
+            left: 100%;
         }
         
-        .launch-btn.standard {
-            background: linear-gradient(45deg, #00ff00, #00cc00);
-            color: #000;
-            box-shadow: 0 4px 20px rgba(0, 255, 0, 0.4);
+        .launch-btn.primary {
+            background: var(--accent-gradient);
+            color: var(--text-primary);
+            box-shadow: 0 10px 30px rgba(79, 172, 254, 0.4);
         }
         
-        .launch-btn.standard:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 30px rgba(0, 255, 0, 0.6);
+        .launch-btn.primary:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(79, 172, 254, 0.6);
         }
         
-        .launch-btn.advanced {
-            background: linear-gradient(45deg, #0088ff, #0066cc);
-            color: #fff;
-            box-shadow: 0 4px 20px rgba(0, 136, 255, 0.4);
+        .launch-btn.secondary {
+            background: var(--success-gradient);
+            color: var(--text-primary);
+            box-shadow: 0 10px 30px rgba(67, 233, 123, 0.4);
         }
         
-        .launch-btn.advanced:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 30px rgba(0, 136, 255, 0.6);
+        .launch-btn.secondary:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(67, 233, 123, 0.6);
         }
         
         .launch-btn i {
-            margin-right: 10px;
+            margin-right: 12px;
             font-size: 20px;
         }
         
-        .features {
-            display: flex;
-            justify-content: center;
-            gap: 40px;
-            margin-top: 60px;
-            flex-wrap: wrap;
+        .admin-section {
+            margin-top: 80px;
+            padding-top: 60px;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .admin-section h2 {
+            text-align: center;
+            font-size: 36px;
+            margin-bottom: 50px;
+            background: var(--warning-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
+        }
+        
+        .admin-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        .admin-card {
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(250, 112, 154, 0.3);
+            border-radius: var(--border-radius);
+            padding: 40px 30px;
+            transition: var(--transition);
+            cursor: pointer;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .admin-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--warning-gradient);
+            opacity: 0;
+            transition: var(--transition);
+        }
+        
+        .admin-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(250, 112, 154, 0.3);
+            border-color: rgba(250, 112, 154, 0.6);
+        }
+
+        .admin-card:hover::before {
+            opacity: 0.1;
+        }
+        
+        .admin-card .action-icon {
+            background: var(--warning-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+        
+        .admin-card .action-title {
+            font-size: 20px;
+            color: var(--text-primary);
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .admin-card .action-desc {
+            font-size: 14px;
+            color: var(--text-secondary);
+            position: relative;
+            z-index: 2;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 30px;
+            margin-top: 80px;
+            max-width: 1000px;
+            margin-left: auto;
+            margin-right: auto;
         }
         
         .feature {
             text-align: center;
+            padding: 30px 20px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            transition: var(--transition);
+        }
+
+        .feature:hover {
+            transform: translateY(-5px);
+            border-color: rgba(255, 255, 255, 0.3);
         }
         
         .feature i {
-            font-size: 32px;
-            color: #0099ff;
-            margin-bottom: 10px;
+            font-size: 40px;
+            background: var(--secondary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 15px;
+            display: block;
         }
         
         .feature p {
-            font-size: 14px;
-            color: #ccc;
+            font-size: 16px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px 15px;
+            }
+
+            h1 {
+                font-size: 48px;
+            }
+
+            .subtitle {
+                font-size: 20px;
+            }
+
+            .main-actions {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+
+            .launch-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .features-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .logo {
+                font-size: 72px;
+            }
+
+            h1 {
+                font-size: 36px;
+            }
+
+            .subtitle {
+                font-size: 18px;
+            }
+
+            .action-card {
+                padding: 30px 20px;
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Smooth scrolling */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Loading animation */
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+
+        .loading.hide {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 3px solid var(--border-color);
+            border-top: 3px solid #4facfe;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
+    <div class="loading" id="loading">
+        <div class="loading-spinner"></div>
+    </div>
+
     <div class="user-info">
         {% if user.is_authenticated %}
-            Welcome, {{ user.get_full_name|default:user.username }}
-            <a href="{% url 'logout' %}">Logout</a>
+            <i class="fas fa-user-circle"></i> {{ user.get_full_name|default:user.username }}
+            <a href="{% url 'logout' %}"><i class="fas fa-sign-out-alt"></i> Logout</a>
         {% else %}
-            <a href="{% url 'login' %}">Login</a>
+            <a href="{% url 'login' %}"><i class="fas fa-sign-in-alt"></i> Login</a>
         {% endif %}
     </div>
     
     <div class="container">
-        <div class="logo">
-            <i class="fas fa-x-ray"></i>
+        <div class="hero-section">
+            <div class="logo-container">
+                <div class="logo">
+                    <i class="fas fa-brain"></i>
+                </div>
+            </div>
+            <h1>Noctis</h1>
+            <p class="subtitle">Premium Medical Imaging Platform</p>
+            <p class="description">
+                Experience the future of medical imaging with our advanced DICOM viewer, 
+                AI-powered analysis, 3D reconstruction, and comprehensive worklist management.
+            </p>
         </div>
-        <h1>Noctis</h1>
-        <p class="subtitle">Advanced Medical Imaging Platform</p>
         
-        <div class="actions">
-            <div class="action-card" onclick="window.location.href='/worklist/'">
+        <div class="main-actions">
+            <div class="action-card" onclick="smoothNavigate('/worklist/')">
                 <div class="action-icon">
                     <i class="fas fa-list-alt"></i>
                 </div>
-                <h3 class="action-title">Worklist</h3>
-                <p class="action-desc">Access patient worklist, manage studies, and view reports</p>
+                <h3 class="action-title">Smart Worklist</h3>
+                <p class="action-desc">Advanced patient management with real-time updates, intelligent filtering, and streamlined workflow automation</p>
             </div>
             
-            <div class="action-card" onclick="launchViewer()">
+            <div class="action-card" onclick="smoothNavigate('/viewer/')">
                 <div class="action-icon">
                     <i class="fas fa-brain"></i>
                 </div>
                 <h3 class="action-title">DICOM Viewer Pro</h3>
-                <p class="action-desc">Professional DICOM viewer with AI, 3D reconstruction, and advanced tools</p>
+                <p class="action-desc">Professional medical imaging with AI analysis, 3D reconstruction, advanced measurements, and precision tools</p>
             </div>
         </div>
         
-        <div class="viewer-options">
-            <a href="/viewer/" class="launch-btn advanced">
-                <i class="fas fa-brain"></i> Launch DICOM Viewer Pro
-            </a>
+        <div class="launch-section">
+            <div class="launch-buttons">
+                <a href="/viewer/" class="launch-btn primary">
+                    <i class="fas fa-play"></i> Launch Viewer Pro
+                </a>
+                <a href="/worklist/" class="launch-btn secondary">
+                    <i class="fas fa-clipboard-list"></i> Open Worklist
+                </a>
+            </div>
         </div>
         
         {% if user.is_superuser %}
         <div class="admin-section">
-            <h2><i class="fas fa-cog"></i> Administration</h2>
+            <h2><i class="fas fa-crown"></i> Administrative Control</h2>
             <div class="admin-actions">
-                <div class="admin-card" onclick="window.location.href='{% url "viewer:facility_list" %}'">
+                <div class="admin-card" onclick="smoothNavigate('{% url "viewer:facility_list" %}')">
                     <div class="action-icon">
                         <i class="fas fa-hospital"></i>
                     </div>
-                    <h3 class="action-title">Manage Facilities</h3>
-                    <p class="action-desc">Add and manage healthcare facilities</p>
+                    <h3 class="action-title">Facility Management</h3>
+                    <p class="action-desc">Configure and manage healthcare facilities</p>
                 </div>
                 
-                <div class="admin-card" onclick="window.location.href='{% url "viewer:radiologist_list" %}'">
+                <div class="admin-card" onclick="smoothNavigate('{% url "viewer:radiologist_list" %}')">
                     <div class="action-icon">
                         <i class="fas fa-user-md"></i>
                     </div>
-                    <h3 class="action-title">Manage Radiologists</h3>
-                    <p class="action-desc">Add and manage radiologist accounts</p>
+                    <h3 class="action-title">User Management</h3>
+                    <p class="action-desc">Manage radiologists and system users</p>
                 </div>
                 
-                <div class="admin-card" onclick="window.location.href='/admin/'">
+                <div class="admin-card" onclick="smoothNavigate('/admin/')">
                     <div class="action-icon">
                         <i class="fas fa-database"></i>
                     </div>
-                    <h3 class="action-title">Django Admin</h3>
-                    <p class="action-desc">Access full system administration</p>
+                    <h3 class="action-title">System Administration</h3>
+                    <p class="action-desc">Advanced system configuration and monitoring</p>
                 </div>
             </div>
         </div>
         {% endif %}
         
-        <div class="features">
+        <div class="features-grid">
             <div class="feature">
-                <i class="fas fa-ruler"></i>
-                <p>Advanced Measurements</p>
+                <i class="fas fa-ruler-combined"></i>
+                <p>Precision Measurements</p>
             </div>
             <div class="feature">
                 <i class="fas fa-robot"></i>
-                <p>AI Analysis</p>
+                <p>AI-Powered Analysis</p>
             </div>
             <div class="feature">
                 <i class="fas fa-cube"></i>
                 <p>3D Reconstruction</p>
             </div>
             <div class="feature">
-                <i class="fas fa-circle-notch"></i>
+                <i class="fas fa-chart-line"></i>
                 <p>Hounsfield Units</p>
             </div>
             <div class="feature">
                 <i class="fas fa-edit"></i>
-                <p>Annotations</p>
+                <p>Smart Annotations</p>
             </div>
             <div class="feature">
                 <i class="fas fa-calculator"></i>
-                <p>Volume Calculations</p>
+                <p>Volume Analysis</p>
             </div>
         </div>
     </div>
     
     <script>
-        function launchViewer() {
-            // Launch DICOM Viewer Pro in same window
-            window.location.href = '/viewer/';
+        // Smooth navigation with loading states
+        function smoothNavigate(url) {
+            document.body.style.opacity = '0.8';
+            setTimeout(() => {
+                window.location.href = url;
+            }, 200);
         }
-        
-        // Add hover effects to cards
-        document.querySelectorAll('.action-card, .admin-card').forEach(card => {
+
+        // Enhanced hover effects
+        document.querySelectorAll('.action-card, .admin-card, .feature').forEach(card => {
             card.addEventListener('mouseenter', function() {
-                this.style.background = 'rgba(255, 255, 255, 0.1)';
+                this.style.transform = this.classList.contains('feature') ? 'translateY(-5px)' : 'translateY(-20px)';
             });
             
             card.addEventListener('mouseleave', function() {
-                if (this.classList.contains('admin-card')) {
-                    this.style.background = 'rgba(255, 153, 0, 0.1)';
-                } else {
-                    this.style.background = 'rgba(255, 255, 255, 0.05)';
-                }
+                this.style.transform = 'translateY(0)';
             });
         });
+
+        // Hide loading screen when page loads
+        window.addEventListener('load', function() {
+            const loading = document.getElementById('loading');
+            loading.classList.add('hide');
+            setTimeout(() => {
+                loading.style.display = 'none';
+            }, 500);
+        });
+
+        // Add parallax effect to background elements
+        document.addEventListener('mousemove', function(e) {
+            const mouseX = e.clientX / window.innerWidth;
+            const mouseY = e.clientY / window.innerHeight;
+            
+            document.querySelectorAll('.action-card').forEach((card, index) => {
+                const xPos = (mouseX - 0.5) * (index % 2 === 0 ? 20 : -20);
+                const yPos = (mouseY - 0.5) * (index % 2 === 0 ? 10 : -10);
+                card.style.transform = `translate(${xPos}px, ${yPos}px)`;
+            });
+        });
+
+        // Add smooth scroll behavior for internal links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+
+        // Add keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && e.target.classList.contains('action-card')) {
+                e.target.click();
+            }
+        });
+
+        // Performance optimization: Reduce animations on low-performance devices
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+        if (prefersReducedMotion.matches) {
+            document.querySelectorAll('*').forEach(el => {
+                el.style.animation = 'none';
+                el.style.transition = 'none';
+            });
+        }
     </script>
 </body>
 </html>
