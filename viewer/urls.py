@@ -93,4 +93,11 @@ urlpatterns = [
     # Settings functionality
     path('api/settings/save/', views.save_viewer_settings, name='save_viewer_settings'),
     path('api/settings/', views.get_viewer_settings, name='get_viewer_settings'),
+    
+    # Reconstruction functionality
+    path('api/series/<int:series_id>/mip/', views.generate_mip, name='generate_mip'),
+    path('api/series/<int:series_id>/mpr/', views.generate_mpr, name='generate_mpr'),
+    path('api/series/<int:series_id>/bone-reconstruction/', views.generate_bone_reconstruction, name='generate_bone_reconstruction'),
+    path('api/series/<int:series_id>/volume-rendering/', views.generate_volume_rendering, name='generate_volume_rendering'),
+    path('api/series/<int:series_id>/volume-measurement/', views.calculate_volume_measurement, name='calculate_volume_measurement'),
 ]

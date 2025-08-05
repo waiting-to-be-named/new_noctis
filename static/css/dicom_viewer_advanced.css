@@ -1430,3 +1430,121 @@ body {
     grid-column: 1 / -1;
     padding: 40px;
 }
+
+/* Viewport Layout Styles */
+.layout-1x1 .dicom-canvas-advanced {
+    width: 100% !important;
+    height: 100% !important;
+    left: 0 !important;
+    top: 0 !important;
+}
+
+.layout-1x2 .dicom-canvas-advanced,
+.layout-1x2 #dicom-canvas-secondary {
+    width: 50% !important;
+    height: 100% !important;
+    top: 0 !important;
+}
+
+.layout-1x2 .dicom-canvas-advanced {
+    left: 0 !important;
+}
+
+.layout-1x2 #dicom-canvas-secondary {
+    left: 50% !important;
+}
+
+.layout-2x2 .dicom-canvas-advanced,
+.layout-2x2 [id^="dicom-canvas-quad"] {
+    width: 50% !important;
+    height: 50% !important;
+}
+
+.layout-2x2 .dicom-canvas-advanced {
+    left: 0 !important;
+    top: 0 !important;
+}
+
+.layout-2x2 #dicom-canvas-quad-2 {
+    left: 50% !important;
+    top: 0 !important;
+}
+
+.layout-2x2 #dicom-canvas-quad-3 {
+    left: 0 !important;
+    top: 50% !important;
+}
+
+.layout-2x2 #dicom-canvas-quad-4 {
+    left: 50% !important;
+    top: 50% !important;
+}
+
+/* MPR and Reconstruction Overlay Styles */
+.mpr-overlay, .volume-overlay, .mip-overlay {
+    border: 1px solid #444;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.mpr-overlay input[type="range"],
+.volume-overlay input[type="range"],
+.mip-overlay input[type="range"] {
+    width: 100px;
+    margin: 5px 0;
+}
+
+.mpr-overlay select,
+.volume-overlay select {
+    background: #333;
+    color: white;
+    border: 1px solid #555;
+    padding: 2px 5px;
+    border-radius: 3px;
+}
+
+.mpr-overlay button,
+.volume-overlay button,
+.mip-overlay button {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.mpr-overlay button:hover,
+.volume-overlay button:hover,
+.mip-overlay button:hover {
+    background: #0056b3;
+}
+
+/* Volume Results Overlay */
+#volume-results {
+    border: 2px solid #007bff;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+}
+
+#volume-results strong {
+    color: #007bff;
+}
+
+#close-volume-results:hover {
+    background: #cc0000 !important;
+}
+
+/* Layout button active states */
+.viewport-btn.active {
+    background: #007bff !important;
+    color: white !important;
+    border-color: #007bff !important;
+}
+
+/* Enhanced tool button styles */
+.tool-btn-advanced.active {
+    background: #007bff !important;
+    color: white !important;
+    border-color: #007bff !important;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+}
