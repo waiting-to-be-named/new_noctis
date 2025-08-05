@@ -272,17 +272,123 @@
                 const format = document.querySelector('input[name="exportFormat"]:checked')?.value || 'dicom';
                 const includeMeasurements = document.getElementById('includeMeasurements')?.checked;
                 const includeAnnotations = document.getElementById('includeAnnotations')?.checked;
+                const includeMetadata = document.getElementById('includeMetadata')?.checked;
                 
                 showNotification(`Exporting as ${format.toUpperCase()}...`, 'info');
                 
-                // Simulate export for now
-                setTimeout(() => {
-                    showNotification('Export completed successfully', 'success');
+                try {
+                    // Get current study ID from the page
+                    const studyId = getCurrentStudyId();
+                    if (!studyId) {
+                        throw new Error('No study selected for export');
+                    }
+                    
+                    const response = await fetch(`/viewer/api/studies/${studyId}/export/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCSRFToken()
+                        },
+                        body: JSON.stringify({
+                            format: format,
+                            include_measurements: includeMeasurements,
+                            include_annotations: includeAnnotations,
+                            include_metadata: includeMetadata
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        // If response is a file (ZIP, PDF), handle download
+                        const contentType = response.headers.get('content-type');
+                        if (contentType && (contentType.includes('application/zip') || contentType.includes('application/pdf'))) {
+                            const blob = await response.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.style.display = 'none';
+                            a.href = url;
+                            
+                            // Get filename from Content-Disposition header or use default
+                            const disposition = response.headers.get('Content-Disposition');
+                            if (disposition && disposition.includes('filename=')) {
+                                const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+                                if (filenameMatch) {
+                                    a.download = filenameMatch[1];
+                                }
+                            } else {
+                                a.download = `export_${format}_${Date.now()}.${format === 'pdf' ? 'pdf' : 'zip'}`;
+                            }
+                            
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                            
+                            showNotification('Export completed successfully', 'success');
+                        } else {
+                            const data = await response.json();
+                            if (data.success) {
+                                showNotification('Export completed successfully', 'success');
+                            } else {
+                                throw new Error(data.error || 'Export failed');
+                            }
+                        }
+                    } else {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || `Export failed with status ${response.status}`);
+                    }
+                    
                     const modal = bootstrap.Modal.getInstance(document.getElementById('exportModal'));
                     if (modal) modal.hide();
-                }, 2000);
+                    
+                } catch (error) {
+                    console.error('Export error:', error);
+                    showNotification(`Export failed: ${error.message}`, 'error');
+                }
             };
         }
+    }
+    
+    function getCurrentStudyId() {
+        // Try to get study ID from various possible sources
+        const urlParams = new URLSearchParams(window.location.search);
+        let studyId = urlParams.get('study_id') || urlParams.get('study');
+        
+        if (!studyId) {
+            // Try to get from URL path
+            const pathParts = window.location.pathname.split('/');
+            const studyIndex = pathParts.indexOf('study');
+            if (studyIndex !== -1 && studyIndex + 1 < pathParts.length) {
+                studyId = pathParts[studyIndex + 1];
+            }
+        }
+        
+        if (!studyId) {
+            // Try to get from global variable if set
+            if (window.currentStudyId) {
+                studyId = window.currentStudyId;
+            }
+        }
+        
+        if (!studyId) {
+            // Try to get from data attribute
+            const container = document.querySelector('[data-study-id]');
+            if (container) {
+                studyId = container.getAttribute('data-study-id');
+            }
+        }
+        
+        return studyId;
+    }
+    
+    function getCSRFToken() {
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === 'csrftoken') {
+                return value;
+            }
+        }
+        return '';
     }
     
     function fixSettingsFunctionality() {
@@ -314,29 +420,142 @@
     function setupSettingsHandlers() {
         const saveSettingsBtn = document.getElementById('saveSettings');
         if (saveSettingsBtn) {
-            saveSettingsBtn.onclick = () => {
-                // Gather settings
+            saveSettingsBtn.onclick = async () => {
+                // Collect all settings
                 const settings = {
-                    defaultWindowPreset: document.getElementById('defaultWindowPreset')?.value,
-                    enableSmoothing: document.getElementById('enableSmoothing')?.checked,
-                    showOverlays: document.getElementById('showOverlays')?.checked,
-                    cacheSize: document.getElementById('cacheSize')?.value,
-                    enableGPUAcceleration: document.getElementById('enableGPUAcceleration')?.checked
+                    defaultWindowPreset: document.getElementById('defaultWindowPreset')?.value || 'soft',
+                    enableSmoothing: document.getElementById('enableSmoothing')?.checked || false,
+                    showOverlays: document.getElementById('showOverlays')?.checked || true,
+                    cacheSize: document.getElementById('cacheSize')?.value || 500,
+                    enableGPUAcceleration: document.getElementById('enableGPUAcceleration')?.checked || false
                 };
                 
-                // Save to localStorage
-                localStorage.setItem('dicomViewerSettings', JSON.stringify(settings));
+                showNotification('Saving settings...', 'info');
                 
-                // Apply settings
-                if (window.advancedViewer) {
-                    window.advancedViewer.settings = settings;
+                try {
+                    const response = await fetch('/viewer/api/settings/save/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCSRFToken()
+                        },
+                        body: JSON.stringify(settings)
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        showNotification('Settings saved successfully', 'success');
+                        
+                        // Apply settings immediately
+                        applySettings(settings);
+                        
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+                        if (modal) modal.hide();
+                    } else {
+                        throw new Error(data.error || 'Failed to save settings');
+                    }
+                    
+                } catch (error) {
+                    console.error('Settings save error:', error);
+                    showNotification(`Failed to save settings: ${error.message}`, 'error');
                 }
-                
-                showNotification('Settings saved successfully', 'success');
-                const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
-                if (modal) modal.hide();
             };
         }
+        
+        // Load settings on page load
+        loadUserSettings();
+    }
+    
+    async function loadUserSettings() {
+        try {
+            const response = await fetch('/viewer/api/settings/');
+            const data = await response.json();
+            
+            if (data.success && data.settings) {
+                applySettings(data.settings);
+                populateSettingsForm(data.settings);
+            }
+        } catch (error) {
+            console.error('Error loading user settings:', error);
+        }
+    }
+    
+    function populateSettingsForm(settings) {
+        // Populate form fields with saved settings
+        const defaultWindowPreset = document.getElementById('defaultWindowPreset');
+        if (defaultWindowPreset && settings.default_window_preset) {
+            defaultWindowPreset.value = settings.default_window_preset;
+        }
+        
+        const enableSmoothing = document.getElementById('enableSmoothing');
+        if (enableSmoothing) {
+            enableSmoothing.checked = settings.enable_smoothing || false;
+        }
+        
+        const showOverlays = document.getElementById('showOverlays');
+        if (showOverlays) {
+            showOverlays.checked = settings.show_overlays !== false; // default to true
+        }
+        
+        const cacheSize = document.getElementById('cacheSize');
+        const cacheSizeValue = document.getElementById('cacheSizeValue');
+        if (cacheSize && settings.cache_size) {
+            cacheSize.value = settings.cache_size;
+            if (cacheSizeValue) {
+                cacheSizeValue.textContent = `${settings.cache_size} MB`;
+            }
+        }
+        
+        const enableGPUAcceleration = document.getElementById('enableGPUAcceleration');
+        if (enableGPUAcceleration) {
+            enableGPUAcceleration.checked = settings.enable_gpu_acceleration || false;
+        }
+        
+        // Update cache size display when slider changes
+        if (cacheSize && cacheSizeValue) {
+            cacheSize.addEventListener('input', (e) => {
+                cacheSizeValue.textContent = `${e.target.value} MB`;
+            });
+        }
+    }
+    
+    function applySettings(settings) {
+        // Apply settings to the viewer
+        if (window.advancedViewer) {
+            // Apply window preset
+            if (settings.default_window_preset || settings.defaultWindowPreset) {
+                const preset = settings.default_window_preset || settings.defaultWindowPreset;
+                window.advancedViewer.applyWindowPreset(preset);
+            }
+            
+            // Apply image smoothing
+            const smoothing = settings.enable_smoothing || settings.enableSmoothing;
+            if (smoothing !== undefined) {
+                window.advancedViewer.setImageSmoothing(smoothing);
+            }
+            
+            // Apply overlay visibility
+            const overlays = settings.show_overlays !== undefined ? settings.show_overlays : settings.showOverlays;
+            if (overlays !== undefined) {
+                window.advancedViewer.setOverlayVisibility(overlays);
+            }
+            
+            // Apply cache size
+            const cacheSize = settings.cache_size || settings.cacheSize;
+            if (cacheSize) {
+                window.advancedViewer.setCacheSize(cacheSize);
+            }
+            
+            // Apply GPU acceleration
+            const gpuAccel = settings.enable_gpu_acceleration || settings.enableGPUAcceleration;
+            if (gpuAccel !== undefined) {
+                window.advancedViewer.setGPUAcceleration(gpuAccel);
+            }
+        }
+        
+        // Store in localStorage as backup
+        localStorage.setItem('dicomViewerSettings', JSON.stringify(settings));
     }
     
     function fixImageDisplay() {

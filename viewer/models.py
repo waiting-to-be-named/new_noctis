@@ -1906,3 +1906,18 @@ class StudyComparison(models.Model):
     
     def __str__(self):
         return f"Comparison: {self.primary_study.patient_name} vs {self.comparison_study.patient_name}"
+
+
+class UserProfile(models.Model):
+    """User profile for storing viewer settings and preferences"""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='viewer_profile')
+    settings = models.JSONField(default=dict, blank=True, help_text="User's viewer settings and preferences")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "User Profile"
+        verbose_name_plural = "User Profiles"
+    
+    def __str__(self):
+        return f"{self.user.username} Profile"

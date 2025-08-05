@@ -86,4 +86,18 @@ urlpatterns = [
     path('api/worklist/create/', views.create_worklist_entry, name='create_worklist_entry'),
     path('api/worklist/<int:entry_id>/update/', views.update_worklist_entry, name='update_worklist_entry'),
     path('api/test/', views.test_viewer_api, name='test_viewer_api'),
+    
+    # Export functionality
+    path('api/studies/<int:study_id>/export/', views.export_study, name='export_study'),
+    
+    # Settings functionality
+    path('api/settings/save/', views.save_viewer_settings, name='save_viewer_settings'),
+    path('api/settings/', views.get_viewer_settings, name='get_viewer_settings'),
+    
+    # Reconstruction functionality
+    path('api/series/<int:series_id>/mip/', views.generate_mip, name='generate_mip'),
+    path('api/series/<int:series_id>/mpr/', views.generate_mpr, name='generate_mpr'),
+    path('api/series/<int:series_id>/bone-reconstruction/', views.generate_bone_reconstruction, name='generate_bone_reconstruction'),
+    path('api/series/<int:series_id>/volume-rendering/', views.generate_volume_rendering, name='generate_volume_rendering'),
+    path('api/series/<int:series_id>/volume-measurement/', views.calculate_volume_measurement, name='calculate_volume_measurement'),
 ]

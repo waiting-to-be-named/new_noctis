@@ -4523,3 +4523,837 @@ def test_viewer_api(request):
             'status': 'error',
             'message': str(e)
         }, status=500)
+
+@login_required
+@require_http_methods(['POST'])
+def export_study(request, study_id):
+    """Export study in various formats"""
+    try:
+        study = get_object_or_404(DicomStudy, id=study_id)
+        
+        # Check permissions
+        if not (request.user.is_superuser or 
+                request.user.groups.filter(name__in=['Radiologists', 'Technicians', 'Administrators']).exists() or
+                (hasattr(request.user, 'facility') and request.user.facility == study.facility)):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+        data = json.loads(request.body) if request.body else {}
+        export_format = data.get('format', 'dicom')
+        include_measurements = data.get('include_measurements', True)
+        include_annotations = data.get('include_annotations', True)
+        include_metadata = data.get('include_metadata', False)
+        
+        if export_format == 'dicom':
+            return export_dicom_files(study, include_metadata)
+        elif export_format == 'jpeg':
+            return export_images_as_jpeg(study, include_measurements, include_annotations)
+        elif export_format == 'png':
+            return export_images_as_png(study, include_measurements, include_annotations)
+        elif export_format == 'pdf':
+            return export_study_as_pdf(study, include_measurements, include_annotations)
+        else:
+            return JsonResponse({'error': 'Invalid export format'}, status=400)
+            
+    except Exception as e:
+        logger.error(f"Error exporting study {study_id}: {str(e)}")
+        return JsonResponse({'error': f'Export failed: {str(e)}'}, status=500)
+
+
+def export_dicom_files(study, include_metadata=False):
+    """Export original DICOM files as ZIP"""
+    import zipfile
+    import tempfile
+    
+    response = HttpResponse(content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="study_{study.patient_name}_{study.study_date}_dicom.zip"'
+    
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for series in study.series.all():
+                for image in series.images.all():
+                    if image.file_path and os.path.exists(image.file_path):
+                        # Add original DICOM file
+                        filename = f"{series.series_description or 'Series'}_{image.instance_number:04d}.dcm"
+                        zipf.write(image.file_path, filename)
+                        
+                        # Add metadata if requested
+                        if include_metadata:
+                            try:
+                                dicom_data = image.load_dicom_data()
+                                if dicom_data:
+                                    metadata = {}
+                                    for elem in dicom_data:
+                                        try:
+                                            metadata[str(elem.tag)] = str(elem.value)
+                                        except:
+                                            pass
+                                    
+                                    metadata_filename = f"{filename}_metadata.json"
+                                    zipf.writestr(metadata_filename, json.dumps(metadata, indent=2))
+                            except Exception as e:
+                                logger.warning(f"Could not extract metadata for image {image.id}: {e}")
+        
+        tmp.seek(0)
+        response.write(tmp.read())
+    
+    return response
+
+
+def export_images_as_jpeg(study, include_measurements=True, include_annotations=True):
+    """Export processed images as JPEG files in ZIP"""
+    import zipfile
+    import tempfile
+    from PIL import Image as PILImage
+    
+    response = HttpResponse(content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="study_{study.patient_name}_{study.study_date}_jpeg.zip"'
+    
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for series in study.series.all():
+                for image in series.images.all():
+                    try:
+                        # Get processed image data
+                        processed_data = image.get_processed_image_data()
+                        if processed_data and 'image_data' in processed_data:
+                            # Decode base64 image
+                            image_data = base64.b64decode(processed_data['image_data'])
+                            
+                            # Create filename
+                            filename = f"{series.series_description or 'Series'}_{image.instance_number:04d}.jpg"
+                            
+                            # Add to ZIP
+                            zipf.writestr(filename, image_data)
+                            
+                    except Exception as e:
+                        logger.warning(f"Could not process image {image.id} for JPEG export: {e}")
+        
+        tmp.seek(0)
+        response.write(tmp.read())
+    
+    return response
+
+
+def export_images_as_png(study, include_measurements=True, include_annotations=True):
+    """Export processed images as PNG files in ZIP"""
+    import zipfile
+    import tempfile
+    
+    response = HttpResponse(content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="study_{study.patient_name}_{study.study_date}_png.zip"'
+    
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for series in study.series.all():
+                for image in series.images.all():
+                    try:
+                        # Get pixel array
+                        dicom_data = image.load_dicom_data()
+                        if dicom_data and hasattr(dicom_data, 'pixel_array'):
+                            pixel_array = dicom_data.pixel_array
+                            
+                            # Normalize to 8-bit
+                            pixel_array = pixel_array.astype(np.float32)
+                            pixel_array = ((pixel_array - pixel_array.min()) / 
+                                         (pixel_array.max() - pixel_array.min()) * 255).astype(np.uint8)
+                            
+                            # Convert to PIL Image
+                            pil_image = PILImage.fromarray(pixel_array)
+                            
+                            # Save as PNG bytes
+                            png_buffer = io.BytesIO()
+                            pil_image.save(png_buffer, format='PNG')
+                            png_data = png_buffer.getvalue()
+                            
+                            # Create filename
+                            filename = f"{series.series_description or 'Series'}_{image.instance_number:04d}.png"
+                            
+                            # Add to ZIP
+                            zipf.writestr(filename, png_data)
+                            
+                    except Exception as e:
+                        logger.warning(f"Could not process image {image.id} for PNG export: {e}")
+        
+        tmp.seek(0)
+        response.write(tmp.read())
+    
+    return response
+
+
+def export_study_as_pdf(study, include_measurements=True, include_annotations=True):
+    """Export study as PDF report with images"""
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.lib.units import inch
+    from reportlab.lib.utils import ImageReader
+    
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="study_{study.patient_name}_{study.study_date}_report.pdf"'
+    
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    
+    # Title page
+    p.setFont("Helvetica-Bold", 20)
+    p.drawString(inch, height - 2*inch, f"DICOM Study Report")
+    
+    p.setFont("Helvetica", 14)
+    y_position = height - 3*inch
+    
+    # Patient information
+    patient_info = [
+        f"Patient: {study.patient_name}",
+        f"Patient ID: {study.patient_id}",
+        f"Study Date: {study.study_date}",
+        f"Modality: {study.modality}",
+        f"Study Description: {study.study_description or 'N/A'}",
+        f"Facility: {study.facility.name if study.facility else 'N/A'}"
+    ]
+    
+    for info in patient_info:
+        p.drawString(inch, y_position, info)
+        y_position -= 0.3*inch
+    
+    # Add images on new pages
+    for series in study.series.all():
+        for image in series.images.all():
+            try:
+                # Start new page for each image
+                p.showPage()
+                
+                # Add series information
+                p.setFont("Helvetica-Bold", 16)
+                p.drawString(inch, height - inch, f"Series: {series.series_description or 'Unnamed'}")
+                
+                p.setFont("Helvetica", 12)
+                p.drawString(inch, height - 1.5*inch, f"Image {image.instance_number}")
+                
+                # Try to add the image
+                processed_data = image.get_processed_image_data()
+                if processed_data and 'image_data' in processed_data:
+                    try:
+                        # Decode base64 image
+                        image_data = base64.b64decode(processed_data['image_data'])
+                        img_buffer = io.BytesIO(image_data)
+                        
+                        # Add image to PDF (scaled to fit page)
+                        img_width = width - 2*inch
+                        img_height = height - 4*inch
+                        
+                        p.drawImage(ImageReader(img_buffer), inch, height - 4*inch - img_height, 
+                                  width=img_width, height=img_height, preserveAspectRatio=True)
+                        
+                    except Exception as e:
+                        p.drawString(inch, height - 3*inch, f"Could not load image: {str(e)}")
+                
+            except Exception as e:
+                logger.warning(f"Could not add image {image.id} to PDF: {e}")
+    
+    p.save()
+    buffer.seek(0)
+    response.write(buffer.read())
+    
+    return response
+
+
+@login_required
+def save_viewer_settings(request):
+    """Save viewer settings for user"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            
+            # Get or create user profile for settings
+            from django.contrib.auth.models import User
+            user_profile, created = UserProfile.objects.get_or_create(
+                user=request.user,
+                defaults={'settings': {}}
+            )
+            
+            # Update settings
+            current_settings = user_profile.settings or {}
+            current_settings.update({
+                'default_window_preset': data.get('defaultWindowPreset'),
+                'enable_smoothing': data.get('enableSmoothing', False),
+                'show_overlays': data.get('showOverlays', True),
+                'cache_size': data.get('cacheSize', 500),
+                'enable_gpu_acceleration': data.get('enableGPUAcceleration', False),
+                'viewport_layout': data.get('viewportLayout', '1x1')
+            })
+            
+            user_profile.settings = current_settings
+            user_profile.save()
+            
+            return JsonResponse({'success': True, 'message': 'Settings saved successfully'})
+            
+        except Exception as e:
+            logger.error(f"Error saving settings: {str(e)}")
+            return JsonResponse({'error': f'Failed to save settings: {str(e)}'}, status=500)
+    
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+
+@login_required
+def get_viewer_settings(request):
+    """Get viewer settings for user"""
+    try:
+        user_profile = UserProfile.objects.filter(user=request.user).first()
+        settings = user_profile.settings if user_profile else {}
+        
+        # Default settings
+        default_settings = {
+            'default_window_preset': 'soft',
+            'enable_smoothing': False,
+            'show_overlays': True,
+            'cache_size': 500,
+            'enable_gpu_acceleration': False,
+            'viewport_layout': '1x1'
+        }
+        
+        # Merge with user settings
+        default_settings.update(settings)
+        
+        return JsonResponse({'success': True, 'settings': default_settings})
+        
+    except Exception as e:
+        logger.error(f"Error getting settings: {str(e)}")
+        return JsonResponse({'error': f'Failed to get settings: {str(e)}'}, status=500)
+
+@login_required
+@require_http_methods(['POST'])
+def generate_mip(request, series_id):
+    """Generate Maximum Intensity Projection (MIP) for a series"""
+    try:
+        series = get_object_or_404(DicomSeries, id=series_id)
+        
+        # Check permissions
+        if not (request.user.is_superuser or 
+                request.user.groups.filter(name__in=['Radiologists', 'Technicians', 'Administrators']).exists() or
+                (hasattr(request.user, 'facility') and request.user.facility == series.study.facility)):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+        data = json.loads(request.body) if request.body else {}
+        projection_axis = data.get('axis', 'axial')  # axial, sagittal, coronal
+        
+        images = series.images.all().order_by('instance_number')
+        if len(images) < 2:
+            return JsonResponse({'error': 'MIP requires at least 2 images'}, status=400)
+        
+        # Load all DICOM data
+        dicom_arrays = []
+        for image in images:
+            try:
+                dicom_data = image.load_dicom_data()
+                if dicom_data and hasattr(dicom_data, 'pixel_array'):
+                    pixel_array = dicom_data.pixel_array.astype(np.float32)
+                    dicom_arrays.append(pixel_array)
+            except Exception as e:
+                logger.warning(f"Could not load image {image.id} for MIP: {e}")
+        
+        if len(dicom_arrays) < 2:
+            return JsonResponse({'error': 'Not enough valid images for MIP'}, status=400)
+        
+        # Create 3D volume from arrays
+        volume = np.stack(dicom_arrays, axis=0)
+        
+        # Generate MIP based on projection axis
+        if projection_axis == 'axial':
+            mip_array = np.max(volume, axis=0)
+        elif projection_axis == 'sagittal':
+            mip_array = np.max(volume, axis=2)
+        elif projection_axis == 'coronal':
+            mip_array = np.max(volume, axis=1)
+        else:
+            return JsonResponse({'error': 'Invalid projection axis'}, status=400)
+        
+        # Normalize to 8-bit for display
+        mip_array = ((mip_array - mip_array.min()) / (mip_array.max() - mip_array.min()) * 255).astype(np.uint8)
+        
+        # Convert to PIL Image and then to base64
+        pil_image = PILImage.fromarray(mip_array)
+        buffer = io.BytesIO()
+        pil_image.save(buffer, format='PNG')
+        image_data = base64.b64encode(buffer.getvalue()).decode()
+        
+        return JsonResponse({
+            'success': True,
+            'mip_data': f'data:image/png;base64,{image_data}',
+            'projection_axis': projection_axis,
+            'dimensions': {
+                'width': mip_array.shape[1],
+                'height': mip_array.shape[0]
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating MIP for series {series_id}: {str(e)}")
+        return JsonResponse({'error': f'MIP generation failed: {str(e)}'}, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def generate_mpr(request, series_id):
+    """Generate Multi-Planar Reconstruction (MPR) views"""
+    try:
+        series = get_object_or_404(DicomSeries, id=series_id)
+        
+        # Check permissions
+        if not (request.user.is_superuser or 
+                request.user.groups.filter(name__in=['Radiologists', 'Technicians', 'Administrators']).exists() or
+                (hasattr(request.user, 'facility') and request.user.facility == series.study.facility)):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+        data = json.loads(request.body) if request.body else {}
+        slice_position = data.get('slice_position', 0.5)  # 0.0 to 1.0
+        
+        images = series.images.all().order_by('instance_number')
+        if len(images) < 3:
+            return JsonResponse({'error': 'MPR requires at least 3 images'}, status=400)
+        
+        # Load all DICOM data
+        dicom_arrays = []
+        spacing = [1.0, 1.0, 1.0]  # Default spacing
+        
+        for image in images:
+            try:
+                dicom_data = image.load_dicom_data()
+                if dicom_data and hasattr(dicom_data, 'pixel_array'):
+                    pixel_array = dicom_data.pixel_array.astype(np.float32)
+                    dicom_arrays.append(pixel_array)
+                    
+                    # Get spacing information from first image
+                    if len(dicom_arrays) == 1:
+                        if hasattr(dicom_data, 'PixelSpacing'):
+                            spacing[0] = float(dicom_data.PixelSpacing[0])
+                            spacing[1] = float(dicom_data.PixelSpacing[1])
+                        if hasattr(dicom_data, 'SliceThickness'):
+                            spacing[2] = float(dicom_data.SliceThickness)
+                            
+            except Exception as e:
+                logger.warning(f"Could not load image {image.id} for MPR: {e}")
+        
+        if len(dicom_arrays) < 3:
+            return JsonResponse({'error': 'Not enough valid images for MPR'}, status=400)
+        
+        # Create 3D volume
+        volume = np.stack(dicom_arrays, axis=0)
+        
+        # Generate the three orthogonal views
+        axial_slice = int(slice_position * (volume.shape[0] - 1))
+        sagittal_slice = int(slice_position * (volume.shape[2] - 1))
+        coronal_slice = int(slice_position * (volume.shape[1] - 1))
+        
+        # Extract slices
+        axial_view = volume[axial_slice, :, :]
+        sagittal_view = volume[:, :, sagittal_slice]
+        coronal_view = volume[:, coronal_slice, :]
+        
+        # Convert to base64 images
+        mpr_views = {}
+        for view_name, view_data in [('axial', axial_view), ('sagittal', sagittal_view), ('coronal', coronal_view)]:
+            # Normalize
+            normalized = ((view_data - view_data.min()) / (view_data.max() - view_data.min()) * 255).astype(np.uint8)
+            
+            # Convert to PIL and base64
+            pil_image = PILImage.fromarray(normalized)
+            buffer = io.BytesIO()
+            pil_image.save(buffer, format='PNG')
+            image_data = base64.b64encode(buffer.getvalue()).decode()
+            
+            mpr_views[view_name] = {
+                'data': f'data:image/png;base64,{image_data}',
+                'dimensions': {
+                    'width': normalized.shape[1],
+                    'height': normalized.shape[0]
+                }
+            }
+        
+        return JsonResponse({
+            'success': True,
+            'mpr_views': mpr_views,
+            'slice_position': slice_position,
+            'spacing': spacing,
+            'volume_dimensions': {
+                'depth': volume.shape[0],
+                'height': volume.shape[1],
+                'width': volume.shape[2]
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating MPR for series {series_id}: {str(e)}")
+        return JsonResponse({'error': f'MPR generation failed: {str(e)}'}, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def generate_bone_reconstruction(request, series_id):
+    """Generate bone-enhanced 3D reconstruction"""
+    try:
+        series = get_object_or_404(DicomSeries, id=series_id)
+        
+        # Check permissions
+        if not (request.user.is_superuser or 
+                request.user.groups.filter(name__in=['Radiologists', 'Technicians', 'Administrators']).exists() or
+                (hasattr(request.user, 'facility') and request.user.facility == series.study.facility)):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+        data = json.loads(request.body) if request.body else {}
+        bone_threshold = data.get('bone_threshold', 200)  # HU threshold for bone
+        enhancement_factor = data.get('enhancement_factor', 2.0)
+        
+        images = series.images.all().order_by('instance_number')
+        if len(images) < 5:
+            return JsonResponse({'error': 'Bone reconstruction requires at least 5 images'}, status=400)
+        
+        # Load all DICOM data and apply bone enhancement
+        enhanced_arrays = []
+        
+        for image in images:
+            try:
+                dicom_data = image.load_dicom_data()
+                if dicom_data and hasattr(dicom_data, 'pixel_array'):
+                    pixel_array = dicom_data.pixel_array.astype(np.float32)
+                    
+                    # Convert to Hounsfield Units if possible
+                    if hasattr(dicom_data, 'RescaleSlope') and hasattr(dicom_data, 'RescaleIntercept'):
+                        slope = float(dicom_data.RescaleSlope)
+                        intercept = float(dicom_data.RescaleIntercept)
+                        hu_array = pixel_array * slope + intercept
+                    else:
+                        # Estimate HU values
+                        hu_array = pixel_array - 1024
+                    
+                    # Apply bone enhancement
+                    bone_mask = hu_array > bone_threshold
+                    enhanced_array = hu_array.copy()
+                    enhanced_array[bone_mask] *= enhancement_factor
+                    
+                    # Apply additional bone-specific filters
+                    from scipy import ndimage
+                    # Sharpen bone edges
+                    kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
+                    enhanced_array = ndimage.convolve(enhanced_array, kernel, mode='reflect')
+                    
+                    enhanced_arrays.append(enhanced_array)
+                    
+            except Exception as e:
+                logger.warning(f"Could not process image {image.id} for bone reconstruction: {e}")
+        
+        if len(enhanced_arrays) < 5:
+            return JsonResponse({'error': 'Not enough valid images for bone reconstruction'}, status=400)
+        
+        # Create 3D volume
+        volume = np.stack(enhanced_arrays, axis=0)
+        
+        # Generate volume rendering with bone emphasis
+        # Use maximum intensity projection for bone structures
+        bone_mip = np.max(volume, axis=0)
+        
+        # Apply bone-specific colormap (white for high-density structures)
+        bone_mip_normalized = ((bone_mip - bone_mip.min()) / (bone_mip.max() - bone_mip.min()) * 255).astype(np.uint8)
+        
+        # Create bone-enhanced visualization
+        bone_colored = np.zeros((*bone_mip_normalized.shape, 3), dtype=np.uint8)
+        
+        # Bone colormap: darker values = red/brown, brighter = white/yellow
+        for i in range(bone_mip_normalized.shape[0]):
+            for j in range(bone_mip_normalized.shape[1]):
+                intensity = bone_mip_normalized[i, j]
+                if intensity > 128:  # High intensity = bone
+                    bone_colored[i, j] = [intensity, intensity, intensity]  # White/gray
+                elif intensity > 64:  # Medium intensity = possible bone
+                    bone_colored[i, j] = [intensity, intensity // 2, 0]  # Orange/brown
+                else:  # Low intensity = soft tissue
+                    bone_colored[i, j] = [intensity // 4, intensity // 4, intensity // 2]  # Dark blue
+        
+        # Convert to PIL and base64
+        pil_image = PILImage.fromarray(bone_colored)
+        buffer = io.BytesIO()
+        pil_image.save(buffer, format='PNG')
+        image_data = base64.b64encode(buffer.getvalue()).decode()
+        
+        return JsonResponse({
+            'success': True,
+            'bone_reconstruction': f'data:image/png;base64,{image_data}',
+            'parameters': {
+                'bone_threshold': bone_threshold,
+                'enhancement_factor': enhancement_factor
+            },
+            'dimensions': {
+                'width': bone_colored.shape[1],
+                'height': bone_colored.shape[0]
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating bone reconstruction for series {series_id}: {str(e)}")
+        return JsonResponse({'error': f'Bone reconstruction failed: {str(e)}'}, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def generate_volume_rendering(request, series_id):
+    """Generate 3D volume rendering"""
+    try:
+        series = get_object_or_404(DicomSeries, id=series_id)
+        
+        # Check permissions
+        if not (request.user.is_superuser or 
+                request.user.groups.filter(name__in=['Radiologists', 'Technicians', 'Administrators']).exists() or
+                (hasattr(request.user, 'facility') and request.user.facility == series.study.facility)):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+        data = json.loads(request.body) if request.body else {}
+        rendering_mode = data.get('mode', 'composite')  # composite, mip, average
+        opacity_threshold = data.get('opacity_threshold', 0.1)
+        color_preset = data.get('color_preset', 'grayscale')  # grayscale, bone, soft_tissue, vessels
+        
+        images = series.images.all().order_by('instance_number')
+        if len(images) < 10:
+            return JsonResponse({'error': 'Volume rendering requires at least 10 images'}, status=400)
+        
+        # Load all DICOM data
+        dicom_arrays = []
+        
+        for image in images:
+            try:
+                dicom_data = image.load_dicom_data()
+                if dicom_data and hasattr(dicom_data, 'pixel_array'):
+                    pixel_array = dicom_data.pixel_array.astype(np.float32)
+                    
+                    # Normalize to 0-1 range
+                    pixel_array = (pixel_array - pixel_array.min()) / (pixel_array.max() - pixel_array.min())
+                    dicom_arrays.append(pixel_array)
+                    
+            except Exception as e:
+                logger.warning(f"Could not load image {image.id} for volume rendering: {e}")
+        
+        if len(dicom_arrays) < 10:
+            return JsonResponse({'error': 'Not enough valid images for volume rendering'}, status=400)
+        
+        # Create 3D volume
+        volume = np.stack(dicom_arrays, axis=0)
+        
+        # Apply volume rendering based on mode
+        if rendering_mode == 'mip':
+            # Maximum Intensity Projection
+            rendered_volume = np.max(volume, axis=0)
+        elif rendering_mode == 'average':
+            # Average Intensity Projection
+            rendered_volume = np.mean(volume, axis=0)
+        else:  # composite
+            # Composite volume rendering with opacity
+            rendered_volume = np.zeros_like(volume[0])
+            accumulated_opacity = np.zeros_like(volume[0])
+            
+            for slice_data in volume:
+                # Calculate opacity based on intensity
+                opacity = np.clip(slice_data - opacity_threshold, 0, 1)
+                
+                # Composite rendering equation
+                rendered_volume += slice_data * opacity * (1 - accumulated_opacity)
+                accumulated_opacity += opacity * (1 - accumulated_opacity)
+                accumulated_opacity = np.clip(accumulated_opacity, 0, 1)
+        
+        # Apply color preset
+        rendered_colored = apply_color_preset(rendered_volume, color_preset)
+        
+        # Convert to 8-bit
+        rendered_8bit = (rendered_colored * 255).astype(np.uint8)
+        
+        # Convert to PIL and base64
+        if len(rendered_8bit.shape) == 2:  # Grayscale
+            pil_image = PILImage.fromarray(rendered_8bit)
+        else:  # RGB
+            pil_image = PILImage.fromarray(rendered_8bit)
+        
+        buffer = io.BytesIO()
+        pil_image.save(buffer, format='PNG')
+        image_data = base64.b64encode(buffer.getvalue()).decode()
+        
+        return JsonResponse({
+            'success': True,
+            'volume_rendering': f'data:image/png;base64,{image_data}',
+            'parameters': {
+                'rendering_mode': rendering_mode,
+                'opacity_threshold': opacity_threshold,
+                'color_preset': color_preset
+            },
+            'dimensions': {
+                'width': rendered_8bit.shape[1] if len(rendered_8bit.shape) > 1 else rendered_8bit.shape[0],
+                'height': rendered_8bit.shape[0]
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating volume rendering for series {series_id}: {str(e)}")
+        return JsonResponse({'error': f'Volume rendering failed: {str(e)}'}, status=500)
+
+
+def apply_color_preset(volume_data, preset):
+    """Apply color preset to volume data"""
+    if preset == 'grayscale':
+        return volume_data
+    elif preset == 'bone':
+        # Bone colormap: white for high density
+        colored = np.zeros((*volume_data.shape, 3))
+        colored[:, :, 0] = volume_data  # Red
+        colored[:, :, 1] = volume_data  # Green
+        colored[:, :, 2] = volume_data  # Blue
+        return colored
+    elif preset == 'soft_tissue':
+        # Soft tissue colormap: pink/red tones
+        colored = np.zeros((*volume_data.shape, 3))
+        colored[:, :, 0] = volume_data * 1.2  # Enhanced red
+        colored[:, :, 1] = volume_data * 0.8  # Reduced green
+        colored[:, :, 2] = volume_data * 0.9  # Slightly reduced blue
+        return np.clip(colored, 0, 1)
+    elif preset == 'vessels':
+        # Vessel colormap: red/orange for contrast
+        colored = np.zeros((*volume_data.shape, 3))
+        colored[:, :, 0] = volume_data * 1.5  # Strong red
+        colored[:, :, 1] = volume_data * 0.5  # Some green
+        colored[:, :, 2] = volume_data * 0.2  # Minimal blue
+        return np.clip(colored, 0, 1)
+    else:
+        return volume_data
+
+
+@login_required
+@require_http_methods(['POST'])
+def calculate_volume_measurement(request, series_id):
+    """Calculate volume measurements from segmented regions"""
+    try:
+        series = get_object_or_404(DicomSeries, id=series_id)
+        
+        # Check permissions
+        if not (request.user.is_superuser or 
+                request.user.groups.filter(name__in=['Radiologists', 'Technicians', 'Administrators']).exists() or
+                (hasattr(request.user, 'facility') and request.user.facility == series.study.facility)):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+        data = json.loads(request.body) if request.body else {}
+        roi_coordinates = data.get('roi_coordinates', [])  # List of [x, y] coordinates for each slice
+        measurement_type = data.get('measurement_type', 'manual')  # manual, threshold, ai_segmentation
+        
+        if not roi_coordinates and measurement_type == 'manual':
+            return JsonResponse({'error': 'ROI coordinates required for manual volume calculation'}, status=400)
+        
+        images = series.images.all().order_by('instance_number')
+        if len(images) < 2:
+            return JsonResponse({'error': 'Volume calculation requires at least 2 images'}, status=400)
+        
+        # Get spacing information
+        spacing = [1.0, 1.0, 1.0]  # Default spacing in mm
+        try:
+            first_image = images.first()
+            dicom_data = first_image.load_dicom_data()
+            if dicom_data:
+                if hasattr(dicom_data, 'PixelSpacing'):
+                    spacing[0] = float(dicom_data.PixelSpacing[0])
+                    spacing[1] = float(dicom_data.PixelSpacing[1])
+                if hasattr(dicom_data, 'SliceThickness'):
+                    spacing[2] = float(dicom_data.SliceThickness)
+                elif len(images) > 1:
+                    # Calculate slice spacing from positions
+                    try:
+                        first_pos = float(dicom_data.ImagePositionPatient[2])
+                        second_image = images[1]
+                        second_dicom = second_image.load_dicom_data()
+                        if second_dicom and hasattr(second_dicom, 'ImagePositionPatient'):
+                            second_pos = float(second_dicom.ImagePositionPatient[2])
+                            spacing[2] = abs(second_pos - first_pos)
+                    except:
+                        pass
+        except Exception as e:
+            logger.warning(f"Could not get spacing information: {e}")
+        
+        total_volume = 0.0
+        slice_areas = []
+        
+        if measurement_type == 'manual':
+            # Calculate volume from manual ROI coordinates
+            for i, coords in enumerate(roi_coordinates):
+                if i < len(images) and coords:
+                    # Calculate area using shoelace formula
+                    area_pixels = calculate_polygon_area(coords)
+                    # Convert to real units (mm²)
+                    area_mm2 = area_pixels * spacing[0] * spacing[1]
+                    slice_areas.append(area_mm2)
+            
+            # Calculate volume using trapezoidal rule
+            if len(slice_areas) > 1:
+                for i in range(len(slice_areas) - 1):
+                    slice_volume = (slice_areas[i] + slice_areas[i + 1]) / 2 * spacing[2]
+                    total_volume += slice_volume
+            elif len(slice_areas) == 1:
+                total_volume = slice_areas[0] * spacing[2]
+        
+        elif measurement_type == 'threshold':
+            # Calculate volume using intensity thresholding
+            threshold_min = data.get('threshold_min', 100)
+            threshold_max = data.get('threshold_max', 3000)
+            
+            voxel_volume = spacing[0] * spacing[1] * spacing[2]  # mm³ per voxel
+            
+            for image in images:
+                try:
+                    dicom_data = image.load_dicom_data()
+                    if dicom_data and hasattr(dicom_data, 'pixel_array'):
+                        pixel_array = dicom_data.pixel_array
+                        
+                        # Convert to HU if possible
+                        if hasattr(dicom_data, 'RescaleSlope') and hasattr(dicom_data, 'RescaleIntercept'):
+                            slope = float(dicom_data.RescaleSlope)
+                            intercept = float(dicom_data.RescaleIntercept)
+                            hu_array = pixel_array * slope + intercept
+                        else:
+                            hu_array = pixel_array
+                        
+                        # Count voxels within threshold
+                        mask = (hu_array >= threshold_min) & (hu_array <= threshold_max)
+                        voxel_count = np.sum(mask)
+                        slice_volume = voxel_count * voxel_volume
+                        total_volume += slice_volume
+                        
+                except Exception as e:
+                    logger.warning(f"Could not process image {image.id} for volume calculation: {e}")
+        
+        # Convert to different units
+        volume_ml = total_volume / 1000  # mm³ to ml
+        volume_cm3 = total_volume / 1000  # mm³ to cm³
+        
+        return JsonResponse({
+            'success': True,
+            'volume_measurements': {
+                'volume_mm3': round(total_volume, 2),
+                'volume_ml': round(volume_ml, 2),
+                'volume_cm3': round(volume_cm3, 2),
+                'slice_areas': slice_areas,
+                'spacing': spacing,
+                'measurement_type': measurement_type,
+                'num_slices': len(slice_areas) if measurement_type == 'manual' else len(images)
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error calculating volume for series {series_id}: {str(e)}")
+        return JsonResponse({'error': f'Volume calculation failed: {str(e)}'}, status=500)
+
+
+def calculate_polygon_area(coordinates):
+    """Calculate area of polygon using shoelace formula"""
+    if len(coordinates) < 3:
+        return 0.0
+    
+    area = 0.0
+    n = len(coordinates)
+    
+    for i in range(n):
+        j = (i + 1) % n
+        area += coordinates[i][0] * coordinates[j][1]
+        area -= coordinates[j][0] * coordinates[i][1]
+    
+    return abs(area) / 2.0
