@@ -1,0 +1,5 @@
+{"timestamp": "2025-08-05T16:16:40.589532", "level": "INFO", "logger": "noctisview.monitoring", "message": "System monitoring started", "module": "monitoring", "function": "start_monitoring", "line": 51}
+{"timestamp": "2025-08-05T16:16:40.593537", "level": "INFO", "logger": "__main__", "message": "Checking system health...", "module": "manage_comprehensive_system", "function": "check_system_health", "line": 210}
+{"timestamp": "2025-08-05T16:16:40.594742", "level": "ERROR", "logger": "noctisview.monitoring", "message": "Error getting database stats: no such table: pg_stats", "module": "monitoring", "function": "get_database_stats", "line": 316}
+{"timestamp": "2025-08-05T16:16:40.595420", "level": "INFO", "logger": "__main__", "message": "System health status: healthy", "module": "manage_comprehensive_system", "function": "check_system_health", "line": 217}
+{"timestamp": "2025-08-05T16:16:40.595539", "level": "INFO", "logger": "__main__", "message": "System health check passed", "module": "manage_comprehensive_system", "function": "check_system_health", "line": 226}

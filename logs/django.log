@@ -570,3 +570,7 @@ DEBUG 2025-08-05 15:31:39,047 middleware 3284 139655591421632 Response size: 224
 INFO 2025-08-05 15:31:39,048 basehttp 3284 139655591421632 "GET /viewer/api/get-image-data/8/ HTTP/1.1" 200 22431
 INFO 2025-08-05 15:31:39,054 basehttp 3284 139655601911488 "GET / HTTP/1.1" 200 22688
 INFO 2025-08-05 15:31:39,057 basehttp 3284 139655591421632 "GET /viewer/ HTTP/1.1" 200 39210
+INFO 2025-08-05 16:08:45,533 font_manager 2708 140087212093696 Failed to extract font properties from /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf: Can not load face (unknown file format; error code 0x2)
+INFO 2025-08-05 16:08:45,543 font_manager 2708 140087212093696 generated new fontManager
+INFO 2025-08-05 16:09:00,518 autoreload 3020 139718961520896 Watching for file changes with StatReloader
+INFO 2025-08-05 16:09:01,619 basehttp 3020 139718124725952 "GET / HTTP/1.1" 200 22688
