@@ -353,248 +353,141 @@ class DicomImage(models.Model):
     
     def get_enhanced_processed_image_base64(self, window_width=None, window_level=None, inverted=False, 
                                                    resolution_factor=1.0, density_enhancement=True, contrast_boost=1.0):
-        """CRITICAL FIX: ALWAYS load actual DICOM files - NO SYNTHETIC DATA"""
+        """FIXED: Process actual uploaded DICOM files and remote machine data"""
         try:
-            # ALWAYS try to load actual DICOM file first
+            # Step 1: Try to load actual DICOM file
             if self.file_path:
-                try:
-                    from django.conf import settings
-                    import os
+                file_path = None
+                
+                # Handle FileField vs string paths
+                if hasattr(self.file_path, 'path'):
+                    file_path = self.file_path.path
+                else:
+                    # Check various path possibilities
+                    possible_paths = [
+                        os.path.join(settings.MEDIA_ROOT, str(self.file_path)),
+                        os.path.join(settings.MEDIA_ROOT, 'dicom_files', os.path.basename(str(self.file_path))),
+                        str(self.file_path),
+                        os.path.join('/workspace/media', str(self.file_path)),
+                        os.path.join('/workspace/media/dicom_files', os.path.basename(str(self.file_path)))
+                    ]
                     
-                    # Handle both FileField and string paths
-                    if hasattr(self.file_path, 'path'):
-                        file_path = self.file_path.path
-                    else:
-                        if not os.path.isabs(str(self.file_path)):
-                            file_path = os.path.join(settings.MEDIA_ROOT, str(self.file_path))
-                        else:
-                            file_path = str(self.file_path)
+                    for path in possible_paths:
+                        if os.path.exists(path):
+                            file_path = path
+                            break
+                
+                if file_path and os.path.exists(file_path):
+                    print(f"🎯 Processing actual DICOM file: {file_path}")
                     
-                    if os.path.exists(file_path):
-                        print(f"🚨 LOADING ACTUAL DICOM FILE: {file_path}")
-                        # Force load actual DICOM data
-                        dicom_data = self.load_dicom_data()
-                        if dicom_data and hasattr(dicom_data, 'pixel_array'):
+                    try:
+                        # Load actual DICOM data
+                        dicom_data = pydicom.dcmread(file_path, force=True)
+                        if hasattr(dicom_data, 'pixel_array'):
                             pixel_array = dicom_data.pixel_array
-                            print(f"✅ SUCCESS: Loaded actual DICOM pixel data, shape: {pixel_array.shape}")
                             
-                            # Process the actual DICOM data with diagnostic quality
-                            result = self.get_enhanced_processed_image_base64_original(
-                                window_width, window_level, inverted, resolution_factor, density_enhancement, contrast_boost
+                            # Process with enhanced quality
+                            result = self.process_actual_dicom_data(
+                                pixel_array, dicom_data, window_width, window_level, 
+                                inverted, resolution_factor, density_enhancement, contrast_boost
                             )
                             
-                            if result and result.startswith('data:image'):
-                                print(f"🎉 SUCCESS: Processed actual DICOM image")
+                            if result:
+                                print(f"✅ Successfully processed actual DICOM file for image {self.id}")
                                 return result
-                            else:
-                                print(f"⚠️  Failed to process actual DICOM file")
-                        else:
-                            print(f"❌ No pixel array in actual DICOM data")
-                    else:
-                        print(f"❌ DICOM file does not exist: {file_path}")
-                    
-                except Exception as path_error:
-                    print(f"❌ Error processing DICOM file: {path_error}")
+                        
+                    except Exception as dicom_error:
+                        print(f"Error processing DICOM file {file_path}: {dicom_error}")
             
-            # If we get here, the actual DICOM file couldn't be loaded
-            print(f"❌ CRITICAL: Could not load actual DICOM file for image {self.id}")
-            print(f"   File path: {self.file_path}")
-            print(f"   This indicates a serious issue with file storage or DICOM processing")
-            
-            # Return error response instead of synthetic data
-            return None
+            # Step 2: If no actual file, try the fallback method
+            print(f"⚠️  No actual DICOM file found for image {self.id}, using fallback")
+            return self.get_enhanced_processed_image_base64_original(
+                window_width, window_level, inverted, resolution_factor, density_enhancement, contrast_boost
+            )
             
         except Exception as e:
-            print(f"❌ CRITICAL ERROR in image processing: {e}")
+            print(f"❌ Error in enhanced processing for image {self.id}: {e}")
             return None
     
-    def generate_synthetic_image(self, window_width=None, window_level=None, inverted=False):
-        """Generate a synthetic test image when no real data is available"""
+    def process_actual_dicom_data(self, pixel_array, dicom_data, window_width=None, window_level=None, 
+                                 inverted=False, resolution_factor=1.0, density_enhancement=True, contrast_boost=1.0):
+        """Process actual DICOM pixel data with medical-grade quality"""
         try:
             import numpy as np
-            from PIL import Image, ImageDraw, ImageFont
+            from PIL import Image, ImageEnhance
             import io
             import base64
+            from skimage import exposure, filters
             
-            # Create a simple test pattern
-            width, height = 512, 512
-            
-            # Create a more realistic medical image pattern
-            x = np.linspace(-2, 2, width)
-            y = np.linspace(-2, 2, height)
-            X, Y = np.meshgrid(x, y)
-            
-            # Create anatomical-like structure
-            pattern = np.zeros((height, width))
-            
-            # Add circular structure (like cross-section)
-            radius = np.sqrt(X**2 + Y**2)
-            pattern += 50 * np.exp(-radius**2 / 0.5)  # Central structure
-            pattern += 30 * np.exp(-(radius-0.8)**2 / 0.1)  # Ring structure
-            
-            # Add some noise for realism
-            noise = np.random.normal(0, 10, (height, width))
-            pattern += noise
-            
-            # Normalize to 0-255 range
-            pattern = np.clip(pattern, 0, 255).astype(np.uint8)
-            
-            # Create PIL image
-            image = Image.fromarray(pattern, mode='L')
-            
-            # Add text overlay indicating this is a placeholder
-            draw = ImageDraw.Draw(image)
-            try:
-                font = ImageFont.load_default()
-            except:
-                font = None
-            
-            # Add overlay text
-            overlay_text = "Image Loading..."
-            if font:
-                draw.text((10, 10), overlay_text, fill=200, font=font)
-                draw.text((10, height-30), f"Patient: {getattr(self.series.study, 'patient_name', 'Unknown')}", fill=200, font=font)
-            else:
-                draw.text((10, 10), overlay_text, fill=200)
-                draw.text((10, height-30), f"Patient: {getattr(self.series.study, 'patient_name', 'Unknown')}", fill=200)
-            
-            # Convert to base64
-            buffer = io.BytesIO()
-            image.save(buffer, format='PNG')
-            buffer.seek(0)
-            image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-            
-            print(f"Generated synthetic image for DICOM image {self.id}")
-            return f"data:image/png;base64,{image_base64}"
-            
-        except Exception as e:
-            print(f"Failed to generate synthetic image: {e}")
-            # Return a minimal valid base64 image as absolute last resort
-            try:
-                from PIL import Image
-                import io
-                import base64
-                
-                # Create a simple 1x1 black pixel as absolute fallback
-                img = Image.new('L', (1, 1), 0)
-                buffer = io.BytesIO()
-                img.save(buffer, format='PNG')
-                buffer.seek(0)
-                image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-                return f"data:image/png;base64,{image_base64}"
-            except:
-                # If even this fails, return a hardcoded minimal PNG
-                return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-    
-    def get_fallback_image_data(self):
-        """Return cached image data if no file exists (for test data)"""
-        if self.processed_image_cache:
-            # Ensure the cached data has proper format
-            cached_data = self.processed_image_cache
-            if not cached_data.startswith('data:image/'):
-                # Assume it's base64 PNG data and add proper header
-                if cached_data.startswith('iVBOR'):  # PNG signature in base64
-                    cached_data = f"data:image/png;base64,{cached_data}"
+            # Use DICOM metadata for optimal windowing
+            if window_width is None and hasattr(dicom_data, 'WindowWidth'):
+                if isinstance(dicom_data.WindowWidth, (list, tuple)):
+                    window_width = float(dicom_data.WindowWidth[0])
                 else:
-                    # Fallback - assume it's raw base64
-                    cached_data = f"data:image/png;base64,{cached_data}"
-            return cached_data
-        return None
-    
-    def apply_diagnostic_preprocessing(self, pixel_array):
-        """Apply diagnostic preprocessing to pixel array"""
-        try:
-            import numpy as np
+                    window_width = float(dicom_data.WindowWidth)
             
-            # Basic preprocessing - normalize and clean
-            if pixel_array.dtype != np.float32:
-                pixel_array = pixel_array.astype(np.float32)
+            if window_level is None and hasattr(dicom_data, 'WindowCenter'):
+                if isinstance(dicom_data.WindowCenter, (list, tuple)):
+                    window_level = float(dicom_data.WindowCenter[0])
+                else:
+                    window_level = float(dicom_data.WindowCenter)
             
-            # Remove any extreme outliers
-            percentile_1 = np.percentile(pixel_array, 1)
-            percentile_99 = np.percentile(pixel_array, 99)
-            pixel_array = np.clip(pixel_array, percentile_1, percentile_99)
-            
-            return pixel_array
-        except Exception as e:
-            print(f"Error in diagnostic preprocessing: {e}")
-            return pixel_array
-    
-    def apply_diagnostic_windowing(self, pixel_array, window_width=None, window_level=None, 
-                                 inverted=False, density_enhancement=True, contrast_boost=1.0):
-        """Apply diagnostic windowing"""
-        try:
-            import numpy as np
-            
-            # Use defaults if not provided
+            # Set medical imaging defaults if still None
             if window_width is None:
-                window_width = self.window_width or 400
+                window_width = 1500  # Good for chest X-rays
             if window_level is None:
-                window_level = self.window_center or 40
+                window_level = -600   # Lung window
             
-            # Apply windowing
+            # Convert to float for processing
+            pixel_array = pixel_array.astype(np.float32)
+            
+            # Apply rescale slope and intercept if available
+            if hasattr(dicom_data, 'RescaleSlope') and hasattr(dicom_data, 'RescaleIntercept'):
+                pixel_array = pixel_array * float(dicom_data.RescaleSlope) + float(dicom_data.RescaleIntercept)
+            
+            # Enhanced windowing
             window_min = window_level - window_width / 2
             window_max = window_level + window_width / 2
             
-            # Apply window/level transformation
-            windowed = (pixel_array - window_min) / (window_max - window_min) * 255
-            windowed = np.clip(windowed, 0, 255)
+            # Apply windowing
+            pixel_array = np.clip(pixel_array, window_min, window_max)
+            pixel_array = ((pixel_array - window_min) / (window_max - window_min)) * 255
             
-            # Apply contrast boost
-            if contrast_boost != 1.0:
-                windowed = np.clip(windowed * contrast_boost, 0, 255)
+            # Apply density enhancement for better tissue differentiation
+            if density_enhancement:
+                pixel_array = exposure.equalize_adapthist(pixel_array / 255.0, clip_limit=0.01) * 255
+            
+            # Convert to uint8
+            pixel_array = np.clip(pixel_array, 0, 255).astype(np.uint8)
             
             # Apply inversion if requested
             if inverted:
-                windowed = 255 - windowed
+                pixel_array = 255 - pixel_array
             
-            return windowed.astype(np.uint8)
+            # Create PIL image
+            image = Image.fromarray(pixel_array, mode='L')
+            
+            # Apply contrast boost
+            if contrast_boost != 1.0:
+                enhancer = ImageEnhance.Contrast(image)
+                image = enhancer.enhance(contrast_boost)
+            
+            # Apply resolution enhancement
+            if resolution_factor != 1.0:
+                new_size = (int(image.width * resolution_factor), int(image.height * resolution_factor))
+                image = image.resize(new_size, Image.Resampling.LANCZOS)
+            
+            # Convert to base64
+            buffer = io.BytesIO()
+            image.save(buffer, format='PNG', optimize=False, compress_level=0)
+            buffer.seek(0)
+            image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            
+            return f"data:image/png;base64,{image_base64}"
+            
         except Exception as e:
-            print(f"Error in diagnostic windowing: {e}")
-            return pixel_array
-    
-    def apply_diagnostic_resolution_enhancement(self, pixel_array, resolution_factor):
-        """Apply resolution enhancement"""
-        try:
-            from PIL import Image
-            import numpy as np
-            
-            # Convert to PIL Image for resizing
-            if len(pixel_array.shape) == 2:
-                image = Image.fromarray(pixel_array.astype(np.uint8), mode='L')
-            else:
-                image = Image.fromarray(pixel_array.astype(np.uint8))
-            
-            # Calculate new size
-            new_width = int(image.width * resolution_factor)
-            new_height = int(image.height * resolution_factor)
-            
-            # Resize with high-quality resampling
-            enhanced = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-            
-            return np.array(enhanced)
-        except Exception as e:
-            print(f"Error in resolution enhancement: {e}")
-            return pixel_array
-    
-    def apply_advanced_tissue_differentiation(self, pixel_array):
-        """Apply advanced tissue differentiation"""
-        try:
-            import numpy as np
-            
-            # Basic histogram equalization for better tissue contrast
-            hist, bins = np.histogram(pixel_array.flatten(), 256, [0, 256])
-            cdf = hist.cumsum()
-            cdf_normalized = cdf * 255 / cdf[-1]
-            
-            # Apply histogram equalization
-            enhanced = np.interp(pixel_array.flatten(), bins[:-1], cdf_normalized)
-            enhanced = enhanced.reshape(pixel_array.shape)
-            
-            return enhanced.astype(np.uint8)
-        except Exception as e:
-            print(f"Error in tissue differentiation: {e}")
-            return pixel_array
+            print(f"Error processing actual DICOM data: {e}")
+            return None
     
     def get_enhanced_processed_image_base64_original(self, window_width=None, window_level=None, inverted=False, 
                                           resolution_factor=2.0, density_enhancement=True, contrast_boost=1.5, thumbnail_size=None):

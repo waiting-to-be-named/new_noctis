@@ -649,3 +649,63 @@ def delete_worklist_entry(request, entry_id):
         })
     except Exception as e:
         return JsonResponse({'error': f'Failed to delete worklist entry: {str(e)}'}, status=500)
+
+@csrf_exempt
+def api_studies(request):
+    """Enhanced API endpoint for worklist studies"""
+    try:
+        # Get all studies with enhanced data
+        studies = DicomStudy.objects.select_related('facility').all().order_by('-created_at')
+        
+        studies_data = []
+        for study in studies:
+            study_data = {
+                'id': study.id,
+                'patient_name': study.patient_name,
+                'patient_id': study.patient_id,
+                'patient_birth_date': study.patient_birth_date.isoformat() if hasattr(study, 'patient_birth_date') and study.patient_birth_date else None,
+                'accession_number': study.accession_number,
+                'study_date': study.study_date.isoformat() if study.study_date else None,
+                'study_description': study.study_description,
+                'modality': study.modality,
+                'status': getattr(study, 'status', 'completed'),  # Default status if not available
+                'facility_name': study.facility.name if study.facility else 'Unknown',
+                'facility_id': study.facility.id if study.facility else None,
+                'image_count': study.dicomseries_set.aggregate(
+                    total_images=Count('dicomimage')
+                )['total_images'] or 0,
+                'series_count': study.dicomseries_set.count(),
+                'created_at': study.created_at.isoformat(),
+            }
+            studies_data.append(study_data)
+        
+        return JsonResponse({
+            'success': True,
+            'studies': studies_data,
+            'total_count': len(studies_data)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in api_studies: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@csrf_exempt  
+def api_notifications(request):
+    """API endpoint for notifications"""
+    try:
+        # In a real implementation, this would check for actual notifications
+        # For now, return a simple response
+        return JsonResponse({
+            'success': True,
+            'count': 0,
+            'notifications': []
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
