@@ -1,0 +1,1 @@
+{"timestamp": "2025-08-05T16:16:40.594801", "level": "ERROR", "logger": "noctisview.monitoring", "message": "Error getting database stats: no such table: pg_stats", "module": "monitoring", "function": "get_database_stats", "line": 316}
