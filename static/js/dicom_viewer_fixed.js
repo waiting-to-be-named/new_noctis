@@ -1016,9 +1016,13 @@ class FixedDicomViewer {
                     this.updateDebugPanel('study', `Study ${studyId}: ${data.images.length} images`);
                     this.updateDebugPanel('images', `Images: ${data.images.length}`);
                     
-                    // Load the first image
+                    // Load and display the first image
                     await this.loadImage(this.currentImage.id);
                     this.updateImageCounter();
+                    
+                    // Ensure the image is displayed by calling refreshCurrentImage directly
+                    console.log('Forcing initial image display...');
+                    await this.refreshCurrentImage();
                     
                     this.notyf.success(`Loaded study with ${this.currentImages.length} images`);
                 } else {
@@ -1044,12 +1048,6 @@ class FixedDicomViewer {
 
     async loadImage(imageId) {
         try {
-            // Prevent loading the same image multiple times
-            if (this.currentImage && this.currentImage.id === imageId) {
-                console.log('Image', imageId, 'already loaded, skipping...');
-                return;
-            }
-            
             console.log('Loading image:', imageId);
             
             // Set the current image
@@ -1059,7 +1057,7 @@ class FixedDicomViewer {
                 return;
             }
             
-            // Refresh the image display
+            // Always refresh the image display to ensure it's shown
             await this.refreshCurrentImage();
             
         } catch (error) {

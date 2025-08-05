@@ -74,6 +74,9 @@ urlpatterns = [
     path('api/images/<int:image_id>/clear-measurements/', views.clear_measurements, name='clear_measurements'),
     path('api/measurements/hu/', views.measure_hu, name='measure_hu'),
     
+    # API connectivity test
+    path('api/test-connectivity/', views.test_connectivity, name='test_connectivity'),
+    
     # AI Analysis
     path('api/images/<int:image_id>/ai-analysis/', views.ai_analysis, name='ai_analysis'),
     
