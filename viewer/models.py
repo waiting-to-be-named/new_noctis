@@ -1098,12 +1098,26 @@ class WorklistEntry(models.Model):
 
 class AIAnalysis(models.Model):
     """Model to store AI analysis results"""
+    ANALYSIS_TYPES = [
+        ('chest_xray', 'Chest X-Ray Analysis'),
+        ('ct_lung', 'CT Lung Analysis'),
+        ('bone_fracture', 'Bone Fracture Detection'),
+        ('brain_mri', 'Brain MRI Analysis'),
+        ('cardiac_analysis', 'Cardiac Analysis'),
+        ('general', 'General Analysis'),
+        ('pneumonia_detection', 'Pneumonia Detection'),
+        ('tumor_detection', 'Tumor Detection'),
+        ('vessel_analysis', 'Vessel Analysis'),
+    ]
+    
     image = models.ForeignKey(DicomImage, related_name='ai_analyses', on_delete=models.CASCADE)
-    analysis_type = models.CharField(max_length=50)
+    analysis_type = models.CharField(max_length=50, choices=ANALYSIS_TYPES)
     findings = models.JSONField()  # Store structured findings
     summary = models.TextField()
     confidence_score = models.FloatField()
     highlighted_regions = models.JSONField()  # Store coordinates of highlighted regions
+    processing_time = models.FloatField(default=0.0)  # Time taken for analysis
+    model_version = models.CharField(max_length=50, default='v1.0')
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -1111,6 +1125,115 @@ class AIAnalysis(models.Model):
     
     def __str__(self):
         return f"AI Analysis for {self.image} - {self.analysis_type}"
+
+
+class MPRReconstruction(models.Model):
+    """Model to store Multi-Planar Reconstruction data"""
+    RECONSTRUCTION_TYPES = [
+        ('axial', 'Axial View'),
+        ('sagittal', 'Sagittal View'),
+        ('coronal', 'Coronal View'),
+        ('oblique', 'Oblique View'),
+        ('curved', 'Curved MPR'),
+    ]
+    
+    series = models.ForeignKey(DicomSeries, related_name='mpr_reconstructions', on_delete=models.CASCADE)
+    reconstruction_type = models.CharField(max_length=20, choices=RECONSTRUCTION_TYPES)
+    slice_position = models.FloatField(default=0.0)
+    slice_thickness = models.FloatField(default=1.0)
+    reconstruction_data = models.JSONField()  # Store reconstruction parameters
+    image_data = models.TextField()  # Base64 encoded image
+    window_width = models.FloatField(null=True, blank=True)
+    window_level = models.FloatField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ['series', 'reconstruction_type', 'slice_position']
+    
+    def __str__(self):
+        return f"MPR {self.reconstruction_type} for {self.series}"
+
+
+class VolumeRendering(models.Model):
+    """Model to store 3D volume rendering data"""
+    RENDERING_TYPES = [
+        ('mip', 'Maximum Intensity Projection'),
+        ('minip', 'Minimum Intensity Projection'),
+        ('average', 'Average Intensity Projection'),
+        ('volume', 'Volume Rendering'),
+        ('surface', 'Surface Rendering'),
+    ]
+    
+    series = models.ForeignKey(DicomSeries, related_name='volume_renderings', on_delete=models.CASCADE)
+    rendering_type = models.CharField(max_length=20, choices=RENDERING_TYPES)
+    rendering_parameters = models.JSONField()  # Store rendering parameters
+    volume_data = models.TextField()  # Base64 encoded volume data
+    opacity_function = models.JSONField(default=dict)  # Opacity transfer function
+    color_function = models.JSONField(default=dict)  # Color transfer function
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Volume Rendering {self.rendering_type} for {self.series}"
+
+
+class AIChat(models.Model):
+    """Model for AI-powered chat assistant"""
+    MESSAGE_TYPES = [
+        ('user', 'User Message'),
+        ('ai', 'AI Response'),
+        ('system', 'System Message'),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_chats')
+    message_type = models.CharField(max_length=10, choices=MESSAGE_TYPES)
+    message = models.TextField()
+    context_study = models.ForeignKey(DicomStudy, on_delete=models.SET_NULL, null=True, blank=True)
+    context_image = models.ForeignKey(DicomImage, on_delete=models.SET_NULL, null=True, blank=True)
+    ai_confidence = models.FloatField(null=True, blank=True)
+    metadata = models.JSONField(default=dict)  # Store additional context
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.message_type} from {self.user.username}: {self.message[:50]}"
+
+
+class SmartMeasurement(models.Model):
+    """Model for AI-powered smart measurements"""
+    MEASUREMENT_TYPES = [
+        ('distance', 'Distance Measurement'),
+        ('area', 'Area Measurement'),
+        ('volume', 'Volume Measurement'),
+        ('angle', 'Angle Measurement'),
+        ('hounsfield', 'Hounsfield Units'),
+        ('density', 'Density Measurement'),
+        ('organ_volume', 'Organ Volume'),
+        ('lesion_size', 'Lesion Size'),
+    ]
+    
+    image = models.ForeignKey(DicomImage, related_name='smart_measurements', on_delete=models.CASCADE)
+    measurement_type = models.CharField(max_length=20, choices=MEASUREMENT_TYPES)
+    coordinates = models.JSONField()  # Store measurement coordinates
+    value = models.FloatField()
+    unit = models.CharField(max_length=20)
+    ai_detected = models.BooleanField(default=False)  # Whether AI automatically detected this
+    confidence_score = models.FloatField(null=True, blank=True)
+    anatomical_structure = models.CharField(max_length=100, blank=True)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.measurement_type} on {self.image}: {self.value} {self.unit}"
 
 
 class Notification(models.Model):
