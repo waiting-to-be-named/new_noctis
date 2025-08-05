@@ -522,3 +522,51 @@ INFO 2025-08-05 12:14:18,540 font_manager 3118 139909000962304 generated new fon
 INFO 2025-08-05 13:27:03,894 autoreload 2999 140539515027712 Watching for file changes with StatReloader
 INFO 2025-08-05 13:33:36,473 autoreload 4173 140549875761408 Watching for file changes with StatReloader
 INFO 2025-08-05 13:39:49,564 autoreload 6078 140009304727808 Watching for file changes with StatReloader
+INFO 2025-08-05 15:28:12,941 font_manager 2405 139760003715328 Failed to extract font properties from /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf: Can not load face (unknown file format; error code 0x2)
+INFO 2025-08-05 15:28:12,951 font_manager 2405 139760003715328 generated new fontManager
+INFO 2025-08-05 15:28:25,504 autoreload 2659 140387113185536 Watching for file changes with StatReloader
+INFO 2025-08-05 15:28:28,711 basehttp 2659 140386275354304 "GET / HTTP/1.1" 200 22688
+INFO 2025-08-05 15:28:34,113 basehttp 2659 140386275354304 "GET /viewer/ HTTP/1.1" 200 39210
+INFO 2025-08-05 15:28:39,969 basehttp 2659 140386275354304 "GET /worklist/ HTTP/1.1" 302 0
+INFO 2025-08-05 15:28:43,881 middleware 2659 140386275354304 API Request: GET /api/studies/
+DEBUG 2025-08-05 15:28:43,885 middleware 2659 140386275354304 Request duration: GET /api/studies/ took 0.004s
+INFO 2025-08-05 15:28:43,885 middleware 2659 140386275354304 API Response: GET /api/studies/ - Status: 404
+DEBUG 2025-08-05 15:28:43,885 middleware 2659 140386275354304 Response size: 2954 bytes
+WARNING 2025-08-05 15:28:43,885 log 2659 140386275354304 Not Found: /api/studies/
+WARNING 2025-08-05 15:28:43,885 basehttp 2659 140386275354304 "GET /api/studies/ HTTP/1.1" 404 2954
+INFO 2025-08-05 15:28:43,885 basehttp 2659 140386275354304 - Broken pipe from ('127.0.0.1', 55526)
+INFO 2025-08-05 15:28:57,105 middleware 2659 140386275354304 API Request: GET /viewer/api/studies/
+DEBUG 2025-08-05 15:28:57,108 middleware 2659 140386275354304 Request duration: GET /viewer/api/studies/ took 0.002s
+INFO 2025-08-05 15:28:57,108 middleware 2659 140386275354304 API Response: GET /viewer/api/studies/ - Status: 200
+DEBUG 2025-08-05 15:28:57,108 middleware 2659 140386275354304 Response size: 2 bytes
+INFO 2025-08-05 15:28:57,108 basehttp 2659 140386275354304 "GET /viewer/api/studies/ HTTP/1.1" 200 2
+INFO 2025-08-05 15:29:13,180 middleware 2659 140386275354304 API Request: GET /viewer/api/studies/
+DEBUG 2025-08-05 15:29:13,182 middleware 2659 140386275354304 Request duration: GET /viewer/api/studies/ took 0.002s
+INFO 2025-08-05 15:29:13,182 middleware 2659 140386275354304 API Response: GET /viewer/api/studies/ - Status: 200
+DEBUG 2025-08-05 15:29:13,182 middleware 2659 140386275354304 Response size: 2 bytes
+INFO 2025-08-05 15:29:13,182 basehttp 2659 140386275354304 "GET /viewer/api/studies/ HTTP/1.1" 200 2
+INFO 2025-08-05 15:30:14,610 autoreload 2659 140387113185536 /workspace/viewer/views.py changed, reloading.
+INFO 2025-08-05 15:30:15,087 autoreload 3284 139656439828736 Watching for file changes with StatReloader
+INFO 2025-08-05 15:30:18,096 middleware 3284 139655601911488 API Request: GET /viewer/api/studies/
+DEBUG 2025-08-05 15:30:18,115 middleware 3284 139655601911488 Request duration: GET /viewer/api/studies/ took 0.019s
+INFO 2025-08-05 15:30:18,116 middleware 3284 139655601911488 API Response: GET /viewer/api/studies/ - Status: 200
+DEBUG 2025-08-05 15:30:18,116 middleware 3284 139655601911488 Response size: 6944 bytes
+INFO 2025-08-05 15:30:18,116 basehttp 3284 139655601911488 "GET /viewer/api/studies/ HTTP/1.1" 200 6944
+INFO 2025-08-05 15:30:24,166 middleware 3284 139655601911488 API Request: GET /viewer/api/get-image-data/1/
+DEBUG 2025-08-05 15:30:24,182 middleware 3284 139655601911488 Request duration: GET /viewer/api/get-image-data/1/ took 0.016s
+INFO 2025-08-05 15:30:24,182 middleware 3284 139655601911488 API Response: GET /viewer/api/get-image-data/1/ - Status: 200
+DEBUG 2025-08-05 15:30:24,182 middleware 3284 139655601911488 Response size: 88166 bytes
+INFO 2025-08-05 15:30:24,182 basehttp 3284 139655601911488 "GET /viewer/api/get-image-data/1/ HTTP/1.1" 200 88166
+INFO 2025-08-05 15:30:50,643 basehttp 3284 139655601911488 "GET /viewer/?study_id=7 HTTP/1.1" 200 39210
+INFO 2025-08-05 15:31:39,019 middleware 3284 139655601911488 API Request: GET /viewer/api/studies/
+DEBUG 2025-08-05 15:31:39,037 middleware 3284 139655601911488 Request duration: GET /viewer/api/studies/ took 0.018s
+INFO 2025-08-05 15:31:39,037 middleware 3284 139655601911488 API Response: GET /viewer/api/studies/ - Status: 200
+DEBUG 2025-08-05 15:31:39,037 middleware 3284 139655601911488 Response size: 6944 bytes
+INFO 2025-08-05 15:31:39,038 basehttp 3284 139655601911488 "GET /viewer/api/studies/ HTTP/1.1" 200 6944
+INFO 2025-08-05 15:31:39,039 middleware 3284 139655591421632 API Request: GET /viewer/api/get-image-data/8/
+DEBUG 2025-08-05 15:31:39,047 middleware 3284 139655591421632 Request duration: GET /viewer/api/get-image-data/8/ took 0.007s
+INFO 2025-08-05 15:31:39,047 middleware 3284 139655591421632 API Response: GET /viewer/api/get-image-data/8/ - Status: 200
+DEBUG 2025-08-05 15:31:39,047 middleware 3284 139655591421632 Response size: 22431 bytes
+INFO 2025-08-05 15:31:39,048 basehttp 3284 139655591421632 "GET /viewer/api/get-image-data/8/ HTTP/1.1" 200 22431
+INFO 2025-08-05 15:31:39,054 basehttp 3284 139655601911488 "GET / HTTP/1.1" 200 22688
+INFO 2025-08-05 15:31:39,057 basehttp 3284 139655591421632 "GET /viewer/ HTTP/1.1" 200 39210
