@@ -60,6 +60,19 @@ class FixedDicomViewer {
         this.densityEnhancement = true;  // Enable by default for better tissue differentiation
         this.contrastBoost = 1.2;  // Slight boost for better visualization
 
+        // Magnification support
+        this.magnificationEnabled = false;
+        this.magnificationLevel = 2.0;
+        this.magnificationRadius = 100;
+        this.magnificationPos = { x: 0, y: 0 };
+
+        // Measurement system with pixel spacing
+        this.measurements = [];
+        this.activeMeasurement = null;
+        this.pixelSpacing = { x: 1.0, y: 1.0 }; // Default 1mm per pixel
+        this.measurementUnits = 'mm'; // Default to millimeters
+        this.calibrationFactor = 1.0; // For manual calibration
+
         // Advanced windowing presets for different anatomical regions
         this.windowPresets = {
             'lung': { ww: 1500, wl: -600, description: 'Lung - Optimal for air-tissue contrast' },
