@@ -182,6 +182,388 @@ class FixedDicomViewer {
         console.log('Navigation buttons setup complete');
     }
 
+    showExportModal() {
+        console.log('Opening export modal...');
+        const modal = document.getElementById('export-modal');
+        if (modal) {
+            modal.style.display = 'block';
+        } else {
+            // Create export modal if it doesn't exist
+            this.createExportModal();
+        }
+    }
+
+    createExportModal() {
+        const modal = document.createElement('div');
+        modal.id = 'export-modal';
+        modal.style.cssText = `
+            display: block;
+            position: fixed;
+            z-index: 10000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+        `;
+
+        const modalContent = document.createElement('div');
+        modalContent.style.cssText = `
+            background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+            margin: 5% auto;
+            padding: 20px;
+            border: 2px solid #10b981;
+            border-radius: 12px;
+            width: 80%;
+            max-width: 500px;
+            color: #e5e5e5;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        `;
+
+        modalContent.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #404040; padding-bottom: 15px;">
+                <h3 style="color: #10b981; margin: 0; font-size: 20px;">Export Options</h3>
+                <button onclick="this.closest('#export-modal').style.display='none'" style="background: none; border: none; color: #9ca3af; font-size: 24px; cursor: pointer;">&times;</button>
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 10px; color: #d1d5db;">Export Format:</label>
+                <select id="export-format" style="width: 100%; padding: 10px; background: #374151; border: 1px solid #4b5563; border-radius: 6px; color: #e5e5e5;">
+                    <option value="png">PNG Image</option>
+                    <option value="jpg">JPEG Image</option>
+                    <option value="dicom">Original DICOM</option>
+                    <option value="pdf">PDF Report</option>
+                </select>
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 10px; color: #d1d5db;">
+                    <input type="checkbox" id="include-measurements" checked style="margin-right: 8px;">
+                    Include Measurements
+                </label>
+                <label style="display: block; margin-bottom: 10px; color: #d1d5db;">
+                    <input type="checkbox" id="include-annotations" checked style="margin-right: 8px;">
+                    Include Annotations
+                </label>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button onclick="this.closest('#export-modal').style.display='none'" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">Cancel</button>
+                <button onclick="window.advancedViewer.performExport()" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">Export</button>
+            </div>
+        `;
+
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+    }
+
+    performExport() {
+        const format = document.getElementById('export-format').value;
+        const includeMeasurements = document.getElementById('include-measurements').checked;
+        const includeAnnotations = document.getElementById('include-annotations').checked;
+
+        console.log('Exporting...', { format, includeMeasurements, includeAnnotations });
+
+        try {
+            if (format === 'png' || format === 'jpg') {
+                this.exportAsImage(format, includeMeasurements, includeAnnotations);
+            } else if (format === 'dicom') {
+                this.exportAsDicom();
+            } else if (format === 'pdf') {
+                this.exportAsPdf(includeMeasurements, includeAnnotations);
+            }
+            
+            document.getElementById('export-modal').style.display = 'none';
+            this.showNotification('Export completed successfully!', 'success');
+        } catch (error) {
+            console.error('Export failed:', error);
+            this.showNotification('Export failed: ' + error.message, 'error');
+        }
+    }
+
+    exportAsImage(format, includeMeasurements, includeAnnotations) {
+        if (!this.canvas) {
+            throw new Error('No canvas available for export');
+        }
+
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = this.canvas.width;
+        tempCanvas.height = this.canvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+
+        // Draw the main image
+        tempCtx.drawImage(this.canvas, 0, 0);
+
+        // Draw measurements if requested
+        if (includeMeasurements && this.measurements) {
+            this.ctx = tempCtx;
+            this.drawMeasurements();
+            this.ctx = this.canvas.getContext('2d');
+        }
+
+        // Convert to blob and download
+        const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+        tempCanvas.toBlob((blob) => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `dicom_export_${Date.now()}.${format}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, mimeType, 0.9);
+    }
+
+    exportAsDicom() {
+        if (this.currentStudy && this.currentStudy.id) {
+            const url = `/viewer/api/export-study/${this.currentStudy.id}/`;
+            window.open(url, '_blank');
+        } else {
+            throw new Error('No study loaded for DICOM export');
+        }
+    }
+
+    exportAsPdf(includeMeasurements, includeAnnotations) {
+        // Simple PDF export - in real implementation, you'd use a library like jsPDF
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>DICOM Study Report</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        .header { text-align: center; margin-bottom: 30px; }
+                        .image-container { text-align: center; margin: 20px 0; }
+                        .measurements { margin-top: 20px; }
+                        .measurement { margin: 5px 0; padding: 5px; background: #f5f5f5; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>DICOM Study Report</h1>
+                        <p>Generated on: ${new Date().toLocaleString()}</p>
+                    </div>
+                    <div class="image-container">
+                        <img src="${this.canvas.toDataURL()}" style="max-width: 100%; height: auto;" />
+                    </div>
+                    ${includeMeasurements && this.measurements ? `
+                        <div class="measurements">
+                            <h3>Measurements:</h3>
+                            ${this.measurements.map((m, i) => `
+                                <div class="measurement">Measurement ${i + 1}: ${m.type}</div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+        setTimeout(() => {
+            printWindow.print();
+        }, 500);
+    }
+
+    toggleFullscreen() {
+        console.log('Toggling fullscreen...');
+        
+        if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.mozFullScreenElement) {
+            // Enter fullscreen
+            const element = document.documentElement;
+            if (element.requestFullscreen) {
+                element.requestFullscreen();
+            } else if (element.webkitRequestFullscreen) {
+                element.webkitRequestFullscreen();
+            } else if (element.mozRequestFullScreen) {
+                element.mozRequestFullScreen();
+            } else if (element.msRequestFullscreen) {
+                element.msRequestFullscreen();
+            }
+            this.showNotification('Entered fullscreen mode', 'info');
+        } else {
+            // Exit fullscreen
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.mozCancelFullScreen) {
+                document.mozCancelFullScreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+            this.showNotification('Exited fullscreen mode', 'info');
+        }
+    }
+
+    showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10001;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            max-width: 300px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        `;
+
+        switch (type) {
+            case 'success':
+                notification.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+                break;
+            case 'error':
+                notification.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+                break;
+            case 'warning':
+                notification.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+                break;
+            default:
+                notification.style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+        }
+
+        notification.textContent = message;
+        document.body.appendChild(notification);
+
+        // Auto remove after 3 seconds
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            notification.style.transform = 'translateY(-20px)';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }, 3000);
+    }
+
+    printStudy() {
+        console.log('Printing study...');
+        
+        if (!this.canvas) {
+            this.showNotification('No image to print', 'warning');
+            return;
+        }
+
+        const printWindow = window.open('', '_blank');
+        const canvasDataUrl = this.canvas.toDataURL('image/png');
+        
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>DICOM Study Print</title>
+                    <style>
+                        body { 
+                            font-family: Arial, sans-serif; 
+                            margin: 0; 
+                            padding: 20px; 
+                            background: white;
+                        }
+                        .header { 
+                            text-align: center; 
+                            margin-bottom: 30px; 
+                            border-bottom: 2px solid #333;
+                            padding-bottom: 20px;
+                        }
+                        .image-container { 
+                            text-align: center; 
+                            margin: 20px 0; 
+                            page-break-inside: avoid;
+                        }
+                        .image-container img {
+                            max-width: 100%;
+                            max-height: 80vh;
+                            border: 1px solid #ddd;
+                            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                        }
+                        .study-info {
+                            margin: 20px 0;
+                            display: grid;
+                            grid-template-columns: 1fr 1fr;
+                            gap: 20px;
+                        }
+                        .info-section {
+                            background: #f9f9f9;
+                            padding: 15px;
+                            border-radius: 5px;
+                        }
+                        .info-section h4 {
+                            margin: 0 0 10px 0;
+                            color: #333;
+                            border-bottom: 1px solid #ddd;
+                            padding-bottom: 5px;
+                        }
+                        .measurements {
+                            margin-top: 20px;
+                            background: #f0f8ff;
+                            padding: 15px;
+                            border-radius: 5px;
+                        }
+                        .measurement {
+                            margin: 5px 0;
+                            padding: 5px;
+                            background: white;
+                            border-left: 3px solid #007bff;
+                        }
+                        @media print {
+                            body { margin: 0; }
+                            .header { margin-bottom: 15px; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>DICOM Study Report</h1>
+                        <p><strong>Patient:</strong> ${this.currentStudy?.patient_name || 'Unknown'}</p>
+                        <p><strong>Study Date:</strong> ${this.currentStudy?.study_date || new Date().toLocaleDateString()}</p>
+                        <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
+                    </div>
+                    
+                    <div class="study-info">
+                        <div class="info-section">
+                            <h4>Study Information</h4>
+                            <p><strong>Study ID:</strong> ${this.currentStudy?.id || 'N/A'}</p>
+                            <p><strong>Modality:</strong> ${this.currentStudy?.modality || 'N/A'}</p>
+                            <p><strong>Study Description:</strong> ${this.currentStudy?.study_description || 'N/A'}</p>
+                            <p><strong>Series Number:</strong> ${this.currentImage?.series_number || 'N/A'}</p>
+                        </div>
+                        <div class="info-section">
+                            <h4>Image Parameters</h4>
+                            <p><strong>Window Level:</strong> ${this.windowLevel}</p>
+                            <p><strong>Window Width:</strong> ${this.windowWidth}</p>
+                            <p><strong>Zoom:</strong> ${Math.round(this.zoom * 100)}%</p>
+                            <p><strong>Inverted:</strong> ${this.inverted ? 'Yes' : 'No'}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="image-container">
+                        <img src="${canvasDataUrl}" alt="DICOM Image" />
+                    </div>
+                    
+                    ${this.measurements && this.measurements.length > 0 ? `
+                        <div class="measurements">
+                            <h4>Measurements</h4>
+                            ${this.measurements.map((m, i) => `
+                                <div class="measurement">
+                                    <strong>Measurement ${i + 1}:</strong> ${m.type}
+                                    ${m.value ? ` - ${m.value}` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        
+        // Wait for image to load then print
+        setTimeout(() => {
+            printWindow.print();
+            this.showNotification('Print dialog opened', 'success');
+        }, 1000);
+    }
+
     createCanvas() {
         const canvasContainer = document.getElementById('canvas-container');
         if (canvasContainer) {
@@ -850,6 +1232,21 @@ class FixedDicomViewer {
         if (resetBtn) resetBtn.addEventListener('click', () => this.resetView());
         if (fitBtn) fitBtn.addEventListener('click', () => this.fitToWindow());
         if (actualSizeBtn) actualSizeBtn.addEventListener('click', () => this.actualSize());
+        
+        // Export and fullscreen buttons
+        const exportBtn = document.getElementById('export-btn');
+        if (exportBtn) exportBtn.addEventListener('click', () => this.showExportModal());
+        
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        if (fullscreenBtn) fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+        
+        // Print button
+        const printBtn = document.getElementById('print-btn');
+        if (printBtn) printBtn.addEventListener('click', () => this.printStudy());
+        
+        // Home button
+        const homeBtn = document.getElementById('home-btn');
+        if (homeBtn) homeBtn.addEventListener('click', () => window.location.href = '/home/');
         
         console.log('Tool buttons setup complete');
     }

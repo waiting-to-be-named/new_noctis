@@ -521,3 +521,4 @@ INFO 2025-08-05 12:14:18,533 font_manager 3118 139909000962304 Failed to extract
 INFO 2025-08-05 12:14:18,540 font_manager 3118 139909000962304 generated new fontManager
 INFO 2025-08-05 13:27:03,894 autoreload 2999 140539515027712 Watching for file changes with StatReloader
 INFO 2025-08-05 13:33:36,473 autoreload 4173 140549875761408 Watching for file changes with StatReloader
+INFO 2025-08-05 13:39:49,564 autoreload 6078 140009304727808 Watching for file changes with StatReloader
