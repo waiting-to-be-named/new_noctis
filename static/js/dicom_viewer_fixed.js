@@ -573,6 +573,86 @@ class FixedDicomViewer {
         this.canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e));
         this.canvas.addEventListener('touchmove', (e) => this.handleTouchMove(e));
         this.canvas.addEventListener('touchend', (e) => this.handleTouchEnd(e));
+        
+        // Setup tool buttons
+        this.setupToolButtons();
+        
+        // Setup preset buttons
+        this.setupPresetButtons();
+    }
+    
+    setupToolButtons() {
+        console.log('Setting up tool buttons...');
+        
+        // Navigation tools
+        const windowingBtn = document.getElementById('windowing-adv-btn');
+        const panBtn = document.getElementById('pan-adv-btn');
+        const zoomBtn = document.getElementById('zoom-adv-btn');
+        const rotateBtn = document.getElementById('rotate-btn');
+        const flipBtn = document.getElementById('flip-btn');
+        
+        // Measurement tools
+        const distanceBtn = document.getElementById('measure-distance-btn');
+        const angleBtn = document.getElementById('measure-angle-btn');
+        const areaBtn = document.getElementById('measure-area-btn');
+        const volumeBtn = document.getElementById('measure-volume-btn');
+        const huBtn = document.getElementById('hu-measurement-btn');
+        
+        // Enhancement tools
+        const invertBtn = document.getElementById('invert-adv-btn');
+        const crosshairBtn = document.getElementById('crosshair-adv-btn');
+        const magnifyBtn = document.getElementById('magnify-btn');
+        const sharpenBtn = document.getElementById('sharpen-btn');
+        
+        // 3D/MPR tools
+        const mprBtn = document.getElementById('mpr-btn');
+        const volumeRenderBtn = document.getElementById('volume-render-btn');
+        const mipBtn = document.getElementById('mip-btn');
+        
+        // Utility tools
+        const resetBtn = document.getElementById('reset-adv-btn');
+        const fitBtn = document.getElementById('fit-to-window-btn');
+        const actualSizeBtn = document.getElementById('actual-size-btn');
+        
+        // Set up event listeners
+        if (windowingBtn) windowingBtn.addEventListener('click', () => this.setActiveTool('windowing'));
+        if (panBtn) panBtn.addEventListener('click', () => this.setActiveTool('pan'));
+        if (zoomBtn) zoomBtn.addEventListener('click', () => this.setActiveTool('zoom'));
+        if (rotateBtn) rotateBtn.addEventListener('click', () => this.rotateImage());
+        if (flipBtn) flipBtn.addEventListener('click', () => this.flipImage());
+        
+        if (distanceBtn) distanceBtn.addEventListener('click', () => this.setActiveTool('distance'));
+        if (angleBtn) angleBtn.addEventListener('click', () => this.setActiveTool('angle'));
+        if (areaBtn) areaBtn.addEventListener('click', () => this.setActiveTool('area'));
+        if (volumeBtn) volumeBtn.addEventListener('click', () => this.setActiveTool('volume'));
+        if (huBtn) huBtn.addEventListener('click', () => this.setActiveTool('hu'));
+        
+        if (invertBtn) invertBtn.addEventListener('click', () => this.toggleInversion());
+        if (crosshairBtn) crosshairBtn.addEventListener('click', () => this.setActiveTool('crosshair'));
+        if (magnifyBtn) magnifyBtn.addEventListener('click', () => this.setActiveTool('magnify'));
+        if (sharpenBtn) sharpenBtn.addEventListener('click', () => this.toggleSharpen());
+        
+        if (mprBtn) mprBtn.addEventListener('click', () => this.enableMPR());
+        if (volumeRenderBtn) volumeRenderBtn.addEventListener('click', () => this.enableVolumeRendering());
+        if (mipBtn) mipBtn.addEventListener('click', () => this.enableMIP());
+        
+        if (resetBtn) resetBtn.addEventListener('click', () => this.resetView());
+        if (fitBtn) fitBtn.addEventListener('click', () => this.fitToWindow());
+        if (actualSizeBtn) actualSizeBtn.addEventListener('click', () => this.actualSize());
+        
+        console.log('Tool buttons setup complete');
+    }
+    
+    setupPresetButtons() {
+        const presetButtons = document.querySelectorAll('.preset-btn');
+        presetButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const preset = e.target.getAttribute('data-preset');
+                if (preset && this.windowPresets[preset]) {
+                    this.applyWindowPreset(preset);
+                }
+            });
+        });
     }
 
     setupKeyboardShortcuts() {
@@ -1020,24 +1100,49 @@ class FixedDicomViewer {
 
     updatePatientInfo(study) {
         try {
-            // Update patient information display
-            const patientName = document.getElementById('patient-name');
-            const patientId = document.getElementById('patient-id');
-            const studyDate = document.getElementById('study-date');
-            const studyDescription = document.getElementById('study-description');
-            const modality = document.getElementById('modality');
+            console.log('Updating patient info with data:', study);
+            
+            // Update main patient information display (advanced view)
+            const patientNameAdv = document.getElementById('patient-name-adv');
+            const patientIdAdv = document.getElementById('patient-id-adv');
+            const patientDob = document.getElementById('patient-dob');
+            const studyDateAdv = document.getElementById('study-date-adv');
+            const studyDescriptionAdv = document.getElementById('study-description-adv');
+            const modalityAdv = document.getElementById('modality-adv');
+            const seriesCount = document.getElementById('series-count');
+            const imageCountAdv = document.getElementById('image-count-adv');
             const institutionName = document.getElementById('institution-name');
+            
+            // Update quick header info
+            const quickPatientName = document.getElementById('quick-patient-name');
+            const quickPatientId = document.getElementById('quick-patient-id');
+            const quickModality = document.getElementById('quick-modality');
+            
+            // Update study counter
+            const studyCounter = document.getElementById('study-counter');
 
-            if (patientName) patientName.textContent = study.patient_name || 'Unknown';
-            if (patientId) patientId.textContent = study.patient_id || 'Unknown';
-            if (studyDate) studyDate.textContent = study.study_date || 'Unknown';
-            if (studyDescription) studyDescription.textContent = study.study_description || 'Unknown';
-            if (modality) modality.textContent = study.modality || 'Unknown';
-            if (institutionName) institutionName.textContent = study.institution_name || 'Unknown';
+            // Populate advanced view fields
+            if (patientNameAdv) patientNameAdv.textContent = study.patient_name || 'Unknown Patient';
+            if (patientIdAdv) patientIdAdv.textContent = study.patient_id || 'Unknown ID';
+            if (patientDob) patientDob.textContent = study.patient_birth_date || study.patient_dob || '-';
+            if (studyDateAdv) studyDateAdv.textContent = study.study_date || '-';
+            if (studyDescriptionAdv) studyDescriptionAdv.textContent = study.study_description || 'No description';
+            if (modalityAdv) modalityAdv.textContent = study.modality || 'Unknown';
+            if (seriesCount) seriesCount.textContent = study.series_count || '1';
+            if (imageCountAdv) imageCountAdv.textContent = study.image_count || this.currentImages.length || '0';
+            if (institutionName) institutionName.textContent = study.institution_name || 'Unknown Institution';
+            
+            // Populate quick header
+            if (quickPatientName) quickPatientName.textContent = study.patient_name || 'Unknown';
+            if (quickPatientId) quickPatientId.textContent = study.patient_id || 'Unknown';
+            if (quickModality) quickModality.textContent = study.modality || 'Unknown';
+            
+            // Update study counter
+            if (studyCounter) studyCounter.textContent = 'Study 1 of 1';
 
-            console.log('Patient info updated:', study);
+            console.log('Patient info successfully updated with all fields');
         } catch (error) {
-            console.warn('Error updating patient info:', error);
+            console.error('Error updating patient info:', error);
         }
     }
 
@@ -1067,6 +1172,130 @@ class FixedDicomViewer {
         
         this.ctx.font = '16px Arial';
         this.ctx.fillText('Unable to connect to DICOM server', this.canvas.width / 2, this.canvas.height / 2 + 10);
+    }
+    
+    // Tool management methods
+    setActiveTool(tool) {
+        console.log('Setting active tool:', tool);
+        this.activeTool = tool;
+        this.updateToolUI();
+        
+        // Update cursor style based on tool
+        const cursor = this.getToolCursor(tool);
+        this.canvas.style.cursor = cursor;
+        
+        this.notyf.info(`Active tool: ${tool}`);
+    }
+    
+    getToolCursor(tool) {
+        const cursors = {
+            'windowing': 'crosshair',
+            'pan': 'move',
+            'zoom': 'zoom-in',
+            'distance': 'crosshair',
+            'angle': 'crosshair',
+            'area': 'crosshair',
+            'hu': 'crosshair',
+            'crosshair': 'crosshair',
+            'magnify': 'zoom-in'
+        };
+        return cursors[tool] || 'default';
+    }
+    
+    updateToolUI() {
+        // Remove active class from all tool buttons
+        const toolButtons = document.querySelectorAll('.tool-btn-advanced');
+        toolButtons.forEach(btn => btn.classList.remove('active'));
+        
+        // Add active class to current tool button
+        const activeButton = document.querySelector(`#${this.activeTool}-adv-btn, #${this.activeTool}-btn, #measure-${this.activeTool}-btn`);
+        if (activeButton) {
+            activeButton.classList.add('active');
+        }
+    }
+    
+    // Image manipulation methods
+    rotateImage() {
+        this.rotation = (this.rotation + 90) % 360;
+        this.refreshCurrentImage();
+        this.notyf.info(`Rotated to ${this.rotation}°`);
+    }
+    
+    flipImage() {
+        this.flipHorizontal = !this.flipHorizontal;
+        this.refreshCurrentImage();
+        this.notyf.info('Image flipped horizontally');
+    }
+    
+    toggleInversion() {
+        this.inverted = !this.inverted;
+        this.refreshCurrentImage();
+        this.notyf.info(this.inverted ? 'Image inverted' : 'Image normal');
+    }
+    
+    toggleSharpen() {
+        // Toggle sharpen filter
+        this.sharpenEnabled = !this.sharpenEnabled;
+        this.refreshCurrentImage();
+        this.notyf.info(this.sharpenEnabled ? 'Sharpening enabled' : 'Sharpening disabled');
+    }
+    
+    fitToWindow() {
+        if (!this.currentImage) return;
+        
+        const containerRect = this.canvas.getBoundingClientRect();
+        const imageAspect = this.currentImage.width / this.currentImage.height;
+        const containerAspect = containerRect.width / containerRect.height;
+        
+        if (imageAspect > containerAspect) {
+            this.zoomFactor = containerRect.width / this.currentImage.width;
+        } else {
+            this.zoomFactor = containerRect.height / this.currentImage.height;
+        }
+        
+        this.panX = 0;
+        this.panY = 0;
+        this.refreshCurrentImage();
+        this.notyf.info('Image fitted to window');
+    }
+    
+    actualSize() {
+        this.zoomFactor = 1.0;
+        this.panX = 0;
+        this.panY = 0;
+        this.refreshCurrentImage();
+        this.notyf.info('Image at actual size (1:1)');
+    }
+    
+    resetView() {
+        this.zoomFactor = 1.0;
+        this.panX = 0;
+        this.panY = 0;
+        this.rotation = 0;
+        this.flipHorizontal = false;
+        this.flipVertical = false;
+        this.inverted = false;
+        this.refreshCurrentImage();
+        this.notyf.info('View reset to defaults');
+    }
+    
+    // Advanced imaging methods
+    enableMPR() {
+        console.log('Enabling MPR...');
+        this.notyf.info('MPR (Multi-Planar Reconstruction) - Feature in development');
+        // TODO: Implement MPR functionality
+    }
+    
+    enableVolumeRendering() {
+        console.log('Enabling Volume Rendering...');
+        this.notyf.info('Volume Rendering - Feature in development');
+        // TODO: Implement volume rendering
+    }
+    
+    enableMIP() {
+        console.log('Enabling MIP...');
+        this.notyf.info('MIP (Maximum Intensity Projection) - Feature in development');
+        // TODO: Implement MIP functionality
     }
 
     async testConnectivity() {
