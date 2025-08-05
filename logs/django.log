@@ -508,3 +508,9 @@ INFO 2025-08-05 09:39:42,330 middleware 2818 139796391438016 API Response: GET /
 DEBUG 2025-08-05 09:39:42,330 middleware 2818 139796391438016 Response size: 193 bytes
 WARNING 2025-08-05 09:39:42,330 log 2818 139796391438016 Not Found: /viewer/api/get-image-data/8/
 WARNING 2025-08-05 09:39:42,330 basehttp 2818 139796391438016 "GET /viewer/api/get-image-data/8/ HTTP/1.1" 404 193
+INFO 2025-08-05 09:57:28,760 autoreload 2747 139723108606208 Watching for file changes with StatReloader
+INFO 2025-08-05 09:58:42,963 font_manager 3208 139892632113408 Failed to extract font properties from /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf: Can not load face (unknown file format; error code 0x2)
+INFO 2025-08-05 09:58:42,969 font_manager 3208 139892632113408 generated new fontManager
+INFO 2025-08-05 09:59:07,583 autoreload 3535 140046038786304 Watching for file changes with StatReloader
+INFO 2025-08-05 09:59:16,157 basehttp 3535 140045199500992 "GET / HTTP/1.1" 200 9926
+INFO 2025-08-05 09:59:20,137 basehttp 3535 140045199500992 "GET /viewer/ HTTP/1.1" 200 39138

@@ -104,18 +104,58 @@ class FixedDicomViewer {
         if (canvasContainer) {
             this.canvas = document.createElement('canvas');
             this.canvas.id = 'dicom-canvas-advanced';
-            this.canvas.width = 800;
-            this.canvas.height = 600;
-            this.canvas.style.border = '1px solid #333';
+            this.canvas.className = 'dicom-canvas-advanced';
+            this.canvas.style.position = 'absolute';
+            this.canvas.style.top = '0';
+            this.canvas.style.left = '0';
+            this.canvas.style.width = '100%';
+            this.canvas.style.height = '100%';
             this.canvas.style.backgroundColor = '#000';
+            
             canvasContainer.appendChild(this.canvas);
             this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+            
+            // Initialize canvas size properly
+            this.resizeCanvas();
+            
+            // Add resize listener to handle container size changes
+            window.addEventListener('resize', () => this.resizeCanvas());
         }
     }
 
     setupHighQualityRendering() {
-        if (this.canvas) {
+        if (this.canvas && this.ctx) {
             // Enable high-quality rendering
+            this.ctx.imageSmoothingEnabled = true;
+            this.ctx.imageSmoothingQuality = 'high';
+            
+            // Set canvas size to match container
+            this.resizeCanvas();
+        }
+    }
+    
+    resizeCanvas() {
+        const container = document.getElementById('canvas-container');
+        if (container && this.canvas) {
+            const rect = container.getBoundingClientRect();
+            
+            // Set the actual size of the canvas
+            this.canvas.width = rect.width || 800;
+            this.canvas.height = rect.height || 600;
+            
+            // Scale it to device pixel ratio for sharp rendering
+            const dpr = window.devicePixelRatio || 1;
+            this.canvas.width *= dpr;
+            this.canvas.height *= dpr;
+            
+            // Scale the canvas style size back down
+            this.canvas.style.width = rect.width + 'px';
+            this.canvas.style.height = rect.height + 'px';
+            
+            // Scale the drawing context to match device pixel ratio
+            this.ctx.scale(dpr, dpr);
+            
+            // Re-setup high quality rendering after resize
             this.ctx.imageSmoothingEnabled = true;
             this.ctx.imageSmoothingQuality = 'high';
         }
@@ -210,7 +250,7 @@ class FixedDicomViewer {
         if (windowLevelInput) windowLevelInput.value = this.windowLevel;
 
         this.refreshCurrentImage();
-        this.notyf.info(`Applied ${preset.description}`);
+                        this.notyf.success(`Applied ${preset.description}`);
     }
 
     setupMPRControls() {
@@ -481,18 +521,20 @@ class FixedDicomViewer {
             img.onload = () => {
                 this.clearCanvas();
                 
-                // Calculate optimal display size maintaining aspect ratio
-                const canvasRect = this.canvas.getBoundingClientRect();
-                const canvasWidth = canvasRect.width;
-                const canvasHeight = canvasRect.height;
+                // Get the device pixel ratio adjusted canvas size
+                const dpr = window.devicePixelRatio || 1;
+                const canvasWidth = this.canvas.width / dpr;
+                const canvasHeight = this.canvas.height / dpr;
                 
                 const aspectRatio = img.width / img.height;
-                let displayWidth = canvasWidth * this.zoomFactor;
-                let displayHeight = canvasHeight * this.zoomFactor;
+                let displayWidth, displayHeight;
                 
-                if (displayWidth / displayHeight > aspectRatio) {
+                // Calculate image size to fit within canvas while maintaining aspect ratio
+                if (canvasWidth / canvasHeight > aspectRatio) {
+                    displayHeight = canvasHeight * this.zoomFactor;
                     displayWidth = displayHeight * aspectRatio;
                 } else {
+                    displayWidth = canvasWidth * this.zoomFactor;
                     displayHeight = displayWidth / aspectRatio;
                 }
                 
@@ -513,7 +555,12 @@ class FixedDicomViewer {
                 this.ctx.drawImage(img, -displayWidth / 2, -displayHeight / 2, displayWidth, displayHeight);
                 this.ctx.restore();
                 
+                // Store image data for measurements and other operations
                 this.imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Update UI elements
+                this.updateViewportInfo();
+                
                 resolve();
             };
             img.onerror = (error) => {
@@ -528,6 +575,27 @@ class FixedDicomViewer {
     clearCanvas() {
         this.ctx.fillStyle = '#000000';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+    
+    updateViewportInfo() {
+        // Update zoom level display
+        const zoomElement = document.getElementById('zoom-level');
+        if (zoomElement) {
+            zoomElement.textContent = `${Math.round(this.zoomFactor * 100)}%`;
+        }
+        
+        // Update window/level display
+        const windowInfoElement = document.getElementById('window-info');
+        if (windowInfoElement) {
+            windowInfoElement.textContent = `W: ${this.windowWidth} L: ${this.windowLevel}`;
+        }
+        
+        // Update slice info
+        const sliceInfoElement = document.getElementById('slice-info');
+        if (sliceInfoElement && this.currentImages) {
+            const currentIndex = this.currentImages.findIndex(img => img.id === this.currentImage?.id) + 1;
+            sliceInfoElement.textContent = `Slice: ${currentIndex}/${this.currentImages.length}`;
+        }
     }
 
     showErrorPlaceholder() {
@@ -783,7 +851,7 @@ class FixedDicomViewer {
         this.flipHorizontal = false;
         this.flipVertical = false;
         this.refreshCurrentImage();
-        this.notyf.info('View reset to defaults');
+        this.notyf.success('View reset to defaults');
     }
 
     toggleInversion() {
@@ -837,6 +905,9 @@ class FixedDicomViewer {
         
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
+        const folderInput = document.getElementById('folderInput');
+        const browseFilesBtn = document.getElementById('browseFilesBtn');
+        const browseFolderBtn = document.getElementById('browseFolderBtn');
         const startUploadBtn = document.getElementById('startUpload');
         const uploadProgress = document.getElementById('uploadProgress');
         const uploadStatus = document.getElementById('uploadStatus');
@@ -849,16 +920,39 @@ class FixedDicomViewer {
         // File input change handler
         fileInput.addEventListener('change', (e) => {
             const files = Array.from(e.target.files);
-            if (files.length > 0) {
-                this.selectedFiles = files;
-                startUploadBtn.disabled = false;
-                uploadStatus.textContent = `${files.length} file(s) selected`;
-            }
+            this.handleFileSelection(files);
         });
         
-        // Upload area click handler
-        uploadArea.addEventListener('click', () => {
-            fileInput.click();
+        // Folder input change handler
+        if (folderInput) {
+            folderInput.addEventListener('change', (e) => {
+                const files = Array.from(e.target.files);
+                this.handleFileSelection(files);
+            });
+        }
+        
+        // Browse files button
+        if (browseFilesBtn) {
+            browseFilesBtn.addEventListener('click', () => {
+                fileInput.click();
+            });
+        }
+        
+        // Browse folder button
+        if (browseFolderBtn) {
+            browseFolderBtn.addEventListener('click', () => {
+                if (folderInput) {
+                    folderInput.click();
+                }
+            });
+        }
+        
+        // Upload area click handler (default to files)
+        uploadArea.addEventListener('click', (e) => {
+            // Only trigger if not clicking on buttons
+            if (!e.target.closest('button')) {
+                fileInput.click();
+            }
         });
         
         // Drag and drop handlers
@@ -876,11 +970,7 @@ class FixedDicomViewer {
             e.preventDefault();
             uploadArea.classList.remove('drag-over');
             const files = Array.from(e.dataTransfer.files);
-            if (files.length > 0) {
-                this.selectedFiles = files;
-                startUploadBtn.disabled = false;
-                uploadStatus.textContent = `${files.length} file(s) selected`;
-            }
+            this.handleFileSelection(files);
         });
         
         // Start upload button
@@ -891,6 +981,48 @@ class FixedDicomViewer {
         // Mark as set up to prevent duplicates
         this.uploadHandlersSetup = true;
         console.log('Upload handlers setup complete');
+    }
+    
+    handleFileSelection(files) {
+        if (files.length === 0) return;
+        
+        // Filter for DICOM files and common medical image formats
+        const validFiles = files.filter(file => {
+            const name = file.name.toLowerCase();
+            const validExtensions = ['.dcm', '.dicom', '.dic', '.img', '.ima'];
+            const hasDicomExtension = validExtensions.some(ext => name.endsWith(ext));
+            
+            // Also accept files without extension (common in DICOM folders)
+            const hasNoExtension = !name.includes('.');
+            
+            // Check MIME type for medical images
+            const isMedicalImage = file.type.includes('dicom') || file.type.includes('medical');
+            
+            return hasDicomExtension || hasNoExtension || isMedicalImage;
+        });
+        
+        if (validFiles.length === 0) {
+            this.notyf.error('No valid DICOM files found. Please select .dcm, .dicom files or a CT scan folder.');
+            return;
+        }
+        
+        this.selectedFiles = validFiles;
+        
+        const startUploadBtn = document.getElementById('startUpload');
+        const uploadStatus = document.getElementById('uploadStatus');
+        
+        if (startUploadBtn) {
+            startUploadBtn.disabled = false;
+        }
+        
+        if (uploadStatus) {
+            uploadStatus.textContent = `${validFiles.length} DICOM file(s) selected`;
+            if (validFiles.length !== files.length) {
+                uploadStatus.textContent += ` (${files.length - validFiles.length} non-DICOM files filtered out)`;
+            }
+        }
+        
+        this.notyf.success(`Selected ${validFiles.length} DICOM files for upload`);
     }
     
     async startUpload() {
@@ -1182,7 +1314,8 @@ class FixedDicomViewer {
         const cursor = this.getToolCursor(tool);
         this.canvas.style.cursor = cursor;
         
-        this.notyf.info(`Active tool: ${tool}`);
+        // Use success method instead of info for compatibility
+        this.notyf.success(`Active tool: ${tool}`);
     }
     
     getToolCursor(tool) {
@@ -1216,26 +1349,26 @@ class FixedDicomViewer {
     rotateImage() {
         this.rotation = (this.rotation + 90) % 360;
         this.refreshCurrentImage();
-        this.notyf.info(`Rotated to ${this.rotation}°`);
+        this.notyf.success(`Rotated to ${this.rotation}°`);
     }
     
     flipImage() {
         this.flipHorizontal = !this.flipHorizontal;
         this.refreshCurrentImage();
-        this.notyf.info('Image flipped horizontally');
+        this.notyf.success('Image flipped horizontally');
     }
     
     toggleInversion() {
         this.inverted = !this.inverted;
         this.refreshCurrentImage();
-        this.notyf.info(this.inverted ? 'Image inverted' : 'Image normal');
+        this.notyf.success(this.inverted ? 'Image inverted' : 'Image normal');
     }
     
     toggleSharpen() {
         // Toggle sharpen filter
         this.sharpenEnabled = !this.sharpenEnabled;
         this.refreshCurrentImage();
-        this.notyf.info(this.sharpenEnabled ? 'Sharpening enabled' : 'Sharpening disabled');
+        this.notyf.success(this.sharpenEnabled ? 'Sharpening enabled' : 'Sharpening disabled');
     }
     
     fitToWindow() {
@@ -1254,7 +1387,7 @@ class FixedDicomViewer {
         this.panX = 0;
         this.panY = 0;
         this.refreshCurrentImage();
-        this.notyf.info('Image fitted to window');
+        this.notyf.success('Image fitted to window');
     }
     
     actualSize() {
@@ -1262,7 +1395,7 @@ class FixedDicomViewer {
         this.panX = 0;
         this.panY = 0;
         this.refreshCurrentImage();
-        this.notyf.info('Image at actual size (1:1)');
+        this.notyf.success('Image at actual size (1:1)');
     }
     
     resetView() {
@@ -1274,25 +1407,25 @@ class FixedDicomViewer {
         this.flipVertical = false;
         this.inverted = false;
         this.refreshCurrentImage();
-        this.notyf.info('View reset to defaults');
+        this.notyf.success('View reset to defaults');
     }
     
     // Advanced imaging methods
     enableMPR() {
         console.log('Enabling MPR...');
-        this.notyf.info('MPR (Multi-Planar Reconstruction) - Feature in development');
+        this.notyf.success('MPR (Multi-Planar Reconstruction) - Feature in development');
         // TODO: Implement MPR functionality
     }
     
     enableVolumeRendering() {
         console.log('Enabling Volume Rendering...');
-        this.notyf.info('Volume Rendering - Feature in development');
+        this.notyf.success('Volume Rendering - Feature in development');
         // TODO: Implement volume rendering
     }
     
     enableMIP() {
         console.log('Enabling MIP...');
-        this.notyf.info('MIP (Maximum Intensity Projection) - Feature in development');
+        this.notyf.success('MIP (Maximum Intensity Projection) - Feature in development');
         // TODO: Implement MIP functionality
     }
 

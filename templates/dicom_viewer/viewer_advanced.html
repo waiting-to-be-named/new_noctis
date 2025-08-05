@@ -606,9 +606,13 @@
                             <i class="fas fa-cloud-upload-alt"></i>
                         </div>
                         <div class="upload-text">
-                            <h5>Drag & Drop DICOM Files Here</h5>
-                            <p>or click to browse files</p>
-                            <input type="file" id="fileInput" multiple accept=".dcm,.dicom" style="display: none;">
+                            <h5>Drag & Drop DICOM Files or Folders Here</h5>
+                            <p>
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="browseFilesBtn">Browse Files</button>
+                                <button type="button" class="btn btn-outline-success btn-sm" id="browseFolderBtn">Browse Folder</button>
+                            </p>
+                            <input type="file" id="fileInput" multiple accept=".dcm,.dicom,image/*" style="display: none;">
+                            <input type="file" id="folderInput" multiple webkitdirectory accept=".dcm,.dicom,image/*" style="display: none;">
                         </div>
                     </div>
                     <div class="upload-progress" id="uploadProgress" style="display: none;">
