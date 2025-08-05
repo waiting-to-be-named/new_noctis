@@ -575,10 +575,10 @@ class FixedDicomViewer {
                     
                     // Calculate display size maintaining aspect ratio
                     if (canvasWidth / canvasHeight > aspectRatio) {
-                        displayHeight = canvasHeight * this.zoomFactor;
+                        displayHeight = canvasHeight * this.zoom;
                         displayWidth = displayHeight * aspectRatio;
                     } else {
-                        displayWidth = canvasWidth * this.zoomFactor;
+                        displayWidth = canvasWidth * this.zoom;
                         displayHeight = displayWidth / aspectRatio;
                     }
                     
@@ -891,6 +891,13 @@ class FixedDicomViewer {
             return;
         }
         
+        // Handle crosshair
+        if (this.activeTool === 'crosshair') {
+            this.refreshCurrentImage();
+            this.drawCrosshair(x, y);
+            return;
+        }
+        
         if (!this.isDragging) {
             // Update cursor position for HU measurement
             if (this.activeTool === 'hu') {
@@ -951,8 +958,9 @@ class FixedDicomViewer {
         if (e.ctrlKey || e.metaKey) {
             // Zoom
             const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-            this.zoomFactor *= zoomFactor;
-            this.zoomFactor = Math.max(0.1, Math.min(5.0, this.zoomFactor));
+            this.zoom *= zoomFactor;
+            this.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.zoom));
+            this.updateZoomDisplay();
             this.refreshCurrentImage();
         } else {
             // Navigate images
@@ -993,14 +1001,31 @@ class FixedDicomViewer {
     }
 
     resetView() {
-        this.zoomFactor = 1.0;
+        // Reset all view parameters to defaults
+        this.zoom = 1.0;
         this.panX = 0;
         this.panY = 0;
         this.rotation = 0;
-        this.flipHorizontal = false;
-        this.flipVertical = false;
+        this.isInverted = false;
+        this.windowCenter = 256;
+        this.windowWidth = 512;
+        this.contrast = 1.0;
+        this.brightness = 0;
+        
+        // Reset tool state
+        this.activeTool = 'pan';
+        this.magnificationActive = false;
+        this.roiActive = false;
+        
+        // Clear measurements
+        this.clearMeasurements();
+        
+        // Update UI and refresh
+        this.updateToolButtons();
+        this.updateZoomDisplay();
         this.refreshCurrentImage();
-        this.notyf.success('View reset to defaults');
+        
+        this.notyf.success('View reset to default');
     }
 
     toggleInversion() {
@@ -1455,15 +1480,29 @@ class FixedDicomViewer {
     
     // Tool management methods
     setActiveTool(tool) {
-        console.log('Setting active tool:', tool);
+        // Deactivate current tool
+        if (this.activeTool === 'magnify') {
+            this.magnificationActive = false;
+        }
+        
         this.activeTool = tool;
-        this.updateToolUI();
         
-        // Update cursor style based on tool
-        const cursor = this.getCursorForTool(tool);
-        this.canvas.style.cursor = cursor;
+        // Activate new tool
+        if (tool === 'magnify') {
+            this.magnificationActive = true;
+        } else if (tool === 'crosshair') {
+            // Setup crosshair mode
+        }
         
-        // Use success method instead of info for compatibility
+        this.canvas.style.cursor = this.getCursorForTool(tool);
+        this.updateToolButtons();
+        
+        // Update unit toggle button text
+        const unitBtn = document.getElementById('unit-toggle-btn');
+        if (unitBtn) {
+            unitBtn.innerHTML = `<span style="font-size: 10px; font-weight: bold;">${this.measurementUnit}</span>`;
+        }
+        
         this.notyf.success(`Active tool: ${tool}`);
     }
     
@@ -1520,16 +1559,7 @@ class FixedDicomViewer {
     fitToWindow() {
         if (!this.currentImage) return;
         
-        const containerRect = this.canvas.getBoundingClientRect();
-        const imageAspect = this.currentImage.width / this.currentImage.height;
-        const containerAspect = containerRect.width / containerRect.height;
-        
-        if (imageAspect > containerAspect) {
-            this.zoomFactor = containerRect.width / this.currentImage.width;
-        } else {
-            this.zoomFactor = containerRect.height / this.currentImage.height;
-        }
-        
+        this.zoom = 1.0;
         this.panX = 0;
         this.panY = 0;
         this.refreshCurrentImage();
@@ -1545,15 +1575,31 @@ class FixedDicomViewer {
     }
     
     resetView() {
-        this.zoomFactor = 1.0;
+        // Reset all view parameters to defaults
+        this.zoom = 1.0;
         this.panX = 0;
         this.panY = 0;
         this.rotation = 0;
-        this.flipHorizontal = false;
-        this.flipVertical = false;
-        this.inverted = false;
+        this.isInverted = false;
+        this.windowCenter = 256;
+        this.windowWidth = 512;
+        this.contrast = 1.0;
+        this.brightness = 0;
+        
+        // Reset tool state
+        this.activeTool = 'pan';
+        this.magnificationActive = false;
+        this.roiActive = false;
+        
+        // Clear measurements
+        this.clearMeasurements();
+        
+        // Update UI and refresh
+        this.updateToolButtons();
+        this.updateZoomDisplay();
         this.refreshCurrentImage();
-        this.notyf.success('View reset to defaults');
+        
+        this.notyf.success('View reset to default');
     }
     
     // Advanced imaging methods
@@ -1895,7 +1941,47 @@ class FixedDicomViewer {
         this.measurements.push({ ...this.currentMeasurement });
         this.currentMeasurement = null;
         this.isDrawing = false;
-        this.redrawCanvas();
+        this.updateMeasurementPanel();
+        this.refreshCurrentImage();
+    }
+
+    updateMeasurementPanel() {
+        const panel = document.getElementById('measurement-info-panel');
+        const list = document.getElementById('measurement-list');
+        
+        if (!panel || !list) return;
+        
+        if (this.measurements.length === 0) {
+            panel.style.display = 'none';
+            return;
+        }
+        
+        panel.style.display = 'block';
+        list.innerHTML = '';
+        
+        this.measurements.forEach((measurement, index) => {
+            const item = document.createElement('div');
+            item.style.marginBottom = '5px';
+            item.style.padding = '5px';
+            item.style.background = 'rgba(255,255,255,0.1)';
+            item.style.borderRadius = '4px';
+            
+            let text = '';
+            if (measurement.type === 'distance' && measurement.points.length === 2) {
+                const distance = this.calculateDistance(measurement.points[0], measurement.points[1]);
+                text = `Distance ${index + 1}: ${distance.toFixed(2)} ${this.measurementUnit}`;
+            } else if (measurement.type === 'angle' && measurement.points.length === 3) {
+                const angle = this.calculateAngle(measurement.points[0], measurement.points[1], measurement.points[2]);
+                text = `Angle ${index + 1}: ${angle.toFixed(1)}°`;
+            }
+            
+            item.innerHTML = `
+                <div>${text}</div>
+                <button onclick="viewer.removeMeasurement(${index})" style="background: #ff4444; border: none; color: white; padding: 2px 6px; border-radius: 3px; cursor: pointer; font-size: 10px;">Remove</button>
+            `;
+            
+            list.appendChild(item);
+        });
     }
 
     calculateDistance(p1, p2) {
@@ -2089,9 +2175,10 @@ class FixedDicomViewer {
 
     showROIStats(stats) {
         const roiPanel = document.getElementById('roi-panel');
-        if (roiPanel) {
-            roiPanel.innerHTML = `
-                <h4>ROI Analysis</h4>
+        const roiStats = document.getElementById('roi-stats');
+        if (roiPanel && roiStats) {
+            roiPanel.style.display = 'block';
+            roiStats.innerHTML = `
                 <p>Mean: ${stats.mean} HU</p>
                 <p>Min: ${stats.min} HU</p>
                 <p>Max: ${stats.max} HU</p>
@@ -2107,20 +2194,114 @@ class FixedDicomViewer {
         this.refreshCurrentImage();
     }
 
+    // Remove specific measurement
+    removeMeasurement(index) {
+        if (index >= 0 && index < this.measurements.length) {
+            this.measurements.splice(index, 1);
+            this.updateMeasurementPanel();
+            this.refreshCurrentImage();
+        }
+    }
+
     // Clear all measurements
     clearMeasurements() {
         this.measurements = [];
         this.rois = [];
         this.currentMeasurement = null;
         this.currentROI = null;
+        this.updateMeasurementPanel();
+        
+        // Hide panels
+        const measurementPanel = document.getElementById('measurement-info-panel');
+        const roiPanel = document.getElementById('roi-panel');
+        if (measurementPanel) measurementPanel.style.display = 'none';
+        if (roiPanel) roiPanel.style.display = 'none';
+        
         this.refreshCurrentImage();
+        this.notyf.success('All measurements cleared');
+    }
+
+    // Crosshair functionality
+    drawCrosshair(x, y) {
+        if (this.activeTool !== 'crosshair') return;
+
+        this.ctx.save();
+        this.ctx.strokeStyle = '#00ff88';
+        this.ctx.lineWidth = 1;
+        this.ctx.setLineDash([5, 5]);
+
+        // Draw full-screen crosshair
+        this.ctx.beginPath();
+        // Vertical line
+        this.ctx.moveTo(x, 0);
+        this.ctx.lineTo(x, this.canvas.height);
+        // Horizontal line
+        this.ctx.moveTo(0, y);
+        this.ctx.lineTo(this.canvas.width, y);
+        this.ctx.stroke();
+
+        this.ctx.restore();
+    }
+
+    // Fit image to window
+    fitToWindow() {
+        if (!this.currentImage) return;
+        
+        this.zoom = 1.0;
+        this.panX = 0;
+        this.panY = 0;
+        this.refreshCurrentImage();
+        this.notyf.success('Image fitted to window');
+    }
+
+    // Update zoom display
+    updateZoomDisplay() {
+        const zoomDisplay = document.getElementById('zoom-level-display');
+        if (zoomDisplay) {
+            zoomDisplay.textContent = `${Math.round(this.zoom * 100)}%`;
+        }
+    }
+
+    // Enhanced updateToolButtons method
+    updateToolButtons() {
+        // Remove active class from all tool buttons
+        const allToolBtns = document.querySelectorAll('.tool-btn');
+        allToolBtns.forEach(btn => btn.classList.remove('active'));
+        
+        // Add active class to current tool button
+        const toolMapping = {
+            'pan': 'pan-adv-btn',
+            'zoom': 'zoom-adv-btn',
+            'windowing': 'windowing-adv-btn',
+            'distance': 'measure-distance-btn',
+            'angle': 'measure-angle-btn',
+            'area': 'measure-area-btn',
+            'hu': 'hu-measurement-btn',
+            'crosshair': 'crosshair-adv-btn',
+            'magnify': 'magnify-btn',
+            'roi': 'roi-btn'
+        };
+        
+        const activeBtn = document.getElementById(toolMapping[this.activeTool]);
+        if (activeBtn) {
+            activeBtn.classList.add('active');
+        }
     }
 }
 
 // Initialize the fixed viewer when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('Initializing Enhanced Fixed DICOM Viewer...');
+    
     const urlParams = new URLSearchParams(window.location.search);
     const studyId = urlParams.get('study_id');
     
-    window.fixedDicomViewer = new FixedDicomViewer(studyId);
+    // Create viewer instance and make it globally accessible
+    window.viewer = new FixedDicomViewer(studyId);
+    window.fixedDicomViewer = window.viewer; // For backward compatibility
+    
+    // Initialize the viewer
+    window.viewer.init(studyId);
+    
+    console.log('Enhanced Fixed DICOM Viewer initialized successfully');
 });
