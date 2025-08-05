@@ -4779,6 +4779,7 @@ def generate_volume_rendering(request, series_id):
         print(f"Error generating volume rendering: {e}")
         return Response({'error': f'Volume rendering failed: {str(e)}'}, status=500)
 
+@api_view(['GET'])
 def test_connectivity(request):
     """Simple connectivity test endpoint"""
     return Response({
