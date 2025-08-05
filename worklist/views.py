@@ -6,7 +6,7 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.contrib.auth.models import User
 from viewer.models import (
     DicomStudy, WorklistEntry, Facility, Report, 
@@ -19,6 +19,9 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 import io
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class WorklistView(LoginRequiredMixin, ListView):
@@ -710,3 +713,112 @@ def api_notifications(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
+
+@login_required
+def api_worklist(request):
+    """API endpoint to get worklist data as JSON"""
+    # Get the same queryset as the main worklist view
+    queryset = WorklistEntry.objects.all()
+    
+    # Apply the same filtering logic as WorklistView
+    if hasattr(request.user, 'facility') and request.user.facility:
+        queryset = queryset.filter(facility=request.user.facility)
+    elif request.user.groups.filter(name='Facilities').exists():
+        queryset = queryset.none()
+    
+    # Apply search filters
+    search = request.GET.get('search')
+    if search:
+        queryset = queryset.filter(
+            Q(patient_name__icontains=search) |
+            Q(patient_id__icontains=search) |
+            Q(accession_number__icontains=search)
+        )
+    
+    # Filter by status
+    status = request.GET.get('status')
+    if status:
+        queryset = queryset.filter(status=status)
+        
+    # Filter by modality
+    modality = request.GET.get('modality')
+    if modality:
+        queryset = queryset.filter(modality=modality)
+    
+    # Filter by priority (if we add it to the model later)
+    priority = request.GET.get('priority')
+    
+    # Filter by facility (for admins/radiologists)
+    facility_id = request.GET.get('facility')
+    if facility_id and (request.user.is_superuser or request.user.groups.filter(name='Radiologists').exists()):
+        queryset = queryset.filter(facility_id=facility_id)
+    
+    # Filter by date range
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    if start_date:
+        queryset = queryset.filter(scheduled_procedure_step_start_date__gte=start_date)
+    if end_date:
+        queryset = queryset.filter(scheduled_procedure_step_start_date__lte=end_date)
+    
+    # Order the results
+    queryset = queryset.order_by('-scheduled_procedure_step_start_date', '-scheduled_procedure_step_start_time')
+    
+    # Convert to JSON format
+    patients = []
+    for entry in queryset:
+        # Determine priority based on status and urgency (simple logic for now)
+        if entry.status == 'in_progress':
+            priority = 'high'
+        elif 'urgent' in entry.procedure_description.lower() or 'emergency' in entry.procedure_description.lower():
+            priority = 'high'
+        elif 'routine' in entry.procedure_description.lower():
+            priority = 'low'
+        else:
+            priority = 'medium'
+        
+        patient_data = {
+            'id': entry.id,
+            'patient_name': entry.patient_name,
+            'patient_id': entry.patient_id,
+            'modality': entry.modality,
+            'study_date': entry.scheduled_procedure_step_start_date.isoformat() if entry.scheduled_procedure_step_start_date else None,
+            'study_time': entry.scheduled_procedure_step_start_time.strftime('%H:%M') if entry.scheduled_procedure_step_start_time else None,
+            'status': entry.status,
+            'priority': priority,
+            'facility': entry.facility.name if entry.facility else 'Unknown',
+            'facility_id': entry.facility.id if entry.facility else None,
+            'accession': entry.accession_number,
+            'study_description': entry.procedure_description,
+            'physician': entry.scheduled_performing_physician,
+            'has_study': bool(entry.study),
+            'study_id': entry.study.id if entry.study else None,
+            'total_images': entry.study.total_images if entry.study else 0,
+            'series_count': entry.study.series_count if entry.study else 0,
+        }
+        patients.append(patient_data)
+    
+    # Get statistics
+    today = timezone.now().date()
+    stats = {
+        'total_patients': queryset.count(),
+        'scheduled_today': queryset.filter(
+            scheduled_procedure_step_start_date=today, 
+            status='scheduled'
+        ).count(),
+        'in_progress': queryset.filter(status='in_progress').count(),
+        'completed_today': queryset.filter(
+            scheduled_procedure_step_start_date=today, 
+            status='completed'
+        ).count(),
+    }
+    
+    return JsonResponse({
+        'success': True,
+        'patients': patients,
+        'stats': stats,
+        'total_count': queryset.count(),
+        'facilities': list(Facility.objects.values('id', 'name')) if request.user.is_superuser or request.user.groups.filter(name='Radiologists').exists() else [],
+        'modalities': ['CT', 'MR', 'CR', 'DX', 'US', 'MG', 'PT', 'NM'],
+    })

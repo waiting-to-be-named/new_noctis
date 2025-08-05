@@ -1105,20 +1105,63 @@
         function loadWorklist() {
             showLoading();
             
-            // Simulate API call - replace with actual endpoint
-            fetch('/api/worklist/')
-                .then(response => response.json())
+            // Get current filter values
+            const searchParams = new URLSearchParams();
+            const search = document.getElementById('search').value;
+            const statusFilter = document.getElementById('status-filter').value;
+            const modalityFilter = document.getElementById('modality-filter').value;
+            const priorityFilter = document.getElementById('priority-filter').value;
+            {% if is_admin or is_radiologist %}
+            const facilityFilter = document.getElementById('facility-filter').value;
+            {% endif %}
+
+            if (search) searchParams.append('search', search);
+            if (statusFilter) searchParams.append('status', statusFilter);
+            if (modalityFilter) searchParams.append('modality', modalityFilter);
+            if (priorityFilter) searchParams.append('priority', priorityFilter);
+            {% if is_admin or is_radiologist %}
+            if (facilityFilter) searchParams.append('facility', facilityFilter);
+            {% endif %}
+            
+            // Call actual API endpoint
+            fetch(`/worklist/api/worklist/?${searchParams.toString()}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
-                    worklistData = data.patients || generateSampleData();
-                    filteredData = [...worklistData];
-                    renderWorklist();
-                    updateStatistics();
+                    if (data.success) {
+                        worklistData = data.patients || [];
+                        filteredData = [...worklistData];
+                        
+                        // Update statistics with real data
+                        if (data.stats) {
+                            document.getElementById('total-patients').textContent = data.stats.total_patients;
+                            document.getElementById('scheduled-today').textContent = data.stats.scheduled_today;
+                            document.getElementById('in-progress').textContent = data.stats.in_progress;
+                            document.getElementById('completed-today').textContent = data.stats.completed_today;
+                        }
+                        
+                        // Update facility dropdown if available
+                        {% if is_admin or is_radiologist %}
+                        if (data.facilities) {
+                            updateFacilityDropdown(data.facilities);
+                        }
+                        {% endif %}
+                        
+                        renderWorklist();
+                    } else {
+                        throw new Error(data.error || 'Failed to load worklist data');
+                    }
                 })
                 .catch(error => {
                     console.error('Error loading worklist:', error);
-                    // Fallback to sample data
-                    worklistData = generateSampleData();
-                    filteredData = [...worklistData];
+                    showNotification('Error loading worklist data: ' + error.message, 'error');
+                    // Show empty state instead of sample data
+                    worklistData = [];
+                    filteredData = [];
                     renderWorklist();
                     updateStatistics();
                 })
@@ -1127,80 +1170,40 @@
                 });
         }
 
-        function generateSampleData() {
-            const samplePatients = [
-                {
-                    id: 1,
-                    patient_name: "Johnson, Sarah",
-                    patient_id: "PAT001",
-                    modality: "CT",
-                    study_date: "2024-01-15",
-                    study_time: "14:30",
-                    status: "scheduled",
-                    priority: "high",
-                    facility: "General Hospital",
-                    accession: "ACC001",
-                    study_description: "Chest CT with contrast"
-                },
-                {
-                    id: 2,
-                    patient_name: "Smith, Michael",
-                    patient_id: "PAT002",
-                    modality: "MRI",
-                    study_date: "2024-01-15",
-                    study_time: "10:15",
-                    status: "in_progress",
-                    priority: "medium",
-                    facility: "Medical Center",
-                    accession: "ACC002",
-                    study_description: "Brain MRI"
-                },
-                {
-                    id: 3,
-                    patient_name: "Davis, Emily",
-                    patient_id: "PAT003",
-                    modality: "X-Ray",
-                    study_date: "2024-01-14",
-                    study_time: "16:45",
-                    status: "completed",
-                    priority: "low",
-                    facility: "General Hospital",
-                    accession: "ACC003",
-                    study_description: "Chest X-Ray"
-                },
-                {
-                    id: 4,
-                    patient_name: "Wilson, Robert",
-                    patient_id: "PAT004",
-                    modality: "CT",
-                    study_date: "2024-01-15",
-                    study_time: "09:00",
-                    status: "scheduled",
-                    priority: "high",
-                    facility: "Emergency Center",
-                    accession: "ACC004",
-                    study_description: "Abdominal CT"
-                },
-                {
-                    id: 5,
-                    patient_name: "Brown, Lisa",
-                    patient_id: "PAT005",
-                    modality: "Ultrasound",
-                    study_date: "2024-01-15",
-                    study_time: "11:30",
-                    status: "in_progress",
-                    priority: "medium",
-                    facility: "Women's Health",
-                    accession: "ACC005",
-                    study_description: "Obstetric Ultrasound"
-                }
-            ];
-            return samplePatients;
+        function updateFacilityDropdown(facilities) {
+            const facilitySelect = document.getElementById('facility-filter');
+            if (!facilitySelect) return;
+            
+            // Clear existing options except the first one
+            const firstOption = facilitySelect.querySelector('option[value=""]');
+            facilitySelect.innerHTML = '';
+            facilitySelect.appendChild(firstOption);
+            
+            // Add facilities from API
+            facilities.forEach(facility => {
+                const option = document.createElement('option');
+                option.value = facility.id;
+                option.textContent = facility.name;
+                facilitySelect.appendChild(option);
+            });
         }
 
         function renderWorklist() {
             const tbody = document.getElementById('worklist-tbody');
             tbody.innerHTML = '';
+
+            if (filteredData.length === 0) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td colspan="9" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                        <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i>
+                        <div style="font-size: 18px; margin-bottom: 8px;">No patients found</div>
+                        <div style="font-size: 14px;">Try adjusting your filters or upload some DICOM studies</div>
+                    </td>
+                `;
+                tbody.appendChild(row);
+                return;
+            }
 
             filteredData.forEach(patient => {
                 const row = document.createElement('tr');
@@ -1251,47 +1254,15 @@
         }
 
         function updateStatistics() {
-            const today = new Date().toISOString().split('T')[0];
-            
+            // Statistics are now updated directly from the API response in loadWorklist()
+            // This function is kept for compatibility but may not be needed
             const totalPatients = worklistData.length;
-            const scheduledToday = worklistData.filter(p => p.study_date === today && p.status === 'scheduled').length;
-            const inProgress = worklistData.filter(p => p.status === 'in_progress').length;
-            const completedToday = worklistData.filter(p => p.study_date === today && p.status === 'completed').length;
-
             document.getElementById('total-patients').textContent = totalPatients;
-            document.getElementById('scheduled-today').textContent = scheduledToday;
-            document.getElementById('in-progress').textContent = inProgress;
-            document.getElementById('completed-today').textContent = completedToday;
         }
 
         function filterWorklist() {
-            const search = document.getElementById('search').value.toLowerCase();
-            const statusFilter = document.getElementById('status-filter').value;
-            const modalityFilter = document.getElementById('modality-filter').value;
-            const priorityFilter = document.getElementById('priority-filter').value;
-            {% if is_admin or is_radiologist %}
-            const facilityFilter = document.getElementById('facility-filter').value;
-            {% endif %}
-
-            filteredData = worklistData.filter(patient => {
-                const matchesSearch = !search || 
-                    patient.patient_name.toLowerCase().includes(search) ||
-                    patient.patient_id.toLowerCase().includes(search) ||
-                    patient.accession.toLowerCase().includes(search);
-                
-                const matchesStatus = !statusFilter || patient.status === statusFilter;
-                const matchesModality = !modalityFilter || patient.modality === modalityFilter;
-                const matchesPriority = !priorityFilter || patient.priority === priorityFilter;
-                {% if is_admin or is_radiologist %}
-                const matchesFacility = !facilityFilter || patient.facility === facilityFilter;
-                {% else %}
-                const matchesFacility = true;
-                {% endif %}
-
-                return matchesSearch && matchesStatus && matchesModality && matchesPriority && matchesFacility;
-            });
-
-            renderWorklist();
+            // Instead of filtering locally, reload data from server with filters
+            loadWorklist();
         }
 
         function sortTable(field) {
@@ -1339,12 +1310,20 @@
         }
 
         function viewPatient(patientId) {
-            showLoading();
-            // Simulate loading delay
-            setTimeout(() => {
-                hideLoading();
-                window.location.href = `/viewer/?patient=${patientId}`;
-            }, 500);
+            // Find the patient data
+            const patient = worklistData.find(p => p.id === patientId);
+            if (!patient) {
+                showNotification('Patient not found', 'error');
+                return;
+            }
+
+            if (patient.has_study && patient.study_id) {
+                // Redirect to viewer with study ID
+                window.location.href = `/viewer/?study_id=${patient.study_id}`;
+            } else {
+                // Redirect to worklist entry view
+                window.location.href = `/worklist/entry/${patientId}/view/`;
+            }
         }
 
         function openClinicalModal(patientId) {
