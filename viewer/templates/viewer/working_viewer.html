@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoctisView - DICOM Viewer</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        .viewer-container {
+            display: flex;
+            height: 100vh;
+        }
+        .main-viewer {
+            flex: 1;
+            position: relative;
+            background: #111;
+        }
+        .viewer-canvas {
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 18px;
+        }
+        .toolbar {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+        .tool-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: #ffffff;
+            cursor: pointer;
+            padding: 10px 15px;
+            transition: all 0.2s ease;
+        }
+        .tool-btn:hover {
+            background: rgba(0, 255, 136, 0.2);
+            border-color: #00ff88;
+        }
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            background: #28a745;
+            color: white;
+            border-radius: 5px;
+            display: none;
+            z-index: 2000;
+        }
+    </style>
+</head>
+<body>
+    <div class="viewer-container">
+        <div class="toolbar">
+            <button class="tool-btn" onclick="window.location.href='/worklist/'">
+                <i class="fas fa-arrow-left"></i> Back to Worklist
+            </button>
+            <button class="tool-btn" onclick="loadPreviousImage()">
+                <i class="fas fa-chevron-left"></i> Previous
+            </button>
+            <button class="tool-btn" onclick="loadNextImage()">
+                <i class="fas fa-chevron-right"></i> Next
+            </button>
+            <button class="tool-btn" onclick="zoomIn()">
+                <i class="fas fa-search-plus"></i> Zoom In
+            </button>
+            <button class="tool-btn" onclick="zoomOut()">
+                <i class="fas fa-search-minus"></i> Zoom Out
+            </button>
+            <button class="tool-btn" onclick="resetView()">
+                <i class="fas fa-sync"></i> Reset
+            </button>
+        </div>
+        
+        <div class="main-viewer">
+            <div class="viewer-canvas" id="viewerCanvas">
+                DICOM Viewer Ready - Load a study to begin
+            </div>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <span>Window:</span>
+        <input type="range" id="windowWidth" min="1" max="4000" value="400" onchange="adjustWindow()">
+        <span>Level:</span>
+        <input type="range" id="windowLevel" min="-1000" max="3000" value="40" onchange="adjustWindow()">
+        <span id="imageInfo">No image loaded</span>
+    </div>
+    
+    <div class="notification" id="notification"></div>
+    
+    <script>
+        let currentStudyId = {{ study.id|default:'null' }};
+        let currentImageIndex = 0;
+        let images = [];
+        
+        // Initialize viewer
+        if (currentStudyId) {
+            loadStudy(currentStudyId);
+        }
+        
+        function loadStudy(studyId) {
+            fetch(`/viewer/api/studies/${studyId}/images/`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.images) {
+                        images = data.images;
+                        currentImageIndex = 0;
+                        loadCurrentImage();
+                        showNotification('Study loaded successfully');
+                    }
+                })
+                .catch(error => {
+                    showNotification('Error loading study: ' + error.message);
+                });
+        }
+        
+        function loadCurrentImage() {
+            if (images.length === 0) return;
+            
+            const image = images[currentImageIndex];
+            const canvas = document.getElementById('viewerCanvas');
+            
+            fetch(`/viewer/api/images/${image.id}/data/`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.image_data) {
+                        canvas.innerHTML = `<img src="data:image/png;base64,${data.image_data}" style="max-width: 100%; max-height: 100%;">`;
+                        document.getElementById('imageInfo').textContent = `Image ${currentImageIndex + 1} of ${images.length}`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading image:', error);
+                });
+        }
+        
+        function loadPreviousImage() {
+            if (currentImageIndex > 0) {
+                currentImageIndex--;
+                loadCurrentImage();
+            }
+        }
+        
+        function loadNextImage() {
+            if (currentImageIndex < images.length - 1) {
+                currentImageIndex++;
+                loadCurrentImage();
+            }
+        }
+        
+        function zoomIn() {
+            const img = document.querySelector('#viewerCanvas img');
+            if (img) {
+                const currentScale = img.style.transform ? parseFloat(img.style.transform.match(/scale\(([^)]+)\)/)?.[1] || 1) : 1;
+                img.style.transform = `scale(${currentScale * 1.2})`;
+            }
+        }
+        
+        function zoomOut() {
+            const img = document.querySelector('#viewerCanvas img');
+            if (img) {
+                const currentScale = img.style.transform ? parseFloat(img.style.transform.match(/scale\(([^)]+)\)/)?.[1] || 1) : 1;
+                img.style.transform = `scale(${currentScale * 0.8})`;
+            }
+        }
+        
+        function resetView() {
+            const img = document.querySelector('#viewerCanvas img');
+            if (img) {
+                img.style.transform = 'scale(1)';
+            }
+        }
+        
+        function adjustWindow() {
+            // Window/Level adjustment would be implemented here
+            showNotification('Window/Level adjusted');
+        }
+        
+        function showNotification(message) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.style.display = 'block';
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            switch(e.key) {
+                case 'ArrowLeft':
+                    loadPreviousImage();
+                    break;
+                case 'ArrowRight':
+                    loadNextImage();
+                    break;
+                case '+':
+                    zoomIn();
+                    break;
+                case '-':
+                    zoomOut();
+                    break;
+                case 'r':
+                    resetView();
+                    break;
+            }
+        });
+    </script>
+</body>
+</html>

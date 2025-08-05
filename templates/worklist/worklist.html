@@ -819,9 +819,7 @@
         <div class="header">
             <h1><i class="fas fa-clipboard-list"></i> Noctis Professional Worklist</h1>
             <div class="header-actions">
-                <button class="btn btn-secondary" onclick="window.location.href='/home/'">
-                    <i class="fas fa-home"></i> Home
-                </button>
+
                 {% if is_admin or is_radiologist %}
                 <div class="notification-area">
                     <button id="notification-bell" class="notification-bell" onclick="toggleNotifications()">
@@ -842,29 +840,34 @@
             </div>
         </div>
         
-        <!-- Advanced Upload Section -->
-        <div class="upload-section">
-            <div class="upload-container">
-                <div class="upload-zone" id="upload-zone">
-                    <i class="fas fa-cloud-upload-alt" style="font-size: 32px; margin-bottom: 15px;"></i>
-                    <p style="font-size: 16px; margin-bottom: 8px;">Drop DICOM files or folders here, or click to browse</p>
-                    <p style="font-size: 14px; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 8px;">
-                        <i class="fas fa-info-circle"></i> 
-                        Supports bulk uploads and background processing for large datasets
-                    </p>
+        <!-- Compact Upload Section -->
+        <div class="upload-section" style="padding: 20px 30px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <button class="btn btn-primary" onclick="document.getElementById('file-input-files').click()">
+                        <i class="fas fa-file-medical"></i> Upload Files
+                    </button>
+                    <button class="btn btn-secondary" onclick="selectUploadType()">
+                        <i class="fas fa-folder-open"></i> Upload Folder
+                    </button>
                     <input type="file" id="file-input" multiple webkitdirectory style="display: none;">
                     <input type="file" id="file-input-files" multiple accept=".dcm,.dicom" style="display: none;">
                 </div>
-                <div style="display: flex; flex-direction: column; gap: 12px;">
-                    <button class="btn btn-primary" onclick="selectUploadType()">
-                        <i class="fas fa-folder-open"></i> Upload Folder
+                {% if is_admin %}
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <button class="btn btn-secondary" onclick="window.location.href='/viewer/admin/facilities/'">
+                        <i class="fas fa-building"></i> Manage Facilities
                     </button>
-                    <button class="btn btn-success" onclick="document.getElementById('file-input-files').click()">
-                        <i class="fas fa-file-medical"></i> Upload Files
+                    <button class="btn btn-secondary" onclick="window.location.href='/viewer/admin/radiologists/'">
+                        <i class="fas fa-user-md"></i> Manage Users
+                    </button>
+                    <button class="btn btn-secondary" onclick="window.location.href='/admin/'">
+                        <i class="fas fa-cogs"></i> System Admin
                     </button>
                 </div>
+                {% endif %}
             </div>
-            <div class="upload-progress" id="upload-progress">
+            <div class="upload-progress" id="upload-progress" style="margin-top: 15px;">
                 <div class="progress-bar">
                     <div class="progress-fill" id="progress-fill"></div>
                 </div>
@@ -872,31 +875,7 @@
             </div>
         </div>
 
-        <!-- Statistics Dashboard -->
-        <div class="stats-section">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon"><i class="fas fa-users"></i></div>
-                    <div class="stat-number" id="total-patients">0</div>
-                    <div class="stat-label">Total Patients</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon"><i class="fas fa-calendar-check"></i></div>
-                    <div class="stat-number" id="scheduled-today">0</div>
-                    <div class="stat-label">Scheduled Today</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon"><i class="fas fa-clock"></i></div>
-                    <div class="stat-number" id="in-progress">0</div>
-                    <div class="stat-label">In Progress</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
-                    <div class="stat-number" id="completed-today">0</div>
-                    <div class="stat-label">Completed Today</div>
-                </div>
-            </div>
-        </div>
+
         
         <!-- Advanced Filters -->
         <div class="filters">
@@ -1524,6 +1503,96 @@
                 timeout = setTimeout(later, wait);
             };
         }
+
+        // Upload functionality
+        function selectUploadType() {
+            document.getElementById('file-input').click();
+        }
+
+        function handleFileUpload(files) {
+            if (files.length === 0) return;
+            
+            const formData = new FormData();
+            files.forEach(file => {
+                formData.append('files', file);
+            });
+
+            uploadFiles(formData, files.length);
+        }
+
+        function handleFolderUpload(files) {
+            if (files.length === 0) return;
+            
+            const formData = new FormData();
+            files.forEach(file => {
+                formData.append('files', file);
+            });
+
+            uploadFiles(formData, files.length);
+        }
+
+        function uploadFiles(formData, fileCount) {
+            const progressContainer = document.getElementById('upload-progress');
+            const progressFill = document.getElementById('progress-fill');
+            const fileInfo = document.getElementById('file-info');
+            
+            progressContainer.style.display = 'block';
+            fileInfo.textContent = `Uploading ${fileCount} file(s)...`;
+            progressFill.style.width = '0%';
+
+            fetch('/viewer/api/upload-dicom-files/', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': getCsrfToken()
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                progressFill.style.width = '100%';
+                if (data.success) {
+                    showNotification(`Successfully uploaded ${data.uploaded_files?.length || 0} files`, 'success');
+                    setTimeout(() => {
+                        progressContainer.style.display = 'none';
+                        loadWorklist(); // Refresh the worklist
+                    }, 2000);
+                } else {
+                    showNotification(`Upload failed: ${data.error || 'Unknown error'}`, 'error');
+                    setTimeout(() => progressContainer.style.display = 'none', 2000);
+                }
+            })
+            .catch(error => {
+                console.error('Upload error:', error);
+                showNotification('Upload failed: Network error', 'error');
+                setTimeout(() => progressContainer.style.display = 'none', 2000);
+            });
+        }
+
+        function getCsrfToken() {
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === 'csrftoken') {
+                    return value;
+                }
+            }
+            return '';
+        }
+
+        // File input event listeners
+        document.getElementById('file-input-files').addEventListener('change', function(e) {
+            const files = Array.from(e.target.files);
+            if (files.length > 0) {
+                handleFileUpload(files);
+            }
+        });
+        
+        document.getElementById('file-input').addEventListener('change', function(e) {
+            const files = Array.from(e.target.files);
+            if (files.length > 0) {
+                handleFolderUpload(files);
+            }
+        });
 
         // Clinical form submission
         document.getElementById('clinical-form').addEventListener('submit', function(e) {
