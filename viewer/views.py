@@ -4524,6 +4524,15 @@ def test_viewer_api(request):
             'message': str(e)
         }, status=500)
 
+@api_view(['GET'])
+def test_connectivity(request):
+    """Simple connectivity test endpoint"""
+    return Response({
+        'status': 'success',
+        'message': 'API connectivity test successful',
+        'timestamp': str(datetime.now())
+    })
+
 @login_required
 @require_http_methods(['POST'])
 def export_study(request, study_id):
