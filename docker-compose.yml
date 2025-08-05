@@ -1,0 +1,122 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: noctis_dicom
+      POSTGRES_USER: noctis_user
+      POSTGRES_PASSWORD: noctis_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U noctis_user -d noctis_dicom"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Noctis DICOM Viewer Application
+  web:
+    build: .
+    ports:
+      - "80:80"
+      - "8000:8000"
+    environment:
+      - DJANGO_SETTINGS_MODULE=noctisview.production_settings
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=noctis_dicom
+      - DB_USER=noctis_user
+      - DB_PASSWORD=noctis_password
+      - REDIS_URL=redis://redis:6379/1
+      - DJANGO_SECRET_KEY=your-production-secret-key-change-this
+      - ALLOWED_HOSTS=localhost,127.0.0.1
+      - DEBUG=False
+    volumes:
+      - ./media:/opt/noctis-dicom-viewer/media
+      - ./logs:/opt/noctis-dicom-viewer/logs
+      - ./staticfiles:/opt/noctis-dicom-viewer/staticfiles
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Celery Worker for background tasks
+  celery:
+    build: .
+    command: celery -A noctisview worker --loglevel=info --concurrency=4
+    environment:
+      - DJANGO_SETTINGS_MODULE=noctisview.production_settings
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=noctis_dicom
+      - DB_USER=noctis_user
+      - DB_PASSWORD=noctis_password
+      - REDIS_URL=redis://redis:6379/1
+    volumes:
+      - ./media:/opt/noctis-dicom-viewer/media
+      - ./logs:/opt/noctis-dicom-viewer/logs
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  # Celery Beat for scheduled tasks
+  celery-beat:
+    build: .
+    command: celery -A noctisview beat --loglevel=info
+    environment:
+      - DJANGO_SETTINGS_MODULE=noctisview.production_settings
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=noctis_dicom
+      - DB_USER=noctis_user
+      - DB_PASSWORD=noctis_password
+      - REDIS_URL=redis://redis:6379/1
+    volumes:
+      - ./media:/opt/noctis-dicom-viewer/media
+      - ./logs:/opt/noctis-dicom-viewer/logs
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  # Nginx reverse proxy (optional, for load balancing)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./media:/opt/noctis-dicom-viewer/media:ro
+      - ./staticfiles:/opt/noctis-dicom-viewer/staticfiles:ro
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
