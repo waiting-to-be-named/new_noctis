@@ -140,6 +140,48 @@ class FixedDicomViewer {
         this.setupAllButtons();
     }
 
+    setupNavigationButtons() {
+        console.log('Setting up navigation buttons...');
+        
+        // Previous/Next study buttons
+        const prevStudyBtn = document.getElementById('prev-study-btn');
+        const nextStudyBtn = document.getElementById('next-study-btn');
+        
+        if (prevStudyBtn) {
+            prevStudyBtn.addEventListener('click', () => {
+                console.log('Previous study clicked');
+                this.previousStudy();
+            });
+        }
+        
+        if (nextStudyBtn) {
+            nextStudyBtn.addEventListener('click', () => {
+                console.log('Next study clicked');
+                this.nextStudy();
+            });
+        }
+        
+        // Image navigation buttons
+        const prevImageBtn = document.getElementById('prev-image-btn');
+        const nextImageBtn = document.getElementById('next-image-btn');
+        
+        if (prevImageBtn) {
+            prevImageBtn.addEventListener('click', () => {
+                console.log('Previous image clicked');
+                this.previousImage();
+            });
+        }
+        
+        if (nextImageBtn) {
+            nextImageBtn.addEventListener('click', () => {
+                console.log('Next image clicked');
+                this.nextImage();
+            });
+        }
+        
+        console.log('Navigation buttons setup complete');
+    }
+
     createCanvas() {
         const canvasContainer = document.getElementById('canvas-container');
         if (canvasContainer) {
