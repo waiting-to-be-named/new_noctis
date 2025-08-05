@@ -27,7 +27,7 @@ class FixedDicomViewer {
         });
 
         // Core canvas elements
-        this.canvas = document.getElementById('dicom-canvas-advanced');
+        this.canvas = document.getElementById('viewerCanvas');
         this.ctx = this.canvas ? this.canvas.getContext('2d', { willReadFrequently: true }) : null;
         
         if (!this.canvas || !this.ctx) {
@@ -48,17 +48,40 @@ class FixedDicomViewer {
         this.originalImageData = null;
 
         // Enhanced viewing parameters for medical imaging
-        this.windowWidth = 1500;  // Optimized for lung imaging
-        this.windowLevel = -600;  // Lung level for optimal contrast
-        this.zoomFactor = 1.0;
+        this.zoom = 1.0;
+        this.minZoom = 0.1;
+        this.maxZoom = 10.0;
         this.panX = 0;
         this.panY = 0;
         this.rotation = 0;
-        this.flipHorizontal = false;
-        this.flipVertical = false;
-        this.inverted = false;
-        this.densityEnhancement = true;  // Enable by default for better tissue differentiation
-        this.contrastBoost = 1.2;  // Slight boost for better visualization
+        this.isInverted = false;
+        this.windowCenter = 256;
+        this.windowWidth = 512;
+        this.contrast = 1.0;
+        this.brightness = 0;
+
+        // Measurement and tool state
+        this.activeTool = 'pan';
+        this.measurements = [];
+        this.currentMeasurement = null;
+        this.isDrawing = false;
+        this.pixelSpacing = { x: 1, y: 1 }; // mm per pixel
+        this.measurementUnit = 'mm';
+        this.calibrationFactor = 1;
+        
+        // Magnification tool
+        this.magnificationActive = false;
+        this.magnificationLevel = 2;
+        this.magnificationRadius = 75;
+        
+        // ROI and analysis
+        this.roiActive = false;
+        this.currentROI = null;
+        this.rois = [];
+        
+        // Drawing state
+        this.isMouseDown = false;
+        this.lastMousePos = { x: 0, y: 0 };
 
         // Advanced windowing presets for different anatomical regions
         this.windowPresets = {
@@ -583,6 +606,11 @@ class FixedDicomViewer {
                     // Store image data
                     this.imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
                     
+                    // Draw overlays (measurements, ROIs)
+                    this.drawMeasurements();
+                    this.rois.forEach(roi => this.drawROI(roi));
+                    if (this.currentROI) this.drawROI(this.currentROI);
+                    
                     // Update UI
                     this.updateViewportInfo();
                     this.hideErrorPlaceholder();
@@ -761,6 +789,18 @@ class FixedDicomViewer {
         if (magnifyBtn) magnifyBtn.addEventListener('click', () => this.setActiveTool('magnify'));
         if (sharpenBtn) sharpenBtn.addEventListener('click', () => this.toggleSharpen());
         
+        // ROI tool
+        const roiBtn = document.getElementById('roi-btn');
+        if (roiBtn) roiBtn.addEventListener('click', () => this.setActiveTool('roi'));
+        
+        // Measurement unit toggle
+        const unitToggleBtn = document.getElementById('unit-toggle-btn');
+        if (unitToggleBtn) unitToggleBtn.addEventListener('click', () => this.toggleMeasurementUnit());
+        
+        // Clear measurements
+        const clearMeasurementsBtn = document.getElementById('clear-measurements-btn');
+        if (clearMeasurementsBtn) clearMeasurementsBtn.addEventListener('click', () => this.clearMeasurements());
+        
         if (mprBtn) mprBtn.addEventListener('click', () => this.enableMPR());
         if (volumeRenderBtn) volumeRenderBtn.addEventListener('click', () => this.enableVolumeRendering());
         if (mipBtn) mipBtn.addEventListener('click', () => this.enableMIP());
@@ -828,10 +868,36 @@ class FixedDicomViewer {
         this.isDragging = true;
         this.dragStart = { x: e.clientX, y: e.clientY };
         this.lastMousePos = { x: e.clientX, y: e.clientY };
+        this.isMouseDown = true;
+        
+        // Handle tool-specific mouse down
+        if (this.activeTool === 'distance' || this.activeTool === 'angle') {
+            this.startMeasurement(this.activeTool, e.clientX, e.clientY);
+        } else if (this.activeTool === 'roi') {
+            const rect = this.canvas.getBoundingClientRect();
+            this.startROI(e.clientX - rect.left, e.clientY - rect.top);
+        }
     }
 
     handleMouseMove(e) {
-        if (!this.isDragging) return;
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        // Handle magnification
+        if (this.magnificationActive) {
+            this.refreshCurrentImage();
+            this.drawMagnifier(x, y);
+            return;
+        }
+        
+        if (!this.isDragging) {
+            // Update cursor position for HU measurement
+            if (this.activeTool === 'hu') {
+                this.updateHUMeasurement(x, y);
+            }
+            return;
+        }
 
         const deltaX = e.clientX - this.lastMousePos.x;
         const deltaY = e.clientY - this.lastMousePos.y;
@@ -847,6 +913,17 @@ class FixedDicomViewer {
             this.updateWindowingUI();
             this.refreshCurrentImage();
         }
+        
+        // Handle measurement drawing
+        if (this.isDrawing && this.currentMeasurement) {
+            this.refreshCurrentImage();
+            this.drawMeasurementPreview(e.clientX, e.clientY);
+        }
+        
+        // Handle ROI drawing
+        if (this.roiActive && this.isMouseDown) {
+            this.updateROI(x, y);
+        }
 
         this.lastMousePos = { x: e.clientX, y: e.clientY };
     }
@@ -855,6 +932,17 @@ class FixedDicomViewer {
         this.isDragging = false;
         this.dragStart = null;
         this.lastMousePos = null;
+        this.isMouseDown = false;
+        
+        // Handle measurement completion
+        if (this.isDrawing && this.currentMeasurement) {
+            this.addMeasurementPoint(e.clientX, e.clientY);
+        }
+        
+        // Handle ROI completion
+        if (this.roiActive && this.currentROI) {
+            this.finishROI();
+        }
     }
 
     handleWheel(e) {
@@ -1372,26 +1460,23 @@ class FixedDicomViewer {
         this.updateToolUI();
         
         // Update cursor style based on tool
-        const cursor = this.getToolCursor(tool);
+        const cursor = this.getCursorForTool(tool);
         this.canvas.style.cursor = cursor;
         
         // Use success method instead of info for compatibility
         this.notyf.success(`Active tool: ${tool}`);
     }
     
-    getToolCursor(tool) {
-        const cursors = {
-            'windowing': 'crosshair',
-            'pan': 'move',
-            'zoom': 'zoom-in',
-            'distance': 'crosshair',
-            'angle': 'crosshair',
-            'area': 'crosshair',
-            'hu': 'crosshair',
-            'crosshair': 'crosshair',
-            'magnify': 'zoom-in'
-        };
-        return cursors[tool] || 'default';
+    getCursorForTool(tool) {
+        switch(tool) {
+            case 'pan': return 'move';
+            case 'zoom': return 'zoom-in';
+            case 'distance': return 'crosshair';
+            case 'angle': return 'crosshair';
+            case 'magnify': return 'none';
+            case 'roi': return 'crosshair';
+            default: return 'default';
+        }
     }
     
     updateToolUI() {
@@ -1717,6 +1802,318 @@ class FixedDicomViewer {
             this.applyWindowLevel();
             this.updateWindowLevelDisplay();
         }
+    }
+
+    // Magnification tool functionality
+    toggleMagnification() {
+        this.magnificationActive = !this.magnificationActive;
+        this.canvas.style.cursor = this.magnificationActive ? 'none' : 'default';
+        
+        if (!this.magnificationActive) {
+            this.redrawCanvas();
+        }
+    }
+
+    drawMagnifier(mouseX, mouseY) {
+        if (!this.magnificationActive || !this.imageData) return;
+
+        const radius = this.magnificationRadius;
+        const scale = this.magnificationLevel;
+
+        // Save context
+        this.ctx.save();
+
+        // Create circular clipping path
+        this.ctx.beginPath();
+        this.ctx.arc(mouseX, mouseY, radius, 0, 2 * Math.PI);
+        this.ctx.clip();
+
+        // Draw magnified portion
+        const sourceX = Math.max(0, mouseX / this.zoom - radius / scale);
+        const sourceY = Math.max(0, mouseY / this.zoom - radius / scale);
+        const sourceWidth = Math.min(this.canvas.width / this.zoom, radius * 2 / scale);
+        const sourceHeight = Math.min(this.canvas.height / this.zoom, radius * 2 / scale);
+
+        this.ctx.drawImage(
+            this.canvas,
+            sourceX, sourceY, sourceWidth, sourceHeight,
+            mouseX - radius, mouseY - radius, radius * 2, radius * 2
+        );
+
+        // Restore context
+        this.ctx.restore();
+
+        // Draw magnifier border and crosshairs
+        this.ctx.strokeStyle = '#00ff88';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.arc(mouseX, mouseY, radius, 0, 2 * Math.PI);
+        this.ctx.stroke();
+
+        // Draw crosshairs
+        this.ctx.beginPath();
+        this.ctx.moveTo(mouseX - 10, mouseY);
+        this.ctx.lineTo(mouseX + 10, mouseY);
+        this.ctx.moveTo(mouseX, mouseY - 10);
+        this.ctx.lineTo(mouseX, mouseY + 10);
+        this.ctx.stroke();
+    }
+
+    // Measurement functionality
+    startMeasurement(type, x, y) {
+        const canvasRect = this.canvas.getBoundingClientRect();
+        const imageX = (x - canvasRect.left - this.panX) / this.zoom;
+        const imageY = (y - canvasRect.top - this.panY) / this.zoom;
+
+        this.currentMeasurement = {
+            type: type,
+            points: [{ x: imageX, y: imageY }],
+            id: Date.now()
+        };
+        this.isDrawing = true;
+    }
+
+    addMeasurementPoint(x, y) {
+        if (!this.isDrawing || !this.currentMeasurement) return;
+
+        const canvasRect = this.canvas.getBoundingClientRect();
+        const imageX = (x - canvasRect.left - this.panX) / this.zoom;
+        const imageY = (y - canvasRect.top - this.panY) / this.zoom;
+
+        this.currentMeasurement.points.push({ x: imageX, y: imageY });
+
+        if (this.currentMeasurement.type === 'distance' && this.currentMeasurement.points.length === 2) {
+            this.finishMeasurement();
+        } else if (this.currentMeasurement.type === 'angle' && this.currentMeasurement.points.length === 3) {
+            this.finishMeasurement();
+        }
+    }
+
+    finishMeasurement() {
+        if (!this.currentMeasurement) return;
+
+        this.measurements.push({ ...this.currentMeasurement });
+        this.currentMeasurement = null;
+        this.isDrawing = false;
+        this.redrawCanvas();
+    }
+
+    calculateDistance(p1, p2) {
+        const dx = (p2.x - p1.x) * this.pixelSpacing.x * this.calibrationFactor;
+        const dy = (p2.y - p1.y) * this.pixelSpacing.y * this.calibrationFactor;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    calculateAngle(p1, p2, p3) {
+        const a = this.calculateDistance(p2, p3);
+        const b = this.calculateDistance(p1, p3);
+        const c = this.calculateDistance(p1, p2);
+        
+        const angle = Math.acos((a * a + c * c - b * b) / (2 * a * c));
+        return (angle * 180) / Math.PI;
+    }
+
+    drawMeasurements() {
+        if (!this.measurements.length && !this.currentMeasurement) return;
+
+        this.ctx.save();
+        this.ctx.strokeStyle = '#ff6b6b';
+        this.ctx.fillStyle = '#ff6b6b';
+        this.ctx.lineWidth = 2;
+        this.ctx.font = '14px Arial';
+
+        // Draw finished measurements
+        this.measurements.forEach(measurement => {
+            this.drawMeasurement(measurement);
+        });
+
+        // Draw current measurement being drawn
+        if (this.currentMeasurement) {
+            this.drawMeasurement(this.currentMeasurement);
+        }
+
+        this.ctx.restore();
+    }
+
+    drawMeasurement(measurement) {
+        const points = measurement.points.map(p => ({
+            x: p.x * this.zoom + this.panX,
+            y: p.y * this.zoom + this.panY
+        }));
+
+        if (measurement.type === 'distance' && points.length >= 2) {
+            // Draw line
+            this.ctx.beginPath();
+            this.ctx.moveTo(points[0].x, points[0].y);
+            this.ctx.lineTo(points[1].x, points[1].y);
+            this.ctx.stroke();
+
+            // Draw points
+            points.forEach(point => {
+                this.ctx.beginPath();
+                this.ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
+                this.ctx.fill();
+            });
+
+            // Draw distance label
+            if (points.length === 2) {
+                const distance = this.calculateDistance(measurement.points[0], measurement.points[1]);
+                const unit = this.measurementUnit;
+                const midX = (points[0].x + points[1].x) / 2;
+                const midY = (points[0].y + points[1].y) / 2;
+                
+                this.ctx.fillText(`${distance.toFixed(2)} ${unit}`, midX + 10, midY - 10);
+            }
+        } else if (measurement.type === 'angle' && points.length >= 2) {
+            // Draw angle lines
+            this.ctx.beginPath();
+            this.ctx.moveTo(points[0].x, points[0].y);
+            this.ctx.lineTo(points[1].x, points[1].y);
+            if (points.length === 3) {
+                this.ctx.lineTo(points[2].x, points[2].y);
+            }
+            this.ctx.stroke();
+
+            // Draw points
+            points.forEach(point => {
+                this.ctx.beginPath();
+                this.ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
+                this.ctx.fill();
+            });
+
+            // Draw angle label
+            if (points.length === 3) {
+                const angle = this.calculateAngle(measurement.points[0], measurement.points[1], measurement.points[2]);
+                this.ctx.fillText(`${angle.toFixed(1)}°`, points[1].x + 10, points[1].y - 10);
+            }
+        }
+    }
+
+    // Additional helper methods for measurements and ROI
+    drawMeasurementPreview(clientX, clientY) {
+        if (!this.currentMeasurement || !this.measurements) return;
+
+        const canvasRect = this.canvas.getBoundingClientRect();
+        const x = (clientX - canvasRect.left - this.panX) / this.zoom;
+        const y = (clientY - canvasRect.top - this.panY) / this.zoom;
+
+        // Create a temporary measurement for preview
+        const previewMeasurement = {
+            ...this.currentMeasurement,
+            points: [...this.currentMeasurement.points, { x, y }]
+        };
+
+        this.drawMeasurement(previewMeasurement);
+    }
+
+    startROI(x, y) {
+        this.roiActive = true;
+        this.currentROI = {
+            startX: x,
+            startY: y,
+            endX: x,
+            endY: y,
+            id: Date.now()
+        };
+    }
+
+    updateROI(x, y) {
+        if (!this.currentROI) return;
+        
+        this.currentROI.endX = x;
+        this.currentROI.endY = y;
+        this.refreshCurrentImage();
+        this.drawROI(this.currentROI);
+    }
+
+    finishROI() {
+        if (!this.currentROI) return;
+        
+        this.rois.push({ ...this.currentROI });
+        this.analyzeROI(this.currentROI);
+        this.currentROI = null;
+        this.roiActive = false;
+    }
+
+    drawROI(roi) {
+        if (!roi) return;
+
+        this.ctx.save();
+        this.ctx.strokeStyle = '#00ff88';
+        this.ctx.fillStyle = 'rgba(0, 255, 136, 0.2)';
+        this.ctx.lineWidth = 2;
+
+        const width = roi.endX - roi.startX;
+        const height = roi.endY - roi.startY;
+
+        this.ctx.fillRect(roi.startX, roi.startY, width, height);
+        this.ctx.strokeRect(roi.startX, roi.startY, width, height);
+
+        this.ctx.restore();
+    }
+
+    analyzeROI(roi) {
+        if (!this.imageData) return;
+
+        const canvas = this.canvas;
+        const imageData = this.ctx.getImageData(
+            Math.min(roi.startX, roi.endX),
+            Math.min(roi.startY, roi.endY),
+            Math.abs(roi.endX - roi.startX),
+            Math.abs(roi.endY - roi.startY)
+        );
+
+        let sum = 0;
+        let count = 0;
+        let min = Infinity;
+        let max = -Infinity;
+
+        for (let i = 0; i < imageData.data.length; i += 4) {
+            const gray = imageData.data[i]; // R channel
+            sum += gray;
+            count++;
+            min = Math.min(min, gray);
+            max = Math.max(max, gray);
+        }
+
+        const mean = sum / count;
+        const stats = {
+            mean: mean.toFixed(2),
+            min: min,
+            max: max,
+            area: Math.abs(roi.endX - roi.startX) * Math.abs(roi.endY - roi.startY)
+        };
+
+        this.showROIStats(stats);
+    }
+
+    showROIStats(stats) {
+        const roiPanel = document.getElementById('roi-panel');
+        if (roiPanel) {
+            roiPanel.innerHTML = `
+                <h4>ROI Analysis</h4>
+                <p>Mean: ${stats.mean} HU</p>
+                <p>Min: ${stats.min} HU</p>
+                <p>Max: ${stats.max} HU</p>
+                <p>Area: ${stats.area} pixels²</p>
+            `;
+        }
+    }
+
+    // Unit conversion for measurements
+    toggleMeasurementUnit() {
+        this.measurementUnit = this.measurementUnit === 'mm' ? 'cm' : 'mm';
+        this.calibrationFactor = this.measurementUnit === 'cm' ? 0.1 : 1;
+        this.refreshCurrentImage();
+    }
+
+    // Clear all measurements
+    clearMeasurements() {
+        this.measurements = [];
+        this.rois = [];
+        this.currentMeasurement = null;
+        this.currentROI = null;
+        this.refreshCurrentImage();
     }
 }
 
