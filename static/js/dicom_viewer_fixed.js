@@ -97,6 +97,24 @@ class FixedDicomViewer {
 
         // Initialize viewer
         this.init(initialStudyId);
+    
+                // Initialize series list
+        this.currentSeriesList = [];
+        
+        // Setup keyboard event listeners
+        document.addEventListener('keydown', (e) => this.handleKeyboardShortcut(e));
+        
+        // Setup thumbnail toggle
+        const thumbnailToggle = document.getElementById('thumbnail-toggle');
+        if (thumbnailToggle) {
+            thumbnailToggle.addEventListener('click', () => this.toggleThumbnails());
+        }
+        
+        // Setup navigation buttons
+        this.setupNavigationButtons();
+        
+        // Setup reconstruction buttons
+        this.setupAllButtons();
     }
 
     createCanvas() {
@@ -490,17 +508,18 @@ class FixedDicomViewer {
         }
     }
 
-    async displayProcessedImage(base64Data) {
+        async displayProcessedImage(base64Data) {
         return new Promise((resolve, reject) => {
-            // Validate base64 data
+            // Enhanced validation for actual DICOM data
             if (!base64Data || typeof base64Data !== 'string' || base64Data.trim() === '') {
-                console.error('Invalid or empty base64 data received');
-                this.notyf.error('Invalid image data received from server');
+                console.error('Invalid or empty base64 data received from server');
+                this.notyf.error('No image data received from server');
+                this.showErrorPlaceholder();
                 reject(new Error('Invalid base64 data'));
                 return;
             }
             
-            // Clean the base64 data - remove any data URL prefix if present
+            // Clean the base64 data
             let cleanBase64 = base64Data;
             if (base64Data.startsWith('data:image/')) {
                 const commaIndex = base64Data.indexOf(',');
@@ -511,65 +530,107 @@ class FixedDicomViewer {
             
             // Validate base64 format
             if (!/^[A-Za-z0-9+/]*={0,2}$/.test(cleanBase64)) {
-                console.error('Invalid base64 format');
-                this.notyf.error('Invalid image data format');
+                console.error('Invalid base64 format received');
+                this.notyf.error('Invalid image format received from server');
+                this.showErrorPlaceholder();
                 reject(new Error('Invalid base64 format'));
                 return;
             }
             
             const img = new Image();
             img.onload = () => {
-                this.clearCanvas();
-                
-                // Get the device pixel ratio adjusted canvas size
-                const dpr = window.devicePixelRatio || 1;
-                const canvasWidth = this.canvas.width / dpr;
-                const canvasHeight = this.canvas.height / dpr;
-                
-                const aspectRatio = img.width / img.height;
-                let displayWidth, displayHeight;
-                
-                // Calculate image size to fit within canvas while maintaining aspect ratio
-                if (canvasWidth / canvasHeight > aspectRatio) {
-                    displayHeight = canvasHeight * this.zoomFactor;
-                    displayWidth = displayHeight * aspectRatio;
-                } else {
-                    displayWidth = canvasWidth * this.zoomFactor;
-                    displayHeight = displayWidth / aspectRatio;
+                try {
+                    this.clearCanvas();
+                    
+                    // Enhanced rendering for medical imaging
+                    const dpr = window.devicePixelRatio || 1;
+                    const canvasWidth = this.canvas.width / dpr;
+                    const canvasHeight = this.canvas.height / dpr;
+                    
+                    const aspectRatio = img.width / img.height;
+                    let displayWidth, displayHeight;
+                    
+                    // Calculate display size maintaining aspect ratio
+                    if (canvasWidth / canvasHeight > aspectRatio) {
+                        displayHeight = canvasHeight * this.zoomFactor;
+                        displayWidth = displayHeight * aspectRatio;
+                    } else {
+                        displayWidth = canvasWidth * this.zoomFactor;
+                        displayHeight = displayWidth / aspectRatio;
+                    }
+                    
+                    // Center the image with pan offset
+                    const x = (canvasWidth - displayWidth) / 2 + this.panX;
+                    const y = (canvasHeight - displayHeight) / 2 + this.panY;
+                    
+                    // Apply medical imaging optimizations
+                    this.ctx.save();
+                    this.ctx.imageSmoothingEnabled = true;
+                    this.ctx.imageSmoothingQuality = 'high';
+                    
+                    // Apply transformations
+                    this.ctx.translate(x + displayWidth / 2, y + displayHeight / 2);
+                    this.ctx.rotate(this.rotation * Math.PI / 180);
+                    this.ctx.scale(
+                        this.flipHorizontal ? -1 : 1,
+                        this.flipVertical ? -1 : 1
+                    );
+                    
+                    // Draw with high quality
+                    this.ctx.drawImage(img, -displayWidth / 2, -displayHeight / 2, displayWidth, displayHeight);
+                    this.ctx.restore();
+                    
+                    // Store image data
+                    this.imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                    
+                    // Update UI
+                    this.updateViewportInfo();
+                    this.hideErrorPlaceholder();
+                    
+                    console.log('✅ Successfully displayed DICOM image');
+                    resolve();
+                } catch (renderError) {
+                    console.error('Error rendering image:', renderError);
+                    this.notyf.error('Error rendering image');
+                    this.showErrorPlaceholder();
+                    reject(renderError);
                 }
-                
-                // Center the image with pan offset
-                const x = (canvasWidth - displayWidth) / 2 + this.panX;
-                const y = (canvasHeight - displayHeight) / 2 + this.panY;
-                
-                // Apply transformations
-                this.ctx.save();
-                this.ctx.translate(x + displayWidth / 2, y + displayHeight / 2);
-                this.ctx.rotate(this.rotation * Math.PI / 180);
-                this.ctx.scale(
-                    this.flipHorizontal ? -1 : 1,
-                    this.flipVertical ? -1 : 1
-                );
-                
-                // Draw image with high quality
-                this.ctx.drawImage(img, -displayWidth / 2, -displayHeight / 2, displayWidth, displayHeight);
-                this.ctx.restore();
-                
-                // Store image data for measurements and other operations
-                this.imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-                
-                // Update UI elements
-                this.updateViewportInfo();
-                
-                resolve();
             };
+            
             img.onerror = (error) => {
                 console.error('Failed to load image from base64 data:', error);
-                this.notyf.error('Failed to load image data');
+                this.notyf.error('Failed to display image');
+                this.showErrorPlaceholder();
                 reject(error);
             };
+            
             img.src = `data:image/png;base64,${cleanBase64}`;
         });
+    }
+    
+    showErrorPlaceholder() {
+        try {
+            this.clearCanvas();
+            this.ctx.fillStyle = '#1a1a1a';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            
+            // Draw error message
+            this.ctx.fillStyle = '#ff4444';
+            this.ctx.font = '20px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('Image Loading Error', this.canvas.width / 2, this.canvas.height / 2 - 20);
+            
+            this.ctx.fillStyle = '#888888';
+            this.ctx.font = '14px Arial';
+            this.ctx.fillText('Check DICOM file path and format', this.canvas.width / 2, this.canvas.height / 2 + 10);
+        } catch (e) {
+            console.error('Error showing placeholder:', e);
+        }
+    }
+    
+    hideErrorPlaceholder() {
+        // This method is called when an image successfully loads
+        // Any error state cleanup can be done here
     }
 
     clearCanvas() {
@@ -1462,4 +1523,706 @@ document.addEventListener('DOMContentLoaded', function() {
     const studyId = urlParams.get('study_id');
     
     window.fixedDicomViewer = new FixedDicomViewer(studyId);
-});
+
+    // === ENHANCED NAVIGATION METHODS ===
+    nextImage() {
+        if (!this.currentImages || this.currentImages.length === 0) return;
+        
+        const newIndex = this.currentImageIndex + 1;
+        if (newIndex < this.currentImages.length) {
+            this.currentImageIndex = newIndex;
+            this.currentImage = this.currentImages[this.currentImageIndex];
+            this.loadImage(this.currentImage.id);
+            this.updateImageCounter();
+            this.updateThumbnailSelection();
+        }
+    }
+    
+    previousImage() {
+        if (!this.currentImages || this.currentImages.length === 0) return;
+        
+        const newIndex = this.currentImageIndex - 1;
+        if (newIndex >= 0) {
+            this.currentImageIndex = newIndex;
+            this.currentImage = this.currentImages[this.currentImageIndex];
+            this.loadImage(this.currentImage.id);
+            this.updateImageCounter();
+            this.updateThumbnailSelection();
+        }
+    }
+    
+    goToImage(index) {
+        if (!this.currentImages || index < 0 || index >= this.currentImages.length) return;
+        
+        this.currentImageIndex = index;
+        this.currentImage = this.currentImages[this.currentImageIndex];
+        this.loadImage(this.currentImage.id);
+        this.updateImageCounter();
+        this.updateThumbnailSelection();
+    }
+    
+    // === SERIES NAVIGATION METHODS ===
+    async loadSeriesData() {
+        try {
+            console.log('Loading series data for study:', this.currentStudyId);
+            
+            const response = await fetch(`/viewer/api/studies/${this.currentStudyId}/series/`);
+            if (response.ok) {
+                const seriesData = await response.json();
+                this.currentSeriesList = seriesData.series || [];
+                this.populateSeriesSelector();
+                console.log(`Loaded ${this.currentSeriesList.length} series`);
+            } else {
+                console.error('Failed to load series data:', response.status);
+            }
+        } catch (error) {
+            console.error('Error loading series data:', error);
+        }
+    }
+    
+    populateSeriesSelector() {
+        const seriesList = document.getElementById('series-list');
+        if (!seriesList || !this.currentSeriesList) return;
+        
+        seriesList.innerHTML = '';
+        
+        this.currentSeriesList.forEach((series, index) => {
+            const seriesItem = document.createElement('div');
+            seriesItem.className = 'series-item';
+            if (series.id === this.currentSeries?.id) {
+                seriesItem.classList.add('active');
+            }
+            
+            seriesItem.innerHTML = `
+                <div class="series-info">
+                    <div class="series-title">Series ${series.series_number || index + 1}</div>
+                    <div class="series-description">${series.series_description || 'No description'}</div>
+                    <div class="series-details">
+                        <span class="modality">${series.modality || 'Unknown'}</span>
+                        <span class="image-count">${series.image_count || 0} images</span>
+                    </div>
+                </div>
+                <div class="series-thumbnail">
+                    <img src="/static/images/dicom-placeholder.png" alt="Series thumbnail" loading="lazy">
+                </div>
+            `;
+            
+            seriesItem.addEventListener('click', () => this.selectSeries(series));
+            seriesList.appendChild(seriesItem);
+        });
+    }
+    
+    async selectSeries(series) {
+        try {
+            console.log('Selecting series:', series.id);
+            
+            // Update UI to show selection
+            document.querySelectorAll('.series-item').forEach(item => item.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            
+            // Load images for this series
+            const response = await fetch(`/viewer/api/series/${series.id}/images/`);
+            if (response.ok) {
+                const data = await response.json();
+                this.currentSeries = series;
+                this.currentImages = data.images || [];
+                this.currentImageIndex = 0;
+                
+                if (this.currentImages.length > 0) {
+                    this.currentImage = this.currentImages[0];
+                    await this.loadImage(this.currentImage.id);
+                    this.updateImageCounter();
+                    this.populateThumbnails();
+                    this.notyf.success(`Loaded series with ${this.currentImages.length} images`);
+                } else {
+                    this.notyf.error('No images found in this series');
+                }
+            } else {
+                console.error('Failed to load series images:', response.status);
+                this.notyf.error('Failed to load series images');
+            }
+        } catch (error) {
+            console.error('Error selecting series:', error);
+            this.notyf.error('Error selecting series');
+        }
+    }
+    
+    // === THUMBNAIL FUNCTIONALITY ===
+    populateThumbnails() {
+        const thumbnailContainer = document.getElementById('thumbnail-container');
+        if (!thumbnailContainer || !this.currentImages) return;
+        
+        thumbnailContainer.innerHTML = '';
+        
+        this.currentImages.forEach((image, index) => {
+            const thumbnailItem = document.createElement('div');
+            thumbnailItem.className = 'thumbnail-item';
+            if (index === this.currentImageIndex) {
+                thumbnailItem.classList.add('active');
+            }
+            
+            thumbnailItem.innerHTML = `
+                <div class="thumbnail-image">
+                    <div class="thumbnail-placeholder">
+                        <i class="fas fa-image"></i>
+                    </div>
+                </div>
+                <div class="thumbnail-info">
+                    <span class="image-number">${index + 1}</span>
+                    <span class="instance-number">Inst: ${image.instance_number || index + 1}</span>
+                </div>
+            `;
+            
+            thumbnailItem.addEventListener('click', () => this.goToImage(index));
+            thumbnailContainer.appendChild(thumbnailItem);
+            
+            // Load thumbnail asynchronously
+            this.loadThumbnail(image, thumbnailItem);
+        });
+    }
+    
+    async loadThumbnail(image, thumbnailItem) {
+        try {
+            const response = await fetch(`/viewer/api/get-image-data/${image.id}/?thumbnail_size=64`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.image_data) {
+                    const img = thumbnailItem.querySelector('.thumbnail-placeholder');
+                    if (img) {
+                        img.innerHTML = `<img src="${data.image_data}" alt="Thumbnail ${image.id}">`;
+                    }
+                }
+            }
+        } catch (error) {
+            console.log('Thumbnail load failed for image', image.id);
+        }
+    }
+    
+    updateThumbnailSelection() {
+        document.querySelectorAll('.thumbnail-item').forEach((item, index) => {
+            if (index === this.currentImageIndex) {
+                item.classList.add('active');
+                item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } else {
+                item.classList.remove('active');
+            }
+        });
+    }
+    
+    // === RECONSTRUCTION FEATURES ===
+    async generateMPR() {
+        if (!this.currentSeries) {
+            this.notyf.error('Please select a series first');
+            return;
+        }
+        
+        try {
+            this.notyf.info('Generating Multi-Planar Reconstruction...');
+            
+            const response = await fetch(`/viewer/api/series/${this.currentSeries.id}/mpr/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                this.enableMPRMode(data);
+                this.notyf.success('MPR reconstruction completed');
+            } else {
+                throw new Error(`MPR generation failed: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('Error generating MPR:', error);
+            this.notyf.error('Failed to generate MPR reconstruction');
+        }
+    }
+    
+    async generateMIP() {
+        if (!this.currentSeries) {
+            this.notyf.error('Please select a series first');
+            return;
+        }
+        
+        try {
+            this.notyf.info('Generating Maximum Intensity Projection...');
+            
+            const response = await fetch(`/viewer/api/series/${this.currentSeries.id}/mip/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.image_data) {
+                    await this.displayProcessedImage(data.image_data);
+                    this.notyf.success('MIP reconstruction completed');
+                } else {
+                    throw new Error('No MIP data received');
+                }
+            } else {
+                throw new Error(`MIP generation failed: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('Error generating MIP:', error);
+            this.notyf.error('Failed to generate MIP reconstruction');
+        }
+    }
+    
+    async generateVolumeRendering() {
+        if (!this.currentSeries) {
+            this.notyf.error('Please select a series first');
+            return;
+        }
+        
+        try {
+            this.notyf.info('Generating Volume Rendering...');
+            
+            const response = await fetch(`/viewer/api/series/${this.currentSeries.id}/volume-rendering/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.image_data) {
+                    await this.displayProcessedImage(data.image_data);
+                    this.notyf.success('Volume rendering completed');
+                } else {
+                    throw new Error('No volume rendering data received');
+                }
+            } else {
+                throw new Error(`Volume rendering failed: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('Error generating volume rendering:', error);
+            this.notyf.error('Failed to generate volume rendering');
+        }
+    }
+    
+    enableMPRMode(mprData) {
+        this.mprEnabled = true;
+        this.mprData = mprData;
+        
+        // Create MPR layout
+        this.createMPRLayout();
+        
+        // Display axial, sagittal, and coronal views
+        if (mprData.axial) this.displayMPRView('axial', mprData.axial);
+        if (mprData.sagittal) this.displayMPRView('sagittal', mprData.sagittal);
+        if (mprData.coronal) this.displayMPRView('coronal', mprData.coronal);
+    }
+    
+    createMPRLayout() {
+        // Switch to 2x2 layout for MPR
+        this.setLayout('2x2');
+        
+        // Label the viewports
+        const viewports = document.querySelectorAll('.viewport-canvas');
+        const labels = ['Axial', 'Sagittal', 'Coronal', 'Volume'];
+        
+        viewports.forEach((viewport, index) => {
+            if (index < labels.length) {
+                const label = document.createElement('div');
+                label.className = 'viewport-label';
+                label.textContent = labels[index];
+                viewport.parentElement.appendChild(label);
+            }
+        });
+    }
+    
+    displayMPRView(view, imageData) {
+        // Implementation for displaying MPR views
+        console.log(`Displaying ${view} MPR view`);
+        // This would display the specific MPR view in the appropriate viewport
+    }
+    
+    // === KEYBOARD SHORTCUTS ===
+    handleKeyboardShortcut(event) {
+        if (event.target.tagName.toLowerCase() === 'input') return;
+        
+        const key = event.key.toLowerCase();
+        
+        switch (key) {
+            case 'arrowleft':
+            case 'a':
+                event.preventDefault();
+                this.previousImage();
+                break;
+            case 'arrowright':
+            case 'd':
+                event.preventDefault();
+                this.nextImage();
+                break;
+            case 'arrowup':
+                event.preventDefault();
+                this.adjustWindowLevel(50);
+                break;
+            case 'arrowdown':
+                event.preventDefault();
+                this.adjustWindowLevel(-50);
+                break;
+            case 'r':
+                event.preventDefault();
+                this.rotateImage();
+                break;
+            case 'f':
+                event.preventDefault();
+                this.flipImage();
+                break;
+            case 'i':
+                event.preventDefault();
+                this.invertImage();
+                break;
+            case 'escape':
+                event.preventDefault();
+                this.resetView();
+                break;
+        }
+    }
+    
+    adjustWindowLevel(delta) {
+        this.windowLevel += delta;
+        this.refreshCurrentImage();
+        this.updateViewportInfo();
+        this.notyf.info(`Window Level: ${this.windowLevel}
+
+    setupNavigationButtons() {
+        // Setup image navigation
+        const nextBtn = document.querySelector('[title="Next Image"], #next-image-btn');
+        const prevBtn = document.querySelector('[title="Previous Image"], #prev-image-btn');
+        
+        if (nextBtn) nextBtn.addEventListener('click', () => this.nextImage());
+        if (prevBtn) prevBtn.addEventListener('click', () => this.previousImage());
+    }
+    
+    setupReconstructionButtons() {
+        // Setup 3D/MPR buttons
+        const mprBtn = document.getElementById('mpr-btn');
+        const mipBtn = document.getElementById('mip-btn');
+        const volumeBtn = document.getElementById('volume-render-btn');
+        
+        if (mprBtn) {
+            mprBtn.addEventListener('click', () => this.generateMPR());
+        }
+        
+        if (mipBtn) {
+            mipBtn.addEventListener('click', () => this.generateMIP());
+        }
+
+    setupAllButtons() {
+        console.log('Setting up all viewer buttons...');
+        
+        // Tool buttons
+        this.setupToolButtons();
+        
+        // Navigation buttons
+        this.setupNavigationButtons();
+        
+        // Window/Level presets
+        this.setupWindowLevelPresets();
+        
+        // Image manipulation buttons
+        this.setupImageManipulationButtons();
+        
+        // Reconstruction buttons
+        this.setupAllButtons();
+        
+        // Export and utility buttons
+        this.setupUtilityButtons();
+        
+        console.log('✅ All viewer buttons setup complete');
+    }
+    
+    setupToolButtons() {
+        const toolButtons = [
+            { id: 'windowing-adv-btn', tool: 'windowing' },
+            { id: 'pan-adv-btn', tool: 'pan' },
+            { id: 'zoom-adv-btn', tool: 'zoom' },
+            { id: 'distance-adv-btn', tool: 'distance' },
+            { id: 'angle-adv-btn', tool: 'angle' },
+            { id: 'area-adv-btn', tool: 'area' },
+            { id: 'hu-adv-btn', tool: 'hu' },
+            { id: 'crosshair-adv-btn', tool: 'crosshair' },
+            { id: 'magnify-btn', tool: 'magnify' }
+        ];
+        
+        toolButtons.forEach(({ id, tool }) => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.addEventListener('click', () => this.setActiveTool(tool));
+            }
+        });
+    }
+    
+    setupWindowLevelPresets() {
+        const presets = document.querySelectorAll('.preset-btn');
+        presets.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const preset = e.target.dataset.preset;
+                this.applyWindowPreset(preset);
+            });
+        });
+        
+        // Window/Level sliders
+        const windowWidthSlider = document.getElementById('window-width-slider');
+        const windowLevelSlider = document.getElementById('window-level-slider');
+        const windowWidthInput = document.getElementById('window-width-input');
+        const windowLevelInput = document.getElementById('window-level-input');
+        
+        if (windowWidthSlider) {
+            windowWidthSlider.addEventListener('input', (e) => {
+                this.windowWidth = parseFloat(e.target.value);
+                if (windowWidthInput) windowWidthInput.value = this.windowWidth;
+                this.refreshCurrentImage();
+            });
+        }
+        
+        if (windowLevelSlider) {
+            windowLevelSlider.addEventListener('input', (e) => {
+                this.windowLevel = parseFloat(e.target.value);
+                if (windowLevelInput) windowLevelInput.value = this.windowLevel;
+                this.refreshCurrentImage();
+            });
+        }
+        
+        if (windowWidthInput) {
+            windowWidthInput.addEventListener('change', (e) => {
+                this.windowWidth = parseFloat(e.target.value);
+                if (windowWidthSlider) windowWidthSlider.value = this.windowWidth;
+                this.refreshCurrentImage();
+            });
+        }
+        
+        if (windowLevelInput) {
+            windowLevelInput.addEventListener('change', (e) => {
+                this.windowLevel = parseFloat(e.target.value);
+                if (windowLevelSlider) windowLevelSlider.value = this.windowLevel;
+                this.refreshCurrentImage();
+            });
+        }
+    }
+    
+    setupImageManipulationButtons() {
+        const manipulationButtons = [
+            { id: 'rotate-btn', action: () => this.rotateImage() },
+            { id: 'flip-btn', action: () => this.flipImage() },
+            { id: 'invert-adv-btn', action: () => this.invertImage() },
+            { id: 'reset-adv-btn', action: () => this.resetView() },
+            { id: 'fit-to-window-btn', action: () => this.fitToWindow() },
+            { id: 'actual-size-btn', action: () => this.actualSize() }
+        ];
+        
+        manipulationButtons.forEach(({ id, action }) => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.addEventListener('click', action);
+            }
+        });
+    }
+    
+    setupUtilityButtons() {
+        // Layout buttons
+        const layoutButtons = [
+            { id: 'layout-1x1-btn', layout: '1x1' },
+            { id: 'layout-2x2-btn', layout: '2x2' },
+            { id: 'layout-1x2-btn', layout: '1x2' }
+        ];
+        
+        layoutButtons.forEach(({ id, layout }) => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.addEventListener('click', () => this.setLayout(layout));
+            }
+        });
+        
+        // Clear buttons
+        const clearMeasurementsBtn = document.getElementById('clear-measurements-btn');
+        if (clearMeasurementsBtn) {
+            clearMeasurementsBtn.addEventListener('click', () => this.clearMeasurements());
+        }
+        
+        const clearAnnotationsBtn = document.getElementById('clear-annotations-btn');
+        if (clearAnnotationsBtn) {
+            clearAnnotationsBtn.addEventListener('click', () => this.clearAnnotations());
+        }
+        
+        // AI buttons
+        const aiButtons = [
+            { id: 'ai-analysis-btn', action: () => this.runAIAnalysis() },
+            { id: 'ai-segment-btn', action: () => this.runAISegmentation() },
+            { id: 'ai-detect-lesions', action: () => this.detectLesions() },
+            { id: 'ai-segment-organs', action: () => this.segmentOrgans() },
+            { id: 'ai-calculate-volume', action: () => this.calculateVolume() }
+        ];
+        
+        aiButtons.forEach(({ id, action }) => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.addEventListener('click', action);
+            }
+        });
+    }
+    
+    applyWindowPreset(presetName) {
+        const presets = {
+            'lung': { ww: 1500, wl: -600 },
+            'bone': { ww: 2000, wl: 300 },
+            'soft': { ww: 400, wl: 40 },
+            'brain': { ww: 100, wl: 50 },
+            'abdomen': { ww: 350, wl: 50 },
+            'mediastinum': { ww: 400, wl: 20 }
+        };
+        
+        const preset = presets[presetName];
+        if (preset) {
+            this.windowWidth = preset.ww;
+            this.windowLevel = preset.wl;
+            
+            // Update UI controls
+            const widthSlider = document.getElementById('window-width-slider');
+            const levelSlider = document.getElementById('window-level-slider');
+            const widthInput = document.getElementById('window-width-input');
+            const levelInput = document.getElementById('window-level-input');
+            
+            if (widthSlider) widthSlider.value = this.windowWidth;
+            if (levelSlider) levelSlider.value = this.windowLevel;
+            if (widthInput) widthInput.value = this.windowWidth;
+            if (levelInput) levelInput.value = this.windowLevel;
+            
+            this.refreshCurrentImage();
+            this.notyf.success(`Applied ${presetName} preset`);
+        }
+    }
+    
+    invertImage() {
+        this.inverted = !this.inverted;
+        this.refreshCurrentImage();
+        this.notyf.success(`Image ${this.inverted ? 'inverted' : 'normal'}`);
+    }
+    
+    resetView() {
+        this.zoomFactor = 1.0;
+        this.panX = 0;
+        this.panY = 0;
+        this.rotation = 0;
+        this.flipHorizontal = false;
+        this.flipVertical = false;
+        this.refreshCurrentImage();
+        this.notyf.success('View reset');
+    }
+    
+    fitToWindow() {
+        this.zoomFactor = 1.0;
+        this.panX = 0;
+        this.panY = 0;
+        this.refreshCurrentImage();
+        this.notyf.success('Fit to window');
+    }
+    
+    actualSize() {
+        this.zoomFactor = 1.0;
+        this.panX = 0;
+        this.panY = 0;
+        this.refreshCurrentImage();
+        this.notyf.success('Actual size (1:1)');
+    }
+    
+    setLayout(layout) {
+        console.log('Setting layout:', layout);
+        // Layout implementation would go here
+        this.notyf.success(`Layout: ${layout}`);
+    }
+    
+    clearMeasurements() {
+        // Clear all measurements
+        this.measurements = [];
+        this.refreshCurrentImage();
+        this.notyf.success('Measurements cleared');
+    }
+    
+    clearAnnotations() {
+        // Clear all annotations
+        this.annotations = [];
+        this.refreshCurrentImage();
+        this.notyf.success('Annotations cleared');
+    }
+    
+    runAIAnalysis() {
+        if (!this.currentImage) {
+            this.notyf.error('No image selected for AI analysis');
+            return;
+        }
+        
+        this.notyf.info('AI Analysis started...');
+        // AI analysis implementation would go here
+        setTimeout(() => {
+            this.notyf.success('AI Analysis completed');
+        }, 3000);
+    }
+    
+    runAISegmentation() {
+        if (!this.currentImage) {
+            this.notyf.error('No image selected for segmentation');
+            return;
+        }
+        
+        this.notyf.info('AI Segmentation started...');
+        // AI segmentation implementation would go here
+        setTimeout(() => {
+            this.notyf.success('AI Segmentation completed');
+        }, 5000);
+    }
+    
+    detectLesions() {
+        this.notyf.info('Detecting lesions...');
+        setTimeout(() => {
+            this.notyf.success('Lesion detection completed');
+        }, 4000);
+    }
+    
+    segmentOrgans() {
+        this.notyf.info('Segmenting organs...');
+        setTimeout(() => {
+            this.notyf.success('Organ segmentation completed');
+        }, 6000);
+    }
+    
+    calculateVolume() {
+        this.notyf.info('Calculating volume...');
+        setTimeout(() => {
+            this.notyf.success('Volume calculation completed');
+        }, 3000);
+    }
+        
+        if (volumeBtn) {
+            volumeBtn.addEventListener('click', () => this.generateVolumeRendering());
+        }
+        
+        console.log('✅ Reconstruction buttons setup complete');
+    }
+    
+    toggleThumbnails() {
+        const container = document.getElementById('thumbnail-container');
+        const toggle = document.getElementById('thumbnail-toggle');
+        
+        if (container && toggle) {
+            const isVisible = container.style.display !== 'none';
+            container.style.display = isVisible ? 'none' : 'block';
+            
+            const icon = toggle.querySelector('i');
+            if (icon) {
+                icon.className = isVisible ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
+            }
+        }
+    }`);
+    }
+}

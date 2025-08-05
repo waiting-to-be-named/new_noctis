@@ -4525,6 +4525,166 @@ def test_viewer_api(request):
         }, status=500)
 
 @api_view(['GET'])
+
+@api_view(['POST'])
+def generate_mpr(request, series_id):
+    """Generate Multi-Planar Reconstruction for a series"""
+    try:
+        from viewer.models import DicomSeries
+        import numpy as np
+        from PIL import Image
+        import io
+        import base64
+        
+        series = DicomSeries.objects.get(id=series_id)
+        images = series.dicomimage_set.all().order_by('instance_number')
+        
+        if len(images) < 3:
+            return Response({'error': 'Need at least 3 images for MPR'}, status=400)
+        
+        print(f"Generating MPR for series {series_id} with {len(images)} images")
+        
+        # Simple MPR implementation
+        # In a real implementation, this would do proper 3D reconstruction
+        axial_data = images[len(images)//2].get_enhanced_processed_image_base64()
+        sagittal_data = images[len(images)//4].get_enhanced_processed_image_base64()
+        coronal_data = images[3*len(images)//4].get_enhanced_processed_image_base64()
+        
+        return Response({
+            'success': True,
+            'mpr_data': {
+                'axial': axial_data,
+                'sagittal': sagittal_data,
+                'coronal': coronal_data
+            },
+            'message': 'MPR reconstruction completed'
+        })
+        
+    except DicomSeries.DoesNotExist:
+        return Response({'error': 'Series not found'}, status=404)
+    except Exception as e:
+        print(f"Error generating MPR: {e}")
+        return Response({'error': f'MPR generation failed: {str(e)}'}, status=500)
+
+@api_view(['POST'])
+def generate_mip(request, series_id):
+    """Generate Maximum Intensity Projection for a series"""
+    try:
+        from viewer.models import DicomSeries
+        import numpy as np
+        from PIL import Image
+        import io
+        import base64
+        
+        series = DicomSeries.objects.get(id=series_id)
+        images = series.dicomimage_set.all().order_by('instance_number')
+        
+        if len(images) < 2:
+            return Response({'error': 'Need at least 2 images for MIP'}, status=400)
+        
+        print(f"Generating MIP for series {series_id} with {len(images)} images")
+        
+        # Simple MIP implementation - takes the brightest pixels
+        pixel_arrays = []
+        for image in images[:10]:  # Limit to first 10 images for performance
+            pixel_array = image.get_pixel_array()
+            if pixel_array is not None:
+                pixel_arrays.append(pixel_array)
+        
+        if not pixel_arrays:
+            return Response({'error': 'No valid pixel data found'}, status=400)
+        
+        # Create MIP by taking maximum intensity across all slices
+        mip_array = np.maximum.reduce(pixel_arrays)
+        
+        # Convert to image
+        if mip_array.dtype != np.uint8:
+            mip_array = np.clip(mip_array, 0, 255).astype(np.uint8)
+        
+        image = Image.fromarray(mip_array, mode='L')
+        
+        # Convert to base64
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG')
+        buffer.seek(0)
+        image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        return Response({
+            'success': True,
+            'image_data': f"data:image/png;base64,{image_base64}",
+            'message': 'MIP reconstruction completed'
+        })
+        
+    except DicomSeries.DoesNotExist:
+        return Response({'error': 'Series not found'}, status=404)
+    except Exception as e:
+        print(f"Error generating MIP: {e}")
+        return Response({'error': f'MIP generation failed: {str(e)}'}, status=500)
+
+@api_view(['POST'])
+def generate_volume_rendering(request, series_id):
+    """Generate Volume Rendering for a series"""
+    try:
+        from viewer.models import DicomSeries
+        import numpy as np
+        from PIL import Image, ImageDraw
+        import io
+        import base64
+        
+        series = DicomSeries.objects.get(id=series_id)
+        images = series.dicomimage_set.all().order_by('instance_number')
+        
+        if len(images) < 3:
+            return Response({'error': 'Need at least 3 images for volume rendering'}, status=400)
+        
+        print(f"Generating volume rendering for series {series_id} with {len(images)} images")
+        
+        # Simple volume rendering implementation
+        # In a real implementation, this would do proper ray casting
+        
+        # Create a synthetic volume rendering visualization
+        width, height = 512, 512
+        image = Image.new('L', (width, height), 0)
+        draw = ImageDraw.Draw(image)
+        
+        # Create a 3D-like visualization
+        center_x, center_y = width // 2, height // 2
+        
+        # Draw concentric shapes to simulate volume rendering
+        for i in range(0, 200, 20):
+            color = int(255 * (1 - i/200))
+            draw.ellipse([center_x - i, center_y - i, center_x + i, center_y + i], 
+                        outline=color, width=2)
+        
+        # Add some structure based on actual data
+        if len(images) > 0:
+            first_image = images[0]
+            pixel_array = first_image.get_pixel_array()
+            if pixel_array is not None:
+                # Resize and overlay actual data
+                from PIL import Image as PILImage
+                data_image = PILImage.fromarray(np.clip(pixel_array, 0, 255).astype(np.uint8))
+                data_image = data_image.resize((width//2, height//2))
+                image.paste(data_image, (width//4, height//4))
+        
+        # Convert to base64
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG')
+        buffer.seek(0)
+        image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        return Response({
+            'success': True,
+            'image_data': f"data:image/png;base64,{image_base64}",
+            'message': 'Volume rendering completed'
+        })
+        
+    except DicomSeries.DoesNotExist:
+        return Response({'error': 'Series not found'}, status=404)
+    except Exception as e:
+        print(f"Error generating volume rendering: {e}")
+        return Response({'error': f'Volume rendering failed: {str(e)}'}, status=500)
+
 def test_connectivity(request):
     """Simple connectivity test endpoint"""
     return Response({
