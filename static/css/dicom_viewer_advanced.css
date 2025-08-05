@@ -8,20 +8,20 @@
 }
 
 :root {
-    /* Professional Medical Color Palette */
-    --primary-bg: #0a0a0a;
-    --secondary-bg: #1a1a1a;
-    --tertiary-bg: #2a2a2a;
-    --accent-color: #00ff88;
-    --secondary-accent: #0088ff;
-    --warning-color: #ff6b35;
-    --danger-color: #ff3333;
-    --text-primary: #ffffff;
-    --text-secondary: #cccccc;
-    --text-muted: #888888;
-    --border-color: #444444;
-    --shadow-color: rgba(0, 255, 136, 0.1);
-    --overlay-bg: rgba(0, 0, 0, 0.8);
+    /* Professional Medical Color Palette - Charcoal Grey & Green Theme */
+    --primary-bg: #1a1a1a;
+    --secondary-bg: #2a2a2a;
+    --tertiary-bg: #333333;
+    --accent-color: #10b981;
+    --secondary-accent: #34d399;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --text-primary: #e5e5e5;
+    --text-secondary: #d1d5db;
+    --text-muted: #9ca3af;
+    --border-color: #4b5563;
+    --shadow-color: rgba(16, 185, 129, 0.2);
+    --overlay-bg: rgba(42, 42, 42, 0.95);
     
     /* Spacing */
     --spacing-xs: 4px;
@@ -42,8 +42,8 @@
 }
 
 body {
-    font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-    background: linear-gradient(135deg, var(--primary-bg) 0%, var(--secondary-bg) 50%, var(--primary-bg) 100%);
+    font-family: 'Inter', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    background: linear-gradient(135deg, var(--primary-bg) 0%, var(--secondary-bg) 50%, var(--tertiary-bg) 100%);
     color: var(--text-primary);
     overflow: hidden;
     height: 100vh;
