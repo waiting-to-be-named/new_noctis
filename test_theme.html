@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoctisView - Unified Theme Test</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="static/css/theme.css" rel="stylesheet">
+    <style>
+        .test-container {
+            padding: var(--spacing-lg);
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .test-section {
+            margin-bottom: var(--spacing-xl);
+            padding: var(--spacing-lg);
+            background: var(--color-bg-secondary);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-border-primary);
+        }
+        
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--spacing-md);
+            margin-top: var(--spacing-md);
+        }
+        
+        .color-swatch {
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
+            text-align: center;
+            font-size: 0.875rem;
+        }
+        
+        .color-primary { background: var(--color-primary); }
+        .color-secondary { background: var(--color-secondary); }
+        .color-accent { background: var(--color-accent); }
+        .color-success { background: var(--color-success); }
+        .color-warning { background: var(--color-warning); }
+        .color-error { background: var(--color-error); }
+        .color-info { background: var(--color-info); }
+        
+        .component-showcase {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-md);
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1 class="text-primary">NoctisView - Unified Theme System</h1>
+        <p class="text-secondary">Testing the consistent color scheme and component styling across the entire system.</p>
+        
+        <!-- Color Palette Test -->
+        <div class="test-section">
+            <h2 class="text-primary">Color Palette</h2>
+            <div class="test-grid">
+                <div class="color-swatch color-primary">
+                    <div>Primary</div>
+                    <div class="text-subtle">#10b981</div>
+                </div>
+                <div class="color-swatch color-secondary">
+                    <div>Secondary</div>
+                    <div class="text-subtle">#06b6d4</div>
+                </div>
+                <div class="color-swatch color-accent">
+                    <div>Accent</div>
+                    <div class="text-subtle">#8b5cf6</div>
+                </div>
+                <div class="color-swatch color-success">
+                    <div>Success</div>
+                    <div class="text-subtle">#10b981</div>
+                </div>
+                <div class="color-swatch color-warning">
+                    <div>Warning</div>
+                    <div class="text-subtle">#f59e0b</div>
+                </div>
+                <div class="color-swatch color-error">
+                    <div>Error</div>
+                    <div class="text-subtle">#ef4444</div>
+                </div>
+                <div class="color-swatch color-info">
+                    <div>Info</div>
+                    <div class="text-subtle">#3b82f6</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Button Components Test -->
+        <div class="test-section">
+            <h2 class="text-primary">Button Components</h2>
+            <div class="component-showcase">
+                <button class="btn btn-primary">Primary Button</button>
+                <button class="btn btn-secondary">Secondary Button</button>
+                <button class="btn btn-accent">Accent Button</button>
+                <button class="btn btn-success">Success Button</button>
+                <button class="btn btn-warning">Warning Button</button>
+                <button class="btn btn-error">Error Button</button>
+                <button class="btn btn-ghost">Ghost Button</button>
+            </div>
+        </div>
+        
+        <!-- Tool Buttons Test -->
+        <div class="test-section">
+            <h2 class="text-primary">Tool Buttons</h2>
+            <div class="component-showcase">
+                <button class="tool-btn"><i class="fas fa-play"></i></button>
+                <button class="tool-btn active"><i class="fas fa-pause"></i></button>
+                <button class="tool-btn"><i class="fas fa-stop"></i></button>
+                <button class="tool-btn"><i class="fas fa-brain"></i></button>
+                <button class="tool-btn"><i class="fas fa-cube"></i></button>
+                <button class="tool-btn"><i class="fas fa-ruler"></i></button>
+            </div>
+        </div>
+        
+        <!-- Status Badges Test -->
+        <div class="test-section">
+            <h2 class="text-primary">Status Badges</h2>
+            <div class="component-showcase">
+                <span class="status-badge status-success">Completed</span>
+                <span class="status-badge status-warning">In Progress</span>
+                <span class="status-badge status-error">Failed</span>
+                <span class="status-badge status-info">Scheduled</span>
+            </div>
+        </div>
+        
+        <!-- Card Component Test -->
+        <div class="test-section">
+            <h2 class="text-primary">Card Components</h2>
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Sample Card</h3>
+                    <button class="btn btn-ghost btn-sm">Action</button>
+                </div>
+                <p class="text-muted">This is a sample card component demonstrating the unified styling system. The card uses consistent colors, spacing, and typography from our theme variables.</p>
+                <div class="component-showcase">
+                    <button class="btn btn-primary">Primary</button>
+                    <button class="btn btn-secondary">Secondary</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Form Components Test -->
+        <div class="test-section">
+            <h2 class="text-primary">Form Components</h2>
+            <div class="test-grid">
+                <div class="form-group">
+                    <label class="form-label">Sample Input</label>
+                    <input type="text" class="form-input" placeholder="Enter text here">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Sample Select</label>
+                    <select class="form-input">
+                        <option>Option 1</option>
+                        <option>Option 2</option>
+                        <option>Option 3</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Typography Test -->
+        <div class="test-section">
+            <h2 class="text-primary">Typography</h2>
+            <h1 class="text-primary">Heading 1 - Primary</h1>
+            <h2 class="text-secondary">Heading 2 - Secondary</h2>
+            <h3 class="text-muted">Heading 3 - Muted</h3>
+            <p class="text-primary">Primary text color</p>
+            <p class="text-secondary">Secondary text color</p>
+            <p class="text-muted">Muted text color</p>
+            <p class="text-subtle">Subtle text color</p>
+            <p class="text-success">Success text color</p>
+            <p class="text-warning">Warning text color</p>
+            <p class="text-error">Error text color</p>
+            <p class="text-info">Info text color</p>
+        </div>
+        
+        <!-- Panel Component Test -->
+        <div class="test-section">
+            <h2 class="text-primary">Panel Components</h2>
+            <div class="panel" style="position: relative; margin-top: 1rem;">
+                <div class="panel-header">
+                    <h3>AI Analysis Panel</h3>
+                    <button class="btn btn-ghost btn-sm">×</button>
+                </div>
+                <div class="panel-content">
+                    <p class="text-muted">This panel demonstrates the consistent styling used throughout the DICOM viewer and analysis tools.</p>
+                    <div class="component-showcase">
+                        <button class="btn btn-accent">Analyze</button>
+                        <button class="btn btn-secondary">Reset</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
