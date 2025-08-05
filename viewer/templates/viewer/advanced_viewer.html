@@ -48,6 +48,41 @@
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
         }
 
+        /* Tool Button Styles */
+        .tool-btn {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: #ffffff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            font-size: 16px;
+        }
+
+        .tool-btn:hover {
+            background: rgba(0, 255, 136, 0.2);
+            border-color: #00ff88;
+            transform: translateY(-1px);
+        }
+
+        .tool-btn.active {
+            background: #00ff88;
+            color: #000000;
+            border-color: #00ff88;
+        }
+
+        .toolbar-separator {
+            width: 1px;
+            height: 30px;
+            background: rgba(255, 255, 255, 0.3);
+            margin: 5px 5px;
+        }
+
         .panel-header {
             display: flex;
             justify-content: space-between;
@@ -430,6 +465,19 @@
                 <div>Study: <span id="studyDescription">--</span></div>
                 <div>Series: <span id="seriesDescription">--</span></div>
                 <div>Image: <span id="imageInfo">-- / --</span></div>
+                <div>Zoom: <span id="zoom-level-display">100%</span></div>
+            </div>
+            
+            <!-- Measurement Info Panel -->
+            <div id="measurement-info-panel" style="position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; color: white; font-size: 12px; max-width: 300px; display: none;">
+                <h5 style="margin: 0 0 5px 0;">Measurements</h5>
+                <div id="measurement-list"></div>
+            </div>
+            
+            <!-- ROI Analysis Panel -->
+            <div id="roi-panel" style="position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; color: white; font-size: 12px; max-width: 200px; display: none;">
+                <h5 style="margin: 0 0 5px 0;">ROI Analysis</h5>
+                <div id="roi-stats"></div>
             </div>
         </div>
     </div>
@@ -451,6 +499,82 @@
         <button class="tool-btn-advanced" onclick="toggleAIChat()" title="AI Assistant">
             <i class="fas fa-robot"></i>
             <span>AI Assistant</span>
+        </button>
+    </div>
+
+    <!-- Measurement and Tools Toolbar -->
+    <div class="measurement-toolbar" style="position: absolute; top: 10px; left: 10px; z-index: 1000; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; display: flex; gap: 5px; flex-wrap: wrap;">
+        <!-- Navigation Tools -->
+        <button id="pan-adv-btn" class="tool-btn active" title="Pan Tool (Drag to move image)">
+            <i class="fas fa-hand-paper"></i>
+        </button>
+        <button id="zoom-adv-btn" class="tool-btn" title="Zoom Tool (Scroll to zoom)">
+            <i class="fas fa-search-plus"></i>
+        </button>
+        <button id="windowing-adv-btn" class="tool-btn" title="Windowing Tool (Adjust contrast)">
+            <i class="fas fa-adjust"></i>
+        </button>
+        
+        <div class="toolbar-separator"></div>
+        
+        <!-- Measurement Tools -->
+        <button id="measure-distance-btn" class="tool-btn" title="Distance Measurement">
+            <i class="fas fa-ruler"></i>
+        </button>
+        <button id="measure-angle-btn" class="tool-btn" title="Angle Measurement">
+            <i class="fas fa-drafting-compass"></i>
+        </button>
+        <button id="measure-area-btn" class="tool-btn" title="Area Measurement">
+            <i class="fas fa-square"></i>
+        </button>
+        <button id="hu-measurement-btn" class="tool-btn" title="HU Value Measurement">
+            <i class="fas fa-crosshairs"></i>
+        </button>
+        
+        <div class="toolbar-separator"></div>
+        
+        <!-- Enhancement Tools -->
+        <button id="crosshair-adv-btn" class="tool-btn" title="Crosshair Tool">
+            <i class="fas fa-plus"></i>
+        </button>
+        <button id="magnify-btn" class="tool-btn" title="Magnification Tool">
+            <i class="fas fa-search"></i>
+        </button>
+        <button id="roi-btn" class="tool-btn" title="Region of Interest">
+            <i class="fas fa-vector-square"></i>
+        </button>
+        
+        <div class="toolbar-separator"></div>
+        
+        <!-- Image Controls -->
+        <button id="invert-adv-btn" class="tool-btn" title="Invert Colors">
+            <i class="fas fa-adjust"></i>
+        </button>
+        <button id="rotate-btn" class="tool-btn" title="Rotate Image">
+            <i class="fas fa-redo"></i>
+        </button>
+        <button id="flip-btn" class="tool-btn" title="Flip Image">
+            <i class="fas fa-arrows-alt-h"></i>
+        </button>
+        
+        <div class="toolbar-separator"></div>
+        
+        <!-- Reset and Utility -->
+        <button id="reset-adv-btn" class="tool-btn" title="Reset View to Default">
+            <i class="fas fa-home"></i>
+        </button>
+        <button id="fit-to-window-btn" class="tool-btn" title="Fit to Window">
+            <i class="fas fa-expand-arrows-alt"></i>
+        </button>
+        <button id="clear-measurements-btn" class="tool-btn" title="Clear All Measurements">
+            <i class="fas fa-eraser"></i>
+        </button>
+        
+        <div class="toolbar-separator"></div>
+        
+        <!-- Unit Toggle -->
+        <button id="unit-toggle-btn" class="tool-btn" title="Toggle mm/cm Units">
+            <span style="font-size: 10px; font-weight: bold;">mm</span>
         </button>
     </div>
 
