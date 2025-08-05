@@ -1098,12 +1098,26 @@ class WorklistEntry(models.Model):
 
 class AIAnalysis(models.Model):
     """Model to store AI analysis results"""
+    ANALYSIS_TYPES = [
+        ('chest_xray', 'Chest X-Ray Analysis'),
+        ('ct_lung', 'CT Lung Analysis'),
+        ('bone_fracture', 'Bone Fracture Detection'),
+        ('brain_mri', 'Brain MRI Analysis'),
+        ('cardiac_analysis', 'Cardiac Analysis'),
+        ('general', 'General Analysis'),
+        ('pneumonia_detection', 'Pneumonia Detection'),
+        ('tumor_detection', 'Tumor Detection'),
+        ('vessel_analysis', 'Vessel Analysis'),
+    ]
+    
     image = models.ForeignKey(DicomImage, related_name='ai_analyses', on_delete=models.CASCADE)
-    analysis_type = models.CharField(max_length=50)
+    analysis_type = models.CharField(max_length=50, choices=ANALYSIS_TYPES)
     findings = models.JSONField()  # Store structured findings
     summary = models.TextField()
     confidence_score = models.FloatField()
     highlighted_regions = models.JSONField()  # Store coordinates of highlighted regions
+    processing_time = models.FloatField(default=0.0)  # Time taken for analysis
+    model_version = models.CharField(max_length=50, default='v1.0')
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -1111,6 +1125,281 @@ class AIAnalysis(models.Model):
     
     def __str__(self):
         return f"AI Analysis for {self.image} - {self.analysis_type}"
+
+
+class MPRReconstruction(models.Model):
+    """Model to store Multi-Planar Reconstruction data"""
+    RECONSTRUCTION_TYPES = [
+        ('axial', 'Axial View'),
+        ('sagittal', 'Sagittal View'),
+        ('coronal', 'Coronal View'),
+        ('oblique', 'Oblique View'),
+        ('curved', 'Curved MPR'),
+    ]
+    
+    series = models.ForeignKey(DicomSeries, related_name='mpr_reconstructions', on_delete=models.CASCADE)
+    reconstruction_type = models.CharField(max_length=20, choices=RECONSTRUCTION_TYPES)
+    slice_position = models.FloatField(default=0.0)
+    slice_thickness = models.FloatField(default=1.0)
+    reconstruction_data = models.JSONField()  # Store reconstruction parameters
+    image_data = models.TextField()  # Base64 encoded image
+    window_width = models.FloatField(null=True, blank=True)
+    window_level = models.FloatField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ['series', 'reconstruction_type', 'slice_position']
+    
+    def __str__(self):
+        return f"MPR {self.reconstruction_type} for {self.series}"
+
+
+class VolumeRendering(models.Model):
+    """Model to store 3D volume rendering data"""
+    RENDERING_TYPES = [
+        ('mip', 'Maximum Intensity Projection'),
+        ('minip', 'Minimum Intensity Projection'),
+        ('average', 'Average Intensity Projection'),
+        ('volume', 'Volume Rendering'),
+        ('surface', 'Surface Rendering'),
+        ('bone_3d', 'Bone 3D Reconstruction'),
+        ('angiogram', 'Angiogram Reconstruction'),
+        ('cardiac_4d', 'Cardiac 4D Reconstruction'),
+        ('neurological', 'Neurological Reconstruction'),
+        ('orthopedic', 'Orthopedic Reconstruction'),
+        ('dental', 'Dental 3D Reconstruction'),
+    ]
+    
+    series = models.ForeignKey(DicomSeries, related_name='volume_renderings', on_delete=models.CASCADE)
+    rendering_type = models.CharField(max_length=20, choices=RENDERING_TYPES)
+    rendering_parameters = models.JSONField()  # Store rendering parameters
+    volume_data = models.TextField()  # Base64 encoded volume data
+    opacity_function = models.JSONField(default=dict)  # Opacity transfer function
+    color_function = models.JSONField(default=dict)  # Color transfer function
+    threshold_values = models.JSONField(default=dict)  # HU threshold values for different tissues
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Volume Rendering {self.rendering_type} for {self.series}"
+
+
+class BoneReconstruction(models.Model):
+    """Model for advanced bone reconstruction and analysis"""
+    BONE_TYPES = [
+        ('skull', 'Skull Reconstruction'),
+        ('spine', 'Spine Reconstruction'),
+        ('pelvis', 'Pelvis Reconstruction'),
+        ('ribs', 'Rib Cage Reconstruction'),
+        ('long_bones', 'Long Bones Reconstruction'),
+        ('joints', 'Joint Reconstruction'),
+        ('dental', 'Dental/Maxillofacial'),
+        ('fracture_analysis', 'Fracture Analysis'),
+    ]
+    
+    series = models.ForeignKey(DicomSeries, related_name='bone_reconstructions', on_delete=models.CASCADE)
+    bone_type = models.CharField(max_length=20, choices=BONE_TYPES)
+    reconstruction_data = models.TextField()  # Base64 encoded 3D bone data
+    fracture_detected = models.BooleanField(default=False)
+    fracture_locations = models.JSONField(default=list)  # Coordinates of detected fractures
+    bone_density_analysis = models.JSONField(default=dict)  # Bone density measurements
+    hounsfield_thresholds = models.JSONField(default=dict)  # HU values for bone classification
+    surgical_planning_data = models.JSONField(default=dict)  # Data for surgical planning
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Bone Reconstruction {self.bone_type} for {self.series}"
+
+
+class AngiogramAnalysis(models.Model):
+    """Model for angiogram analysis and vessel reconstruction"""
+    VESSEL_TYPES = [
+        ('coronary', 'Coronary Arteries'),
+        ('cerebral', 'Cerebral Vessels'),
+        ('pulmonary', 'Pulmonary Vessels'),
+        ('renal', 'Renal Vessels'),
+        ('peripheral', 'Peripheral Vessels'),
+        ('aorta', 'Aortic Analysis'),
+        ('carotid', 'Carotid Arteries'),
+        ('venous', 'Venous System'),
+    ]
+    
+    STENOSIS_LEVELS = [
+        ('none', 'No Stenosis (0-25%)'),
+        ('mild', 'Mild Stenosis (25-50%)'),
+        ('moderate', 'Moderate Stenosis (50-75%)'),
+        ('severe', 'Severe Stenosis (75-90%)'),
+        ('critical', 'Critical Stenosis (90-99%)'),
+        ('occlusion', 'Complete Occlusion (100%)'),
+    ]
+    
+    series = models.ForeignKey(DicomSeries, related_name='angiogram_analyses', on_delete=models.CASCADE)
+    vessel_type = models.CharField(max_length=20, choices=VESSEL_TYPES)
+    vessel_tree_data = models.TextField()  # Base64 encoded vessel tree reconstruction
+    stenosis_detected = models.BooleanField(default=False)
+    stenosis_locations = models.JSONField(default=list)  # Locations and severity of stenosis
+    vessel_measurements = models.JSONField(default=dict)  # Diameter, length, tortuosity measurements
+    contrast_analysis = models.JSONField(default=dict)  # Contrast enhancement analysis
+    flow_analysis = models.JSONField(default=dict)  # Blood flow analysis if available
+    ai_confidence_score = models.FloatField(default=0.0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Angiogram Analysis {self.vessel_type} for {self.series}"
+
+
+class CardiacAnalysis(models.Model):
+    """Model for cardiac imaging analysis"""
+    CARDIAC_PHASES = [
+        ('systole', 'Systolic Phase'),
+        ('diastole', 'Diastolic Phase'),
+        ('full_cycle', 'Full Cardiac Cycle'),
+    ]
+    
+    series = models.ForeignKey(DicomSeries, related_name='cardiac_analyses', on_delete=models.CASCADE)
+    cardiac_phase = models.CharField(max_length=20, choices=CARDIAC_PHASES)
+    ejection_fraction = models.FloatField(null=True, blank=True)
+    wall_motion_analysis = models.JSONField(default=dict)  # Regional wall motion
+    chamber_volumes = models.JSONField(default=dict)  # LV, RV, LA, RA volumes
+    valve_analysis = models.JSONField(default=dict)  # Valve function analysis
+    perfusion_data = models.JSONField(default=dict)  # Myocardial perfusion
+    coronary_calcium_score = models.FloatField(null=True, blank=True)
+    rhythm_analysis = models.JSONField(default=dict)  # If ECG-gated
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Cardiac Analysis for {self.series}"
+
+
+class NeurologicalAnalysis(models.Model):
+    """Model for neurological imaging analysis"""
+    BRAIN_REGIONS = [
+        ('frontal', 'Frontal Lobe'),
+        ('parietal', 'Parietal Lobe'),
+        ('temporal', 'Temporal Lobe'),
+        ('occipital', 'Occipital Lobe'),
+        ('cerebellum', 'Cerebellum'),
+        ('brainstem', 'Brainstem'),
+        ('basal_ganglia', 'Basal Ganglia'),
+        ('white_matter', 'White Matter'),
+        ('ventricles', 'Ventricular System'),
+    ]
+    
+    series = models.ForeignKey(DicomSeries, related_name='neurological_analyses', on_delete=models.CASCADE)
+    brain_segmentation = models.JSONField(default=dict)  # Segmented brain regions
+    lesion_detection = models.JSONField(default=list)  # Detected lesions
+    brain_volume_analysis = models.JSONField(default=dict)  # Volume measurements
+    white_matter_analysis = models.JSONField(default=dict)  # White matter integrity
+    vascular_analysis = models.JSONField(default=dict)  # Cerebral vessels
+    atrophy_analysis = models.JSONField(default=dict)  # Brain atrophy measurements
+    symmetry_analysis = models.JSONField(default=dict)  # Brain symmetry analysis
+    hemorrhage_detection = models.JSONField(default=list)  # Detected hemorrhages
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Neurological Analysis for {self.series}"
+
+
+class OrthopedicAnalysis(models.Model):
+    """Model for orthopedic imaging analysis"""
+    JOINT_TYPES = [
+        ('knee', 'Knee Joint'),
+        ('hip', 'Hip Joint'),
+        ('shoulder', 'Shoulder Joint'),
+        ('elbow', 'Elbow Joint'),
+        ('wrist', 'Wrist Joint'),
+        ('ankle', 'Ankle Joint'),
+        ('spine', 'Spinal Joints'),
+        ('temporomandibular', 'TMJ'),
+    ]
+    
+    series = models.ForeignKey(DicomSeries, related_name='orthopedic_analyses', on_delete=models.CASCADE)
+    joint_type = models.CharField(max_length=20, choices=JOINT_TYPES)
+    joint_space_measurements = models.JSONField(default=dict)  # Joint space width
+    cartilage_analysis = models.JSONField(default=dict)  # Cartilage thickness and quality
+    bone_quality_analysis = models.JSONField(default=dict)  # Bone density and quality
+    alignment_analysis = models.JSONField(default=dict)  # Joint alignment measurements
+    arthritis_assessment = models.JSONField(default=dict)  # Arthritis severity
+    implant_analysis = models.JSONField(default=dict)  # For post-surgical cases
+    range_of_motion = models.JSONField(default=dict)  # If dynamic imaging
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Orthopedic Analysis {self.joint_type} for {self.series}"
+
+
+class AIChat(models.Model):
+    """Model for AI-powered chat assistant"""
+    MESSAGE_TYPES = [
+        ('user', 'User Message'),
+        ('ai', 'AI Response'),
+        ('system', 'System Message'),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_chats')
+    message_type = models.CharField(max_length=10, choices=MESSAGE_TYPES)
+    message = models.TextField()
+    context_study = models.ForeignKey(DicomStudy, on_delete=models.SET_NULL, null=True, blank=True)
+    context_image = models.ForeignKey(DicomImage, on_delete=models.SET_NULL, null=True, blank=True)
+    ai_confidence = models.FloatField(null=True, blank=True)
+    metadata = models.JSONField(default=dict)  # Store additional context
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.message_type} from {self.user.username}: {self.message[:50]}"
+
+
+class SmartMeasurement(models.Model):
+    """Model for AI-powered smart measurements"""
+    MEASUREMENT_TYPES = [
+        ('distance', 'Distance Measurement'),
+        ('area', 'Area Measurement'),
+        ('volume', 'Volume Measurement'),
+        ('angle', 'Angle Measurement'),
+        ('hounsfield', 'Hounsfield Units'),
+        ('density', 'Density Measurement'),
+        ('organ_volume', 'Organ Volume'),
+        ('lesion_size', 'Lesion Size'),
+    ]
+    
+    image = models.ForeignKey(DicomImage, related_name='smart_measurements', on_delete=models.CASCADE)
+    measurement_type = models.CharField(max_length=20, choices=MEASUREMENT_TYPES)
+    coordinates = models.JSONField()  # Store measurement coordinates
+    value = models.FloatField()
+    unit = models.CharField(max_length=20)
+    ai_detected = models.BooleanField(default=False)  # Whether AI automatically detected this
+    confidence_score = models.FloatField(null=True, blank=True)
+    anatomical_structure = models.CharField(max_length=100, blank=True)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.measurement_type} on {self.image}: {self.value} {self.unit}"
 
 
 class Notification(models.Model):

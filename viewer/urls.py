@@ -77,8 +77,13 @@ urlpatterns = [
     # API connectivity test
     path('api/test-connectivity/', views.test_connectivity, name='test_connectivity'),
     
-    # AI Analysis
+    # Enhanced AI Analysis
     path('api/images/<int:image_id>/ai-analysis/', views.ai_analysis, name='ai_analysis'),
+    path('api/images/<int:image_id>/ai-analysis/enhanced/', views.perform_ai_analysis, name='enhanced_ai_analysis'),
+    path('api/images/<int:image_id>/ai-analysis/chest-xray/', views.ai_analysis, name='ai_chest_xray'),
+    path('api/images/<int:image_id>/ai-analysis/bone-fracture/', views.ai_analysis, name='ai_bone_fracture'),
+    path('api/images/<int:image_id>/ai-analysis/cardiac/', views.ai_analysis, name='ai_cardiac'),
+    path('api/images/<int:image_id>/ai-analysis/vessel/', views.ai_analysis, name='ai_vessel'),
     
     # Reports
     path('api/images/<int:image_id>/generate-report/', views.generate_report, name='generate_report'),
@@ -97,10 +102,17 @@ urlpatterns = [
     path('api/settings/save/', views.save_viewer_settings, name='save_viewer_settings'),
     path('api/settings/', views.get_viewer_settings, name='get_viewer_settings'),
     
-    # Reconstruction functionality
+    # Advanced Reconstruction functionality
     path('api/series/<int:series_id>/mip/', views.generate_mip, name='generate_mip'),
     path('api/series/<int:series_id>/mpr/', views.generate_mpr, name='generate_mpr'),
     path('api/series/<int:series_id>/bone-reconstruction/', views.generate_bone_reconstruction, name='generate_bone_reconstruction'),
+    path('api/series/<int:series_id>/angiogram-analysis/', views.generate_angiogram_analysis, name='generate_angiogram_analysis'),
     path('api/series/<int:series_id>/volume-rendering/', views.generate_volume_rendering, name='generate_volume_rendering'),
     path('api/series/<int:series_id>/volume-measurement/', views.calculate_volume_measurement, name='calculate_volume_measurement'),
+    
+    # Specialized Reconstructions
+    path('api/series/<int:series_id>/cardiac-analysis/', views.generate_cardiac_4d, name='generate_cardiac_4d'),
+    path('api/series/<int:series_id>/neurological-analysis/', views.generate_neurological_analysis, name='generate_neurological_analysis'),
+    path('api/series/<int:series_id>/orthopedic-analysis/', views.generate_orthopedic_analysis, name='generate_orthopedic_analysis'),
+    path('api/series/<int:series_id>/dental-reconstruction/', views.generate_dental_reconstruction, name='generate_dental_reconstruction'),
 ]
