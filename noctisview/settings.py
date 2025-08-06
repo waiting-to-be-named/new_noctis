@@ -152,7 +152,7 @@ REST_FRAMEWORK = {
 
 # Authentication settings
 LOGIN_URL = '/accounts/login/'
-LOGIN_REDIRECT_URL = '/'
+LOGIN_REDIRECT_URL = '/worklist/'
 LOGOUT_REDIRECT_URL = '/'
 
 # Logging configuration

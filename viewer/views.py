@@ -696,7 +696,7 @@ class HomeView(TemplateView):
     template_name = 'home.html'
 
 
-class DicomViewerView(TemplateView):
+class DicomViewerView(LoginRequiredMixin, TemplateView):
     """Main DICOM viewer page"""
     template_name = 'dicom_viewer/viewer.html'
     
@@ -730,7 +730,7 @@ class DicomViewerView(TemplateView):
         return context
 
 
-class AdvancedDicomViewerView(TemplateView):
+class AdvancedDicomViewerView(LoginRequiredMixin, TemplateView):
     """Advanced DICOM viewer page with enhanced features"""
     template_name = 'dicom_viewer/viewer_advanced.html'
     

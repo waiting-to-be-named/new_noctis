@@ -169,11 +169,32 @@
             background: var(--success-gradient);
             color: var(--text-primary);
             box-shadow: 0 4px 20px rgba(67, 233, 123, 0.3);
+            position: relative;
+        }
+
+        .btn-success::after {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(135deg, #43e97b, #38f9d7);
+            border-radius: var(--border-radius);
+            opacity: 0.5;
+            z-index: -1;
+            filter: blur(8px);
+            transition: var(--transition);
         }
 
         .btn-success:hover {
             transform: translateY(-2px);
             box-shadow: 0 8px 30px rgba(67, 233, 123, 0.5);
+        }
+        
+        .btn-success:hover::after {
+            opacity: 0.8;
+            filter: blur(12px);
         }
 
         .btn-secondary {
@@ -337,69 +358,7 @@
             color: var(--text-muted);
         }
 
-        /* Statistics Cards */
-        .stats-section {
-            padding: 30px;
-            background: var(--bg-tertiary);
-        }
 
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .stat-card {
-            background: var(--bg-glass);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius-lg);
-            padding: 30px;
-            text-align: center;
-            transition: var(--transition);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .stat-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: var(--accent-gradient);
-        }
-
-        .stat-card:hover {
-            transform: translateY(-5px);
-            border-color: var(--border-hover);
-            box-shadow: var(--shadow-card);
-        }
-
-        .stat-icon {
-            font-size: 40px;
-            margin-bottom: 15px;
-            background: var(--accent-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .stat-number {
-            font-size: 32px;
-            font-weight: 800;
-            color: var(--text-primary);
-            margin-bottom: 8px;
-        }
-
-        .stat-label {
-            color: var(--text-secondary);
-            font-size: 14px;
-            font-weight: 500;
-        }
 
         /* Professional Table */
         .worklist-table-container {
@@ -737,9 +696,7 @@
                 width: 100%;
             }
 
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
+
         }
 
         @media (max-width: 768px) {
@@ -758,9 +715,7 @@
                 flex-direction: column;
             }
 
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
+
 
             .worklist-table-container {
                 padding: 20px;
@@ -821,8 +776,8 @@
         <div class="header">
             <h1><i class="fas fa-clipboard-list"></i> Noctis Professional Worklist</h1>
             <div class="header-actions">
-                <button class="btn btn-secondary" onclick="window.location.href='/home/'">
-                    <i class="fas fa-home"></i> Home
+                <button class="btn btn-primary" onclick="window.location.href='/viewer/'">
+                    <i class="fas fa-x-ray"></i> DICOM Viewer
                 </button>
                 {% if is_admin or is_radiologist %}
                 <div class="notification-area">
@@ -857,14 +812,9 @@
                     <input type="file" id="file-input" multiple webkitdirectory style="display: none;">
                     <input type="file" id="file-input-files" multiple accept=".dcm,.dicom" style="display: none;">
                 </div>
-                <div style="display: flex; flex-direction: column; gap: 12px;">
-                    <button class="btn btn-primary" onclick="selectUploadType()">
-                        <i class="fas fa-folder-open"></i> Upload Folder
-                    </button>
-                    <button class="btn btn-success" onclick="document.getElementById('file-input-files').click()">
-                        <i class="fas fa-file-medical"></i> Upload Files
-                    </button>
-                </div>
+                <button class="btn btn-success" onclick="openUploadDialog()">
+                    <i class="fas fa-upload"></i> Upload DICOM
+                </button>
             </div>
             <div class="upload-progress" id="upload-progress">
                 <div class="progress-bar">
@@ -874,31 +824,7 @@
             </div>
         </div>
 
-        <!-- Statistics Dashboard -->
-        <div class="stats-section">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon"><i class="fas fa-users"></i></div>
-                    <div class="stat-number" id="total-patients">0</div>
-                    <div class="stat-label">Total Patients</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon"><i class="fas fa-calendar-check"></i></div>
-                    <div class="stat-number" id="scheduled-today">0</div>
-                    <div class="stat-label">Scheduled Today</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon"><i class="fas fa-clock"></i></div>
-                    <div class="stat-number" id="in-progress">0</div>
-                    <div class="stat-label">In Progress</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
-                    <div class="stat-number" id="completed-today">0</div>
-                    <div class="stat-label">Completed Today</div>
-                </div>
-            </div>
-        </div>
+
         
         <!-- Advanced Filters -->
         <div class="filters">
@@ -989,6 +915,35 @@
     </div>
 
     <!-- Modals -->
+    
+    <!-- Upload Dialog Modal -->
+    <div class="modal-overlay" id="upload-dialog">
+        <div class="modal" style="max-width: 400px;">
+            <button class="modal-close" onclick="closeUploadDialog()">&times;</button>
+            <div class="modal-header">
+                <h3 class="modal-title">Upload DICOM Files</h3>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    <button class="btn btn-primary" style="padding: 20px; font-size: 16px;" onclick="uploadFolder()">
+                        <i class="fas fa-folder-open" style="font-size: 24px; margin-bottom: 8px; display: block;"></i>
+                        Upload Folder
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                            Select a folder containing DICOM files
+                        </div>
+                    </button>
+                    <button class="btn btn-success" style="padding: 20px; font-size: 16px;" onclick="uploadFiles()">
+                        <i class="fas fa-file-medical" style="font-size: 24px; margin-bottom: 8px; display: block;"></i>
+                        Upload Files
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                            Select individual DICOM files
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <div class="modal-overlay" id="clinical-modal">
         <div class="modal">
             <button class="modal-close" onclick="closeClinicalModal()">&times;</button>
@@ -1373,8 +1328,26 @@
             showNotification('Export feature coming soon', 'info');
         }
 
-        function selectUploadType() {
+        function openUploadDialog() {
+            const dialog = document.getElementById('upload-dialog');
+            dialog.style.display = 'flex';
+            setTimeout(() => dialog.classList.add('show'), 10);
+        }
+        
+        function closeUploadDialog() {
+            const dialog = document.getElementById('upload-dialog');
+            dialog.classList.remove('show');
+            setTimeout(() => dialog.style.display = 'none', 300);
+        }
+        
+        function uploadFolder() {
+            closeUploadDialog();
             document.getElementById('file-input').click();
+        }
+        
+        function uploadFiles() {
+            closeUploadDialog();
+            document.getElementById('file-input-files').click();
         }
 
         function handleFileUpload(files) {
