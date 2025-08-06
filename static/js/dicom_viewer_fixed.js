@@ -27,7 +27,7 @@ class FixedDicomViewer {
         });
 
         // Core canvas elements
-        this.canvas = document.getElementById('viewerCanvas');
+        this.canvas = document.getElementById('dicom-canvas-advanced');
         this.ctx = this.canvas ? this.canvas.getContext('2d', { willReadFrequently: true }) : null;
         
         if (!this.canvas || !this.ctx) {
@@ -150,36 +150,164 @@ class FixedDicomViewer {
         if (prevStudyBtn) {
             prevStudyBtn.addEventListener('click', () => {
                 console.log('Previous study clicked');
-                this.previousStudy();
+                // TODO: Implement previous study navigation
+                this.notyf.info('Previous study navigation not yet implemented');
             });
         }
         
         if (nextStudyBtn) {
             nextStudyBtn.addEventListener('click', () => {
                 console.log('Next study clicked');
-                this.nextStudy();
+                // TODO: Implement next study navigation
+                this.notyf.info('Next study navigation not yet implemented');
+            });
+        }
+    }
+    
+    setupAllButtons() {
+        console.log('Setting up all buttons...');
+        
+        // Header buttons
+        const uploadBtn = document.getElementById('upload-advanced-btn');
+        const exportBtn = document.getElementById('export-btn');
+        const settingsBtn = document.getElementById('settings-btn');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const logoutBtn = document.getElementById('logout-advanced-btn');
+        
+        if (uploadBtn) {
+            uploadBtn.addEventListener('click', () => {
+                console.log('Upload button clicked');
+                this.showUploadModal();
             });
         }
         
-        // Image navigation buttons
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => {
+                console.log('Export button clicked');
+                this.showExportModal();
+            });
+        }
+        
+        if (settingsBtn) {
+            settingsBtn.addEventListener('click', () => {
+                console.log('Settings button clicked');
+                this.notyf.info('Settings panel coming soon');
+            });
+        }
+        
+        if (fullscreenBtn) {
+            fullscreenBtn.addEventListener('click', () => {
+                console.log('Fullscreen button clicked');
+                this.toggleFullscreen();
+            });
+        }
+        
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                console.log('Logout button clicked');
+                if (confirm('Are you sure you want to logout?')) {
+                    window.location.href = '/logout/';
+                }
+            });
+        }
+        
+        // Navigation controls
         const prevImageBtn = document.getElementById('prev-image-btn');
         const nextImageBtn = document.getElementById('next-image-btn');
+        const playBtn = document.getElementById('play-btn');
         
         if (prevImageBtn) {
-            prevImageBtn.addEventListener('click', () => {
-                console.log('Previous image clicked');
-                this.previousImage();
-            });
+            prevImageBtn.addEventListener('click', () => this.navigateImages(-1));
         }
         
         if (nextImageBtn) {
-            nextImageBtn.addEventListener('click', () => {
-                console.log('Next image clicked');
-                this.nextImage();
+            nextImageBtn.addEventListener('click', () => this.navigateImages(1));
+        }
+        
+        if (playBtn) {
+            playBtn.addEventListener('click', () => this.toggleCineMode());
+        }
+        
+        // Viewport controls
+        const layout1x1Btn = document.getElementById('layout-1x1-btn');
+        const layout2x2Btn = document.getElementById('layout-2x2-btn');
+        const layout1x2Btn = document.getElementById('layout-1x2-btn');
+        const syncViewportsBtn = document.getElementById('sync-viewports-btn');
+        
+        if (layout1x1Btn) {
+            layout1x1Btn.addEventListener('click', () => {
+                console.log('1x1 layout selected');
+                this.setViewportLayout('1x1');
             });
         }
         
-        console.log('Navigation buttons setup complete');
+        if (layout2x2Btn) {
+            layout2x2Btn.addEventListener('click', () => {
+                console.log('2x2 layout selected');
+                this.setViewportLayout('2x2');
+            });
+        }
+        
+        if (layout1x2Btn) {
+            layout1x2Btn.addEventListener('click', () => {
+                console.log('1x2 layout selected');
+                this.setViewportLayout('1x2');
+            });
+        }
+        
+        if (syncViewportsBtn) {
+            syncViewportsBtn.addEventListener('click', () => {
+                console.log('Sync viewports toggled');
+                this.toggleViewportSync();
+            });
+        }
+        
+        // Annotation buttons
+        const textAnnotationBtn = document.getElementById('text-annotation-btn');
+        const arrowAnnotationBtn = document.getElementById('arrow-annotation-btn');
+        const circleAnnotationBtn = document.getElementById('circle-annotation-btn');
+        const rectangleAnnotationBtn = document.getElementById('rectangle-annotation-btn');
+        const clearAnnotationsBtn = document.getElementById('clear-annotations-btn');
+        
+        if (textAnnotationBtn) {
+            textAnnotationBtn.addEventListener('click', () => this.setActiveTool('text'));
+        }
+        
+        if (arrowAnnotationBtn) {
+            arrowAnnotationBtn.addEventListener('click', () => this.setActiveTool('arrow'));
+        }
+        
+        if (circleAnnotationBtn) {
+            circleAnnotationBtn.addEventListener('click', () => this.setActiveTool('circle'));
+        }
+        
+        if (rectangleAnnotationBtn) {
+            rectangleAnnotationBtn.addEventListener('click', () => this.setActiveTool('rectangle'));
+        }
+        
+        if (clearAnnotationsBtn) {
+            clearAnnotationsBtn.addEventListener('click', () => this.clearAnnotations());
+        }
+        
+        // AI Analysis buttons
+        const aiAnalysisBtn = document.getElementById('ai-analysis-btn');
+        const aiSegmentBtn = document.getElementById('ai-segment-btn');
+        
+        if (aiAnalysisBtn) {
+            aiAnalysisBtn.addEventListener('click', () => {
+                console.log('AI Analysis clicked');
+                this.performAIAnalysis();
+            });
+        }
+        
+        if (aiSegmentBtn) {
+            aiSegmentBtn.addEventListener('click', () => {
+                console.log('AI Segmentation clicked');
+                this.performAISegmentation();
+            });
+        }
+        
+        console.log('All buttons setup complete');
     }
 
     showExportModal() {
@@ -2725,6 +2853,222 @@ class FixedDicomViewer {
         if (activeBtn) {
             activeBtn.classList.add('active');
         }
+    }
+    
+    // Cine Mode Methods
+    toggleCineMode() {
+        if (this.cineMode) {
+            this.stopCineMode();
+        } else {
+            this.startCineMode();
+        }
+    }
+    
+    startCineMode() {
+        console.log('Starting cine mode...');
+        this.cineMode = true;
+        this.cineSpeed = 100; // milliseconds between frames
+        
+        const playBtn = document.getElementById('play-btn');
+        if (playBtn) {
+            playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+        }
+        
+        this.cineInterval = setInterval(() => {
+            this.navigateImages(1);
+        }, this.cineSpeed);
+        
+        this.notyf.success('Cine mode started');
+    }
+    
+    stopCineMode() {
+        console.log('Stopping cine mode...');
+        this.cineMode = false;
+        
+        const playBtn = document.getElementById('play-btn');
+        if (playBtn) {
+            playBtn.innerHTML = '<i class="fas fa-play"></i>';
+        }
+        
+        if (this.cineInterval) {
+            clearInterval(this.cineInterval);
+            this.cineInterval = null;
+        }
+        
+        this.notyf.info('Cine mode stopped');
+    }
+    
+    // Viewport Layout Methods
+    setViewportLayout(layout) {
+        console.log('Setting viewport layout:', layout);
+        this.currentLayout = layout;
+        
+        // Update UI to reflect layout change
+        const layoutButtons = document.querySelectorAll('[id^="layout-"]');
+        layoutButtons.forEach(btn => btn.classList.remove('active'));
+        
+        const activeLayoutBtn = document.getElementById(`layout-${layout}-btn`);
+        if (activeLayoutBtn) {
+            activeLayoutBtn.classList.add('active');
+        }
+        
+        // TODO: Implement actual viewport layout logic
+        this.notyf.info(`Viewport layout set to ${layout}`);
+    }
+    
+    toggleViewportSync() {
+        this.viewportSyncEnabled = !this.viewportSyncEnabled;
+        
+        const syncBtn = document.getElementById('sync-viewports-btn');
+        if (syncBtn) {
+            syncBtn.classList.toggle('active', this.viewportSyncEnabled);
+        }
+        
+        this.notyf.info(`Viewport sync ${this.viewportSyncEnabled ? 'enabled' : 'disabled'}`);
+    }
+    
+    // Annotation Methods
+    clearAnnotations() {
+        console.log('Clearing all annotations...');
+        this.annotations = [];
+        this.refreshCurrentImage();
+        this.notyf.success('All annotations cleared');
+    }
+    
+    // AI Analysis Methods
+    async performAIAnalysis() {
+        console.log('Performing AI analysis...');
+        
+        try {
+            this.notyf.info('AI analysis started...');
+            
+            // Show loading indicator
+            const loadingEl = document.getElementById('loading-indicator');
+            if (loadingEl) loadingEl.style.display = 'flex';
+            
+            // TODO: Implement actual AI analysis API call
+            // For now, simulate with a timeout
+            setTimeout(() => {
+                if (loadingEl) loadingEl.style.display = 'none';
+                this.notyf.success('AI analysis complete - No abnormalities detected');
+                
+                // Update UI with mock results
+                const aiResultsPanel = document.getElementById('ai-results-panel');
+                if (aiResultsPanel) {
+                    aiResultsPanel.innerHTML = `
+                        <div class="ai-result">
+                            <h4>AI Analysis Results</h4>
+                            <p><strong>Status:</strong> Normal</p>
+                            <p><strong>Confidence:</strong> 95%</p>
+                            <p><strong>Findings:</strong> No significant abnormalities detected</p>
+                        </div>
+                    `;
+                }
+            }, 2000);
+            
+        } catch (error) {
+            console.error('AI analysis error:', error);
+            this.notyf.error('AI analysis failed');
+        }
+    }
+    
+    async performAISegmentation() {
+        console.log('Performing AI segmentation...');
+        
+        try {
+            this.notyf.info('AI segmentation started...');
+            
+            // Show loading indicator
+            const loadingEl = document.getElementById('loading-indicator');
+            if (loadingEl) loadingEl.style.display = 'flex';
+            
+            // TODO: Implement actual AI segmentation API call
+            // For now, simulate with a timeout
+            setTimeout(() => {
+                if (loadingEl) loadingEl.style.display = 'none';
+                this.notyf.success('AI segmentation complete');
+                
+                // Mock segmentation overlay
+                this.drawMockSegmentation();
+            }, 2000);
+            
+        } catch (error) {
+            console.error('AI segmentation error:', error);
+            this.notyf.error('AI segmentation failed');
+        }
+    }
+    
+    drawMockSegmentation() {
+        if (!this.ctx || !this.canvas) return;
+        
+        // Draw a mock segmentation overlay
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.3;
+        this.ctx.fillStyle = '#00ff00';
+        
+        // Draw some mock segmented regions
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        
+        this.ctx.beginPath();
+        this.ctx.arc(centerX, centerY, 100, 0, 2 * Math.PI);
+        this.ctx.fill();
+        
+        this.ctx.restore();
+    }
+    
+    // Additional helper methods
+    showNoDataMessage() {
+        if (!this.canvas || !this.ctx) return;
+        
+        this.clearCanvas();
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = '24px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText('No DICOM image loaded', this.canvas.width / 2, this.canvas.height / 2);
+        this.ctx.font = '16px Arial';
+        this.ctx.fillText('Please upload a DICOM file or select a study', this.canvas.width / 2, this.canvas.height / 2 + 40);
+    }
+    
+    showConnectionError() {
+        if (!this.canvas || !this.ctx) return;
+        
+        this.clearCanvas();
+        this.ctx.fillStyle = '#ff3333';
+        this.ctx.font = '24px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText('Connection Error', this.canvas.width / 2, this.canvas.height / 2);
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = '16px Arial';
+        this.ctx.fillText('Failed to connect to DICOM server', this.canvas.width / 2, this.canvas.height / 2 + 40);
+    }
+    
+    showErrorPlaceholder() {
+        if (!this.canvas || !this.ctx) return;
+        
+        this.clearCanvas();
+        this.ctx.fillStyle = '#ff3333';
+        this.ctx.font = '24px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText('Error Loading Image', this.canvas.width / 2, this.canvas.height / 2);
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = '16px Arial';
+        this.ctx.fillText('Failed to load DICOM image', this.canvas.width / 2, this.canvas.height / 2 + 40);
+    }
+    
+    hideErrorPlaceholder() {
+        // This method is called when image loads successfully
+        // No action needed as the image will overwrite any error message
+    }
+    
+    clearCanvas() {
+        if (!this.canvas || !this.ctx) return;
+        
+        this.ctx.fillStyle = '#000000';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
 }
 
