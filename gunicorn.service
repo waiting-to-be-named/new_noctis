@@ -1,0 +1,59 @@
+[Unit]
+Description=Noctis PACS Gunicorn Application Server
+After=network.target postgresql.service redis.service
+Requires=gunicorn.socket
+
+[Service]
+Type=notify
+User=noctis
+Group=noctis
+RuntimeDirectory=gunicorn
+WorkingDirectory=/opt/noctis
+Environment="PATH=/opt/noctis/venv/bin"
+Environment="DJANGO_SETTINGS_MODULE=noctisview.settings_production"
+
+# Start command with optimal worker configuration
+ExecStart=/opt/noctis/venv/bin/gunicorn \
+          --access-logfile /var/log/noctis/gunicorn_access.log \
+          --error-logfile /var/log/noctis/gunicorn_error.log \
+          --workers 4 \
+          --worker-class sync \
+          --worker-connections 1000 \
+          --max-requests 1000 \
+          --max-requests-jitter 100 \
+          --timeout 300 \
+          --graceful-timeout 300 \
+          --keep-alive 5 \
+          --bind unix:/run/gunicorn.sock \
+          --pid /run/gunicorn.pid \
+          --name noctis_pacs \
+          --preload \
+          --log-level info \
+          --capture-output \
+          noctisview.wsgi:application
+
+# Restart policy
+Restart=always
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=3
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/noctis/media /var/log/noctis /opt/noctis
+
+# Process management
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s TERM $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

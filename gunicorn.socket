@@ -1,0 +1,12 @@
+[Unit]
+Description=Noctis PACS Gunicorn Socket
+PartOf=gunicorn.service
+
+[Socket]
+ListenStream=/run/gunicorn.sock
+SocketUser=noctis
+SocketGroup=www-data
+SocketMode=0660
+
+[Install]
+WantedBy=sockets.target

@@ -1,0 +1,50 @@
+[Unit]
+Description=Noctis PACS Celery Worker
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=forking
+User=noctis
+Group=noctis
+WorkingDirectory=/opt/noctis
+Environment="PATH=/opt/noctis/venv/bin"
+Environment="DJANGO_SETTINGS_MODULE=noctisview.settings_production"
+
+# Celery worker command
+ExecStart=/opt/noctis/venv/bin/celery \
+          -A noctisview \
+          worker \
+          --loglevel=info \
+          --logfile=/var/log/noctis/celery.log \
+          --pidfile=/run/celery.pid \
+          --concurrency=4 \
+          --max-tasks-per-child=100 \
+          --time-limit=3600 \
+          --soft-time-limit=3300 \
+          --queues=default,dicom_processing,notifications \
+          --detach
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=60
+StartLimitBurst=3
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/noctis/media /var/log/noctis /opt/noctis
+
+# Process management
+ExecStop=/opt/noctis/venv/bin/celery -A noctisview control shutdown
+KillMode=mixed
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,34 @@
+[Unit]
+Description=Noctis PACS Celery Beat Scheduler
+After=network.target postgresql.service redis.service celery.service
+
+[Service]
+Type=simple
+User=noctis
+Group=noctis
+WorkingDirectory=/opt/noctis
+Environment="PATH=/opt/noctis/venv/bin"
+Environment="DJANGO_SETTINGS_MODULE=noctisview.settings_production"
+
+# Celery beat command
+ExecStart=/opt/noctis/venv/bin/celery \
+          -A noctisview \
+          beat \
+          --loglevel=info \
+          --logfile=/var/log/noctis/celerybeat.log \
+          --pidfile=/run/celerybeat.pid \
+          --schedule=/opt/noctis/celerybeat-schedule.db
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/noctis /opt/noctis
+
+[Install]
+WantedBy=multi-user.target
