@@ -322,14 +322,15 @@ class FixedDicomViewer {
 
     async initializeMPR() {
         try {
-            // Show MPR controls
-            const mprPanel = document.getElementById('mpr-reconstruction-panel');
-            if (mprPanel) {
-                mprPanel.style.display = 'block';
-            }
-
-            // Initialize MPR views
-            await this.createMPRViews();
+            // Create MPR workspace
+            this.createMPRWorkspace();
+            
+            // Load volume data
+            await this.loadVolumeData();
+            
+            // Generate MPR views
+            this.generateMPRViews();
+            
             this.notyf.success('MPR reconstruction initialized');
             
         } catch (error) {
@@ -339,100 +340,962 @@ class FixedDicomViewer {
         }
     }
 
-    async createMPRViews() {
-        const mprContainer = document.getElementById('mpr-views-container');
+    createMPRWorkspace() {
+        // Create MPR container if it doesn't exist
+        let mprContainer = document.getElementById('mpr-container');
         if (!mprContainer) {
-            console.error('MPR container not found');
+            mprContainer = document.createElement('div');
+            mprContainer.id = 'mpr-container';
+            mprContainer.className = 'mpr-workspace';
+            mprContainer.innerHTML = `
+                <div class="mpr-header">
+                    <h3>Multi-Planar Reconstruction</h3>
+                    <div class="mpr-controls">
+                        <button id="mpr-axial-btn" class="mpr-view-btn active">Axial</button>
+                        <button id="mpr-sagittal-btn" class="mpr-view-btn">Sagittal</button>
+                        <button id="mpr-coronal-btn" class="mpr-view-btn">Coronal</button>
+                        <button id="mpr-3d-btn" class="mpr-view-btn">3D</button>
+                        <button id="mpr-close-btn" class="btn-close">×</button>
+                    </div>
+                </div>
+                <div class="mpr-views">
+                    <div class="mpr-view-panel" id="mpr-axial-panel">
+                        <h4>Axial View</h4>
+                        <canvas id="mpr-axial-canvas" width="256" height="256"></canvas>
+                        <div class="mpr-slice-control">
+                            <input type="range" id="axial-slice-slider" min="0" max="100" value="50">
+                            <span id="axial-slice-info">Slice: 50/100</span>
+                        </div>
+                    </div>
+                    <div class="mpr-view-panel" id="mpr-sagittal-panel">
+                        <h4>Sagittal View</h4>
+                        <canvas id="mpr-sagittal-canvas" width="256" height="256"></canvas>
+                        <div class="mpr-slice-control">
+                            <input type="range" id="sagittal-slice-slider" min="0" max="100" value="50">
+                            <span id="sagittal-slice-info">Slice: 50/100</span>
+                        </div>
+                    </div>
+                    <div class="mpr-view-panel" id="mpr-coronal-panel">
+                        <h4>Coronal View</h4>
+                        <canvas id="mpr-coronal-canvas" width="256" height="256"></canvas>
+                        <div class="mpr-slice-control">
+                            <input type="range" id="coronal-slice-slider" min="0" max="100" value="50">
+                            <span id="coronal-slice-info">Slice: 50/100</span>
+                        </div>
+                    </div>
+                    <div class="mpr-view-panel" id="mpr-3d-panel">
+                        <h4>3D Volume Rendering</h4>
+                        <canvas id="mpr-3d-canvas" width="400" height="400"></canvas>
+                        <div class="render-controls">
+                            <label>Opacity: <input type="range" id="volume-opacity" min="0" max="100" value="50"></label>
+                            <label>Threshold: <input type="range" id="volume-threshold" min="0" max="4095" value="500"></label>
+                            <button id="rotate-3d-btn">Auto Rotate</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Add to main content area
+            const mainContent = document.querySelector('.main-content-advanced');
+            mainContent.appendChild(mprContainer);
+            
+            // Setup MPR event handlers
+            this.setupMPREventHandlers();
+        }
+        
+        // Show MPR container
+        mprContainer.style.display = 'block';
+    }
+
+    setupMPREventHandlers() {
+        // View switching buttons
+        document.getElementById('mpr-axial-btn').addEventListener('click', () => this.switchMPRView('axial'));
+        document.getElementById('mpr-sagittal-btn').addEventListener('click', () => this.switchMPRView('sagittal'));
+        document.getElementById('mpr-coronal-btn').addEventListener('click', () => this.switchMPRView('coronal'));
+        document.getElementById('mpr-3d-btn').addEventListener('click', () => this.switchMPRView('3d'));
+        
+        // Close button
+        document.getElementById('mpr-close-btn').addEventListener('click', () => this.disableMPR());
+        
+        // Slice sliders
+        document.getElementById('axial-slice-slider').addEventListener('input', (e) => {
+            this.currentSlice.axial = parseInt(e.target.value);
+            this.renderMPRView('axial');
+            this.updateSliceInfo('axial');
+        });
+        
+        document.getElementById('sagittal-slice-slider').addEventListener('input', (e) => {
+            this.currentSlice.sagittal = parseInt(e.target.value);
+            this.renderMPRView('sagittal');
+            this.updateSliceInfo('sagittal');
+        });
+        
+        document.getElementById('coronal-slice-slider').addEventListener('input', (e) => {
+            this.currentSlice.coronal = parseInt(e.target.value);
+            this.renderMPRView('coronal');
+            this.updateSliceInfo('coronal');
+        });
+        
+        // 3D controls
+        document.getElementById('volume-opacity').addEventListener('input', (e) => {
+            this.volumeOpacity = parseInt(e.target.value) / 100;
+            this.render3DVolume();
+        });
+        
+        document.getElementById('volume-threshold').addEventListener('input', (e) => {
+            this.volumeThreshold = parseInt(e.target.value);
+            this.render3DVolume();
+        });
+        
+        document.getElementById('rotate-3d-btn').addEventListener('click', () => this.toggle3DRotation());
+    }
+
+    async loadVolumeData() {
+        if (!this.currentImages || this.currentImages.length === 0) {
+            throw new Error('No images available for volume reconstruction');
+        }
+
+        this.notyf.info('Loading volume data...');
+        
+        // Initialize volume data structure
+        this.volumeData = {
+            images: [],
+            dimensions: { x: 0, y: 0, z: this.currentImages.length },
+            spacing: { x: 1.0, y: 1.0, z: 1.0 },
+            origin: { x: 0, y: 0, z: 0 },
+            pixelData: null
+        };
+
+        // Load all images and extract pixel data
+        for (let i = 0; i < this.currentImages.length; i++) {
+            try {
+                const imageData = await this.loadImagePixelData(this.currentImages[i]);
+                this.volumeData.images.push(imageData);
+                
+                if (i === 0) {
+                    // Set dimensions from first image
+                    this.volumeData.dimensions.x = imageData.width;
+                    this.volumeData.dimensions.y = imageData.height;
+                }
+            } catch (error) {
+                console.error(`Error loading image ${i}:`, error);
+            }
+        }
+
+        // Create 3D pixel array
+        this.create3DPixelArray();
+        
+        // Initialize slice positions
+        this.currentSlice = {
+            axial: Math.floor(this.volumeData.dimensions.z / 2),
+            sagittal: Math.floor(this.volumeData.dimensions.x / 2),
+            coronal: Math.floor(this.volumeData.dimensions.y / 2)
+        };
+
+        this.notyf.success('Volume data loaded successfully');
+    }
+
+    async loadImagePixelData(imageInfo) {
+        // Create a temporary canvas to extract pixel data
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                tempCanvas.width = img.width;
+                tempCanvas.height = img.height;
+                tempCtx.drawImage(img, 0, 0);
+                
+                const imageData = tempCtx.getImageData(0, 0, img.width, img.height);
+                resolve({
+                    width: img.width,
+                    height: img.height,
+                    data: imageData.data,
+                    grayscaleData: this.convertToGrayscale(imageData.data)
+                });
+            };
+            img.onerror = reject;
+            
+            // Load the image (this would need actual image data)
+            img.src = `/viewer/api/get-image/${imageInfo.id}/`;
+        });
+    }
+
+    convertToGrayscale(rgbaData) {
+        const grayscale = new Uint16Array(rgbaData.length / 4);
+        for (let i = 0; i < grayscale.length; i++) {
+            const r = rgbaData[i * 4];
+            const g = rgbaData[i * 4 + 1];
+            const b = rgbaData[i * 4 + 2];
+            // Convert to grayscale and scale to 16-bit
+            grayscale[i] = Math.round((r * 0.299 + g * 0.587 + b * 0.114) * 257);
+        }
+        return grayscale;
+    }
+
+    create3DPixelArray() {
+        const { x, y, z } = this.volumeData.dimensions;
+        this.volumeData.pixelData = new Uint16Array(x * y * z);
+        
+        // Fill 3D array from individual images
+        for (let zi = 0; zi < z; zi++) {
+            if (this.volumeData.images[zi]) {
+                const imageData = this.volumeData.images[zi].grayscaleData;
+                for (let yi = 0; yi < y; yi++) {
+                    for (let xi = 0; xi < x; xi++) {
+                        const index = zi * x * y + yi * x + xi;
+                        const imageIndex = yi * x + xi;
+                        if (imageIndex < imageData.length) {
+                            this.volumeData.pixelData[index] = imageData[imageIndex];
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    generateMPRViews() {
+        this.renderMPRView('axial');
+        this.renderMPRView('sagittal');
+        this.renderMPRView('coronal');
+        this.updateAllSliceInfo();
+    }
+
+    renderMPRView(view) {
+        const canvas = document.getElementById(`mpr-${view}-canvas`);
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        const { x, y, z } = this.volumeData.dimensions;
+        
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        if (!this.volumeData.pixelData) return;
+        
+        let imageData, sliceIndex;
+        
+        switch (view) {
+            case 'axial':
+                sliceIndex = this.currentSlice.axial;
+                imageData = this.extractAxialSlice(sliceIndex);
+                break;
+            case 'sagittal':
+                sliceIndex = this.currentSlice.sagittal;
+                imageData = this.extractSagittalSlice(sliceIndex);
+                break;
+            case 'coronal':
+                sliceIndex = this.currentSlice.coronal;
+                imageData = this.extractCoronalSlice(sliceIndex);
+                break;
+        }
+        
+        if (imageData) {
+            this.displaySliceOnCanvas(ctx, imageData, canvas.width, canvas.height);
+        }
+    }
+
+    extractAxialSlice(sliceIndex) {
+        const { x, y, z } = this.volumeData.dimensions;
+        if (sliceIndex < 0 || sliceIndex >= z) return null;
+        
+        const sliceData = new Uint16Array(x * y);
+        const startIndex = sliceIndex * x * y;
+        
+        for (let i = 0; i < x * y; i++) {
+            sliceData[i] = this.volumeData.pixelData[startIndex + i];
+        }
+        
+        return { data: sliceData, width: x, height: y };
+    }
+
+    extractSagittalSlice(sliceIndex) {
+        const { x, y, z } = this.volumeData.dimensions;
+        if (sliceIndex < 0 || sliceIndex >= x) return null;
+        
+        const sliceData = new Uint16Array(z * y);
+        
+        for (let zi = 0; zi < z; zi++) {
+            for (let yi = 0; yi < y; yi++) {
+                const volumeIndex = zi * x * y + yi * x + sliceIndex;
+                const sliceDataIndex = zi * y + yi;
+                sliceData[sliceDataIndex] = this.volumeData.pixelData[volumeIndex];
+            }
+        }
+        
+        return { data: sliceData, width: z, height: y };
+    }
+
+    extractCoronalSlice(sliceIndex) {
+        const { x, y, z } = this.volumeData.dimensions;
+        if (sliceIndex < 0 || sliceIndex >= y) return null;
+        
+        const sliceData = new Uint16Array(x * z);
+        
+        for (let zi = 0; zi < z; zi++) {
+            for (let xi = 0; xi < x; xi++) {
+                const volumeIndex = zi * x * y + sliceIndex * x + xi;
+                const sliceDataIndex = zi * x + xi;
+                sliceData[sliceDataIndex] = this.volumeData.pixelData[volumeIndex];
+            }
+        }
+        
+        return { data: sliceData, width: x, height: z };
+    }
+
+    displaySliceOnCanvas(ctx, sliceData, canvasWidth, canvasHeight) {
+        const { data, width, height } = sliceData;
+        
+        // Create ImageData for the slice
+        const imageData = ctx.createImageData(width, height);
+        const pixels = imageData.data;
+        
+        // Convert 16-bit grayscale to 8-bit RGBA
+        for (let i = 0; i < data.length; i++) {
+            const value = Math.min(255, Math.floor(data[i] / 257)); // Convert to 8-bit
+            const pixelIndex = i * 4;
+            pixels[pixelIndex] = value;     // R
+            pixels[pixelIndex + 1] = value; // G
+            pixels[pixelIndex + 2] = value; // B
+            pixels[pixelIndex + 3] = 255;   // A
+        }
+        
+        // Create temporary canvas for scaling
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        tempCtx.putImageData(imageData, 0, 0);
+        
+        // Draw scaled to main canvas
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(tempCanvas, 0, 0, canvasWidth, canvasHeight);
+        
+        // Add crosshairs
+        this.drawMPRCrosshairs(ctx, canvasWidth, canvasHeight);
+    }
+
+    drawMPRCrosshairs(ctx, width, height) {
+        ctx.strokeStyle = '#ff0000';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 5]);
+        
+        // Vertical line
+        ctx.beginPath();
+        ctx.moveTo(width / 2, 0);
+        ctx.lineTo(width / 2, height);
+        ctx.stroke();
+        
+        // Horizontal line
+        ctx.beginPath();
+        ctx.moveTo(0, height / 2);
+        ctx.lineTo(width, height / 2);
+        ctx.stroke();
+        
+        ctx.setLineDash([]);
+    }
+
+    switchMPRView(view) {
+        // Hide all panels
+        document.querySelectorAll('.mpr-view-panel').forEach(panel => {
+            panel.style.display = 'none';
+        });
+        
+        // Remove active class from all buttons
+        document.querySelectorAll('.mpr-view-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        // Show selected panel and activate button
+        const panel = document.getElementById(`mpr-${view}-panel`);
+        const button = document.getElementById(`mpr-${view}-btn`);
+        
+        if (panel) panel.style.display = 'block';
+        if (button) button.classList.add('active');
+        
+        // Render 3D if selected
+        if (view === '3d') {
+            this.render3DVolume();
+        }
+    }
+
+    updateSliceInfo(view) {
+        const infoElement = document.getElementById(`${view}-slice-info`);
+        if (infoElement) {
+            const max = this.volumeData.dimensions[view === 'axial' ? 'z' : view === 'sagittal' ? 'x' : 'y'];
+            const current = this.currentSlice[view];
+            infoElement.textContent = `Slice: ${current}/${max}`;
+        }
+    }
+
+    updateAllSliceInfo() {
+        this.updateSliceInfo('axial');
+        this.updateSliceInfo('sagittal');
+        this.updateSliceInfo('coronal');
+        
+        // Update slider max values
+        const { x, y, z } = this.volumeData.dimensions;
+        document.getElementById('axial-slice-slider').max = z - 1;
+        document.getElementById('sagittal-slice-slider').max = x - 1;
+        document.getElementById('coronal-slice-slider').max = y - 1;
+    }
+
+    // === MAXIMUM INTENSITY PROJECTION (MIP) ===
+    
+    enableMIP() {
+        if (!this.currentImages || this.currentImages.length < 5) {
+            this.notyf.error('Need at least 5 images for MIP reconstruction');
             return;
         }
 
-        // Create MPR view elements if they don't exist
-        const views = ['axial', 'sagittal', 'coronal'];
-        views.forEach(view => {
-            let viewElement = document.getElementById(`mpr-${view}`);
-            if (!viewElement) {
-                viewElement = document.createElement('div');
-                viewElement.id = `mpr-${view}`;
-                viewElement.className = 'mpr-view';
-                viewElement.innerHTML = `
-                    <h4>${view.charAt(0).toUpperCase() + view.slice(1)} View</h4>
-                    <canvas id="${view}-canvas" width="256" height="256"></canvas>
-                `;
-                mprContainer.appendChild(viewElement);
-            }
-
-            // Store canvas references
-            const canvas = document.getElementById(`${view}-canvas`);
-            if (canvas) {
-                this.mprViews[view].canvas = canvas;
-                this.mprViews[view].ctx = canvas.getContext('2d');
-            }
-        });
-
-        // Generate MPR slices
-        this.generateMPRSlices();
+        this.notyf.info('Generating Maximum Intensity Projection...');
+        this.generateMIP();
     }
 
-    generateMPRSlices() {
-        if (!this.currentImages || this.currentImages.length === 0) return;
-
-        const currentIndex = this.currentImageIndex;
-        const totalImages = this.currentImages.length;
-
-        // Axial view (current slice)
-        this.renderMPRView('axial', currentIndex);
-
-        // Sagittal view (reconstructed from all slices at current X position)
-        this.renderMPRView('sagittal', Math.floor(currentIndex * 0.5));
-
-        // Coronal view (reconstructed from all slices at current Y position)
-        this.renderMPRView('coronal', Math.floor(currentIndex * 0.7));
-    }
-
-    renderMPRView(viewType, sliceIndex) {
-        const view = this.mprViews[viewType];
-        if (!view.canvas || !view.ctx) return;
-
-        const canvas = view.canvas;
-        const ctx = view.ctx;
-
-        // Clear canvas
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // For demonstration, we'll render a simplified version
-        // In a real implementation, this would reconstruct from volume data
-        if (this.currentImage && this.currentImage.image) {
-            const scale = Math.min(canvas.width / this.currentImage.image.width, 
-                                 canvas.height / this.currentImage.image.height);
+    async generateMIP() {
+        try {
+            if (!this.volumeData) {
+                await this.loadVolumeData();
+            }
             
-            const width = this.currentImage.image.width * scale;
-            const height = this.currentImage.image.height * scale;
-            const x = (canvas.width - width) / 2;
-            const y = (canvas.height - height) / 2;
+            // Create MIP workspace
+            this.createMIPWorkspace();
+            
+            // Generate MIP projections
+            this.generateMIPProjections();
+            
+            this.notyf.success('MIP reconstruction completed');
+            
+        } catch (error) {
+            console.error('Error generating MIP:', error);
+            this.notyf.error('Failed to generate MIP reconstruction');
+        }
+    }
 
-            ctx.drawImage(this.currentImage.image, x, y, width, height);
+    createMIPWorkspace() {
+        let mipContainer = document.getElementById('mip-container');
+        if (!mipContainer) {
+            mipContainer = document.createElement('div');
+            mipContainer.id = 'mip-container';
+            mipContainer.className = 'mip-workspace';
+            mipContainer.innerHTML = `
+                <div class="mip-header">
+                    <h3>Maximum Intensity Projection</h3>
+                    <div class="mip-controls">
+                        <button id="mip-ap-btn" class="mip-view-btn active">Anterior-Posterior</button>
+                        <button id="mip-lateral-btn" class="mip-view-btn">Lateral</button>
+                        <button id="mip-superior-btn" class="mip-view-btn">Superior-Inferior</button>
+                        <button id="mip-rotating-btn" class="mip-view-btn">Rotating</button>
+                        <button id="mip-close-btn" class="btn-close">×</button>
+                    </div>
+                </div>
+                <div class="mip-views">
+                    <div class="mip-view-panel" id="mip-ap-panel">
+                        <h4>Anterior-Posterior MIP</h4>
+                        <canvas id="mip-ap-canvas" width="400" height="400"></canvas>
+                    </div>
+                    <div class="mip-view-panel" id="mip-lateral-panel">
+                        <h4>Lateral MIP</h4>
+                        <canvas id="mip-lateral-canvas" width="400" height="400"></canvas>
+                    </div>
+                    <div class="mip-view-panel" id="mip-superior-panel">
+                        <h4>Superior-Inferior MIP</h4>
+                        <canvas id="mip-superior-canvas" width="400" height="400"></canvas>
+                    </div>
+                    <div class="mip-view-panel" id="mip-rotating-panel">
+                        <h4>Rotating MIP</h4>
+                        <canvas id="mip-rotating-canvas" width="400" height="400"></canvas>
+                        <div class="rotation-controls">
+                            <button id="start-rotation-btn">Start Rotation</button>
+                            <button id="stop-rotation-btn">Stop Rotation</button>
+                            <label>Speed: <input type="range" id="rotation-speed" min="1" max="10" value="5"></label>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            const mainContent = document.querySelector('.main-content-advanced');
+            mainContent.appendChild(mipContainer);
+            
+            this.setupMIPEventHandlers();
+        }
+        
+        mipContainer.style.display = 'block';
+    }
 
-            // Add view-specific transformations
-            switch (viewType) {
-                case 'sagittal':
-                    ctx.save();
-                    ctx.translate(canvas.width / 2, canvas.height / 2);
-                    ctx.rotate(Math.PI / 2);
-                    ctx.translate(-canvas.width / 2, -canvas.height / 2);
-                    ctx.restore();
-                    break;
-                case 'coronal':
-                    ctx.save();
-                    ctx.translate(canvas.width / 2, canvas.height / 2);
-                    ctx.scale(1, -1);
-                    ctx.translate(-canvas.width / 2, -canvas.height / 2);
-                    ctx.restore();
-                    break;
+    setupMIPEventHandlers() {
+        document.getElementById('mip-ap-btn').addEventListener('click', () => this.switchMIPView('ap'));
+        document.getElementById('mip-lateral-btn').addEventListener('click', () => this.switchMIPView('lateral'));
+        document.getElementById('mip-superior-btn').addEventListener('click', () => this.switchMIPView('superior'));
+        document.getElementById('mip-rotating-btn').addEventListener('click', () => this.switchMIPView('rotating'));
+        document.getElementById('mip-close-btn').addEventListener('click', () => this.closeMIP());
+        
+        document.getElementById('start-rotation-btn').addEventListener('click', () => this.startMIPRotation());
+        document.getElementById('stop-rotation-btn').addEventListener('click', () => this.stopMIPRotation());
+    }
+
+    generateMIPProjections() {
+        this.generateMIPProjection('ap');
+        this.generateMIPProjection('lateral');
+        this.generateMIPProjection('superior');
+    }
+
+    generateMIPProjection(direction) {
+        const canvas = document.getElementById(`mip-${direction}-canvas`);
+        if (!canvas || !this.volumeData) return;
+        
+        const ctx = canvas.getContext('2d');
+        const { x, y, z } = this.volumeData.dimensions;
+        
+        let projectionData, width, height;
+        
+        switch (direction) {
+            case 'ap': // Anterior-Posterior (looking from front)
+                projectionData = this.projectAP();
+                width = x;
+                height = z;
+                break;
+            case 'lateral': // Lateral (looking from side)
+                projectionData = this.projectLateral();
+                width = y;
+                height = z;
+                break;
+            case 'superior': // Superior-Inferior (looking from top)
+                projectionData = this.projectSuperior();
+                width = x;
+                height = y;
+                break;
+        }
+        
+        if (projectionData) {
+            this.displayMIPOnCanvas(ctx, projectionData, width, height, canvas.width, canvas.height);
+        }
+    }
+
+    projectAP() {
+        const { x, y, z } = this.volumeData.dimensions;
+        const projection = new Uint16Array(x * z);
+        
+        for (let zi = 0; zi < z; zi++) {
+            for (let xi = 0; xi < x; xi++) {
+                let maxIntensity = 0;
+                
+                // Find maximum intensity along Y axis
+                for (let yi = 0; yi < y; yi++) {
+                    const volumeIndex = zi * x * y + yi * x + xi;
+                    const intensity = this.volumeData.pixelData[volumeIndex];
+                    if (intensity > maxIntensity) {
+                        maxIntensity = intensity;
+                    }
+                }
+                
+                const projectionIndex = zi * x + xi;
+                projection[projectionIndex] = maxIntensity;
             }
+        }
+        
+        return projection;
+    }
 
-            // Draw crosshairs
-            this.drawMPRCrosshairs(ctx, canvas);
+    projectLateral() {
+        const { x, y, z } = this.volumeData.dimensions;
+        const projection = new Uint16Array(y * z);
+        
+        for (let zi = 0; zi < z; zi++) {
+            for (let yi = 0; yi < y; yi++) {
+                let maxIntensity = 0;
+                
+                // Find maximum intensity along X axis
+                for (let xi = 0; xi < x; xi++) {
+                    const volumeIndex = zi * x * y + yi * x + xi;
+                    const intensity = this.volumeData.pixelData[volumeIndex];
+                    if (intensity > maxIntensity) {
+                        maxIntensity = intensity;
+                    }
+                }
+                
+                const projectionIndex = zi * y + yi;
+                projection[projectionIndex] = maxIntensity;
+            }
+        }
+        
+        return projection;
+    }
+
+    projectSuperior() {
+        const { x, y, z } = this.volumeData.dimensions;
+        const projection = new Uint16Array(x * y);
+        
+        for (let yi = 0; yi < y; yi++) {
+            for (let xi = 0; xi < x; xi++) {
+                let maxIntensity = 0;
+                
+                // Find maximum intensity along Z axis
+                for (let zi = 0; zi < z; zi++) {
+                    const volumeIndex = zi * x * y + yi * x + xi;
+                    const intensity = this.volumeData.pixelData[volumeIndex];
+                    if (intensity > maxIntensity) {
+                        maxIntensity = intensity;
+                    }
+                }
+                
+                const projectionIndex = yi * x + xi;
+                projection[projectionIndex] = maxIntensity;
+            }
+        }
+        
+        return projection;
+    }
+
+    displayMIPOnCanvas(ctx, projectionData, dataWidth, dataHeight, canvasWidth, canvasHeight) {
+        // Create ImageData
+        const imageData = ctx.createImageData(dataWidth, dataHeight);
+        const pixels = imageData.data;
+        
+        // Convert to RGBA
+        for (let i = 0; i < projectionData.length; i++) {
+            const value = Math.min(255, Math.floor(projectionData[i] / 257));
+            const pixelIndex = i * 4;
+            pixels[pixelIndex] = value;     // R
+            pixels[pixelIndex + 1] = value; // G
+            pixels[pixelIndex + 2] = value; // B
+            pixels[pixelIndex + 3] = 255;   // A
+        }
+        
+        // Scale and display
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCanvas.width = dataWidth;
+        tempCanvas.height = dataHeight;
+        tempCtx.putImageData(imageData, 0, 0);
+        
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(tempCanvas, 0, 0, canvasWidth, canvasHeight);
+    }
+
+    switchMIPView(view) {
+        // Hide all panels
+        document.querySelectorAll('.mip-view-panel').forEach(panel => {
+            panel.style.display = 'none';
+        });
+        
+        // Remove active class
+        document.querySelectorAll('.mip-view-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        // Show selected
+        const panel = document.getElementById(`mip-${view}-panel`);
+        const button = document.getElementById(`mip-${view}-btn`);
+        
+        if (panel) panel.style.display = 'block';
+        if (button) button.classList.add('active');
+    }
+
+    // === BONE RECONSTRUCTION ===
+    
+    enableBoneReconstruction() {
+        if (!this.currentImages || this.currentImages.length < 10) {
+            this.notyf.error('Need at least 10 images for bone reconstruction');
+            return;
+        }
+
+        this.notyf.info('Initializing bone reconstruction...');
+        this.generateBoneReconstruction();
+    }
+
+    async generateBoneReconstruction() {
+        try {
+            if (!this.volumeData) {
+                await this.loadVolumeData();
+            }
+            
+            // Create bone reconstruction workspace
+            this.createBoneReconstructionWorkspace();
+            
+            // Apply bone segmentation
+            this.performBoneSegmentation();
+            
+            // Generate 3D bone model
+            this.generate3DBoneModel();
+            
+            this.notyf.success('Bone reconstruction completed');
+            
+        } catch (error) {
+            console.error('Error in bone reconstruction:', error);
+            this.notyf.error('Failed to complete bone reconstruction');
+        }
+    }
+
+    createBoneReconstructionWorkspace() {
+        let boneContainer = document.getElementById('bone-container');
+        if (!boneContainer) {
+            boneContainer = document.createElement('div');
+            boneContainer.id = 'bone-container';
+            boneContainer.className = 'bone-workspace';
+            boneContainer.innerHTML = `
+                <div class="bone-header">
+                    <h3>Bone Reconstruction</h3>
+                    <div class="bone-controls">
+                        <label>HU Threshold: <input type="range" id="bone-threshold" min="150" max="3000" value="250"></label>
+                        <label>Opacity: <input type="range" id="bone-opacity" min="0" max="100" value="80"></label>
+                        <label>Quality: 
+                            <select id="bone-quality">
+                                <option value="low">Low (Fast)</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="high">High (Slow)</option>
+                            </select>
+                        </label>
+                        <button id="bone-regenerate-btn">Regenerate</button>
+                        <button id="bone-close-btn" class="btn-close">×</button>
+                    </div>
+                </div>
+                <div class="bone-views">
+                    <div class="bone-view-panel">
+                        <h4>3D Bone Model</h4>
+                        <canvas id="bone-3d-canvas" width="500" height="500"></canvas>
+                        <div class="bone-3d-controls">
+                            <button id="bone-rotate-btn">Auto Rotate</button>
+                            <button id="bone-reset-view-btn">Reset View</button>
+                            <label>Zoom: <input type="range" id="bone-zoom" min="0.5" max="3" step="0.1" value="1"></label>
+                        </div>
+                    </div>
+                    <div class="bone-segmentation-panel">
+                        <h4>Bone Segmentation Preview</h4>
+                        <canvas id="bone-segmentation-canvas" width="300" height="300"></canvas>
+                        <div class="segmentation-info">
+                            <p>Bone Volume: <span id="bone-volume">Calculating...</span></p>
+                            <p>Bone Density: <span id="bone-density">Calculating...</span></p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            const mainContent = document.querySelector('.main-content-advanced');
+            mainContent.appendChild(boneContainer);
+            
+            this.setupBoneReconstructionEventHandlers();
+        }
+        
+        boneContainer.style.display = 'block';
+    }
+
+    setupBoneReconstructionEventHandlers() {
+        document.getElementById('bone-threshold').addEventListener('input', (e) => {
+            this.boneThreshold = parseInt(e.target.value);
+            this.performBoneSegmentation();
+        });
+        
+        document.getElementById('bone-opacity').addEventListener('input', (e) => {
+            this.boneOpacity = parseInt(e.target.value) / 100;
+            this.generate3DBoneModel();
+        });
+        
+        document.getElementById('bone-regenerate-btn').addEventListener('click', () => {
+            this.generateBoneReconstruction();
+        });
+        
+        document.getElementById('bone-close-btn').addEventListener('click', () => {
+            this.closeBoneReconstruction();
+        });
+        
+        document.getElementById('bone-rotate-btn').addEventListener('click', () => {
+            this.toggleBoneRotation();
+        });
+        
+        document.getElementById('bone-reset-view-btn').addEventListener('click', () => {
+            this.resetBoneView();
+        });
+    }
+
+    performBoneSegmentation() {
+        if (!this.volumeData) return;
+        
+        this.boneThreshold = this.boneThreshold || 250; // Default bone HU threshold
+        const { x, y, z } = this.volumeData.dimensions;
+        
+        // Create bone mask
+        this.boneMask = new Uint8Array(x * y * z);
+        let boneVoxelCount = 0;
+        let totalBoneDensity = 0;
+        
+        for (let i = 0; i < this.volumeData.pixelData.length; i++) {
+            const huValue = this.pixelToHU(this.volumeData.pixelData[i]);
+            if (huValue >= this.boneThreshold) {
+                this.boneMask[i] = 255;
+                boneVoxelCount++;
+                totalBoneDensity += huValue;
+            } else {
+                this.boneMask[i] = 0;
+            }
+        }
+        
+        // Calculate bone statistics
+        const voxelVolume = 1.0; // mm³ per voxel (simplified)
+        const boneVolume = boneVoxelCount * voxelVolume;
+        const averageBoneDensity = boneVoxelCount > 0 ? totalBoneDensity / boneVoxelCount : 0;
+        
+        // Update UI
+        document.getElementById('bone-volume').textContent = `${boneVolume.toFixed(1)} mm³`;
+        document.getElementById('bone-density').textContent = `${averageBoneDensity.toFixed(1)} HU`;
+        
+        // Display segmentation preview
+        this.displayBoneSegmentation();
+    }
+
+    pixelToHU(pixelValue) {
+        // Convert pixel value to Hounsfield Units
+        // This is a simplified conversion - real DICOM uses slope/intercept
+        return (pixelValue / 257) * 4000 - 1000;
+    }
+
+    displayBoneSegmentation() {
+        const canvas = document.getElementById('bone-segmentation-canvas');
+        if (!canvas || !this.boneMask) return;
+        
+        const ctx = canvas.getContext('2d');
+        const { x, y, z } = this.volumeData.dimensions;
+        
+        // Display middle axial slice with bone overlay
+        const sliceIndex = Math.floor(z / 2);
+        const sliceStart = sliceIndex * x * y;
+        
+        const imageData = ctx.createImageData(x, y);
+        const pixels = imageData.data;
+        
+        for (let i = 0; i < x * y; i++) {
+            const originalValue = Math.min(255, Math.floor(this.volumeData.pixelData[sliceStart + i] / 257));
+            const boneValue = this.boneMask[sliceStart + i];
+            
+            const pixelIndex = i * 4;
+            if (boneValue > 0) {
+                // Highlight bone in red
+                pixels[pixelIndex] = Math.min(255, originalValue + 100);     // R
+                pixels[pixelIndex + 1] = originalValue;                      // G
+                pixels[pixelIndex + 2] = originalValue;                      // B
+            } else {
+                pixels[pixelIndex] = originalValue;     // R
+                pixels[pixelIndex + 1] = originalValue; // G
+                pixels[pixelIndex + 2] = originalValue; // B
+            }
+            pixels[pixelIndex + 3] = 255; // A
+        }
+        
+        // Scale and display
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCanvas.width = x;
+        tempCanvas.height = y;
+        tempCtx.putImageData(imageData, 0, 0);
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(tempCanvas, 0, 0, canvas.width, canvas.height);
+    }
+
+    generate3DBoneModel() {
+        const canvas = document.getElementById('bone-3d-canvas');
+        if (!canvas || !this.boneMask) return;
+        
+        const ctx = canvas.getContext('2d');
+        
+        // Simple 3D rendering using raycasting
+        this.render3DBones(ctx, canvas.width, canvas.height);
+    }
+
+    render3DBones(ctx, width, height) {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, width, height);
+        
+        const { x, y, z } = this.volumeData.dimensions;
+        const centerX = width / 2;
+        const centerY = height / 2;
+        
+        // Simple orthographic projection
+        const scale = Math.min(width, height) / Math.max(x, y, z) * 0.8;
+        
+        this.boneOpacity = this.boneOpacity || 0.8;
+        this.boneRotationAngle = this.boneRotationAngle || 0;
+        
+        const cos = Math.cos(this.boneRotationAngle);
+        const sin = Math.sin(this.boneRotationAngle);
+        
+        // Render bone voxels as points
+        for (let zi = 0; zi < z; zi += 2) { // Skip voxels for performance
+            for (let yi = 0; yi < y; yi += 2) {
+                for (let xi = 0; xi < x; xi += 2) {
+                    const index = zi * x * y + yi * x + xi;
+                    if (this.boneMask[index] > 0) {
+                        // Apply rotation
+                        const rotX = (xi - x/2) * cos - (zi - z/2) * sin;
+                        const rotZ = (xi - x/2) * sin + (zi - z/2) * cos;
+                        
+                        const screenX = centerX + rotX * scale;
+                        const screenY = centerY + (yi - y/2) * scale;
+                        const depth = (rotZ + z/2) / z; // Normalized depth
+                        
+                        // Simple depth-based color and size
+                        const intensity = Math.floor(155 + depth * 100);
+                        const size = 1 + depth * 2;
+                        
+                        ctx.fillStyle = `rgba(${intensity}, ${intensity - 50}, ${intensity - 100}, ${this.boneOpacity})`;
+                        ctx.fillRect(screenX, screenY, size, size);
+                    }
+                }
+            }
+        }
+    }
+
+    toggleBoneRotation() {
+        if (this.boneRotationInterval) {
+            clearInterval(this.boneRotationInterval);
+            this.boneRotationInterval = null;
+            document.getElementById('bone-rotate-btn').textContent = 'Auto Rotate';
+        } else {
+            this.boneRotationInterval = setInterval(() => {
+                this.boneRotationAngle += 0.05;
+                this.generate3DBoneModel();
+            }, 50);
+            document.getElementById('bone-rotate-btn').textContent = 'Stop Rotation';
+        }
+    }
+
+    resetBoneView() {
+        this.boneRotationAngle = 0;
+        this.generate3DBoneModel();
+    }
+
+    closeBoneReconstruction() {
+        const container = document.getElementById('bone-container');
+        if (container) {
+            container.style.display = 'none';
+        }
+        
+        if (this.boneRotationInterval) {
+            clearInterval(this.boneRotationInterval);
+            this.boneRotationInterval = null;
+        }
+    }
+
+    disableMPR() {
+        this.mprEnabled = false;
+        const mprContainer = document.getElementById('mpr-container');
+        if (mprContainer) {
+            mprContainer.style.display = 'none';
+        }
+    }
+
+    closeMIP() {
+        const mipContainer = document.getElementById('mip-container');
+        if (mipContainer) {
+            mipContainer.style.display = 'none';
+        }
+        
+        if (this.mipRotationInterval) {
+            clearInterval(this.mipRotationInterval);
+            this.mipRotationInterval = null;
         }
     }
 
