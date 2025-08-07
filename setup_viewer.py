@@ -89,61 +89,9 @@ def install_dependencies():
         return False
 
 def create_test_data():
-    """Create sample data if database is empty"""
-    print_status("Creating sample medical data...", "INFO")
-    
-    try:
-        from worklist.models import Study, Series, DICOMImage
-        
-        # Check if data already exists
-        if Study.objects.exists():
-            print_status("Sample data already exists", "INFO")
-            return True
-        
-        # Create a sample study if none exists
-        study = Study.objects.create(
-            study_instance_uid="1.2.826.0.1.3680043.2.1125.1.12345678901234567890123456789012",
-            patient_name="Smith, John M",
-            patient_id="MRN789456",
-            patient_birth_date=date(1975, 3, 15),
-            accession_number="ACC2024001234",
-            study_description="CT Chest with Contrast",
-            study_date=date.today(),
-            institution_name="General Medical Center"
-        )
-        
-        # Create a sample series
-        series = Series.objects.create(
-            study=study,
-            series_instance_uid="1.2.826.0.1.3680043.2.1125.2.12345678901234567890123456789012",
-            series_number=1,
-            series_description="Axial CT Chest",
-            modality="CT"
-        )
-        
-        # Create a sample image
-        dicom_image = DICOMImage.objects.create(
-            series=series,
-            sop_instance_uid="1.2.826.0.1.3680043.2.1125.3.12345678901234567890123456789012",
-            instance_number=1,
-            slice_location=0.0,
-            image_position_patient="0.0\\0.0\\0.0",
-            image_orientation_patient="1.0\\0.0\\0.0\\0.0\\1.0\\0.0",
-            pixel_spacing="0.976562\\0.976562",
-            slice_thickness=5.0,
-            rows=512,
-            columns=512,
-            bits_allocated=16,
-            bits_stored=12,
-            high_bit=11
-        )
-        
-        print_status("Sample medical data created successfully", "SUCCESS")
-        return True
-        
-    except Exception as e:
-        print_status(f"Failed to create sample data: {e}", "ERROR")
-        return False
+    """Database is ready for DICOM file uploads"""
+    print_status("Database initialized - ready for DICOM file uploads", "INFO")
+    return True
 
 def start_server():
     """Start the Django development server"""
@@ -175,19 +123,18 @@ def main():
             print_status("Setup failed: Could not install Django", "ERROR")
             return False
     
-    # Check database
+    # Initialize database
     db_ok = check_database()
     
-    if check_django_installation():
-        # Create test data if needed
-        if not db_ok or True:  # Always try to ensure test data exists
-            create_test_data()
+    # System is ready for DICOM uploads
+    if db_ok:
+        create_test_data()  # Just confirms DB is ready
     
-    print_status("\n=== Setup Summary ===", "INFO")
-    print_status("1. Open your web browser", "INFO")
-    print_status("2. Navigate to: http://127.0.0.1:8000/viewer/", "INFO")
-    print_status("3. Or use the diagnostic page: dicom_viewer_test.html", "INFO")
-    print_status("4. Check the debug panel in the bottom left", "INFO")
+    print_status("=== NOCTIS DICOM VIEWER SETUP COMPLETE ===", "SUCCESS")
+    print_status("System is ready for DICOM file uploads", "INFO")
+    print_status("1. Start the server: python manage.py runserver", "INFO")
+    print_status("2. Access the application: http://localhost:8000", "INFO")
+    print_status("3. Upload your DICOM files through the worklist interface", "INFO")
     
     # Ask user if they want to start the server
     response = input("\nStart Django server now? (y/N): ").strip().lower()
