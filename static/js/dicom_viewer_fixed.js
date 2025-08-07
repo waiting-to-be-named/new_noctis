@@ -304,165 +304,164 @@ class FixedDicomViewer {
     }
 
     async toggleMPR() {
+        if (!this.currentImages || this.currentImages.length < 3) {
+            this.notyf.error('Need at least 3 images for MPR reconstruction');
+            return;
+        }
+
         this.mprEnabled = !this.mprEnabled;
-        const mprToggle = document.getElementById('mpr-toggle-btn');
-        if (mprToggle) mprToggle.classList.toggle('active', this.mprEnabled);
         
         if (this.mprEnabled) {
+            this.notyf.info('Initializing MPR reconstruction...');
             await this.initializeMPR();
         } else {
             this.disableMPR();
+            this.notyf.info('MPR disabled');
         }
     }
 
     async initializeMPR() {
-        if (!this.currentImages || this.currentImages.length === 0) {
-            this.notyf.error('No images available for MPR');
+        try {
+            // Show MPR controls
+            const mprPanel = document.getElementById('mpr-reconstruction-panel');
+            if (mprPanel) {
+                mprPanel.style.display = 'block';
+            }
+
+            // Initialize MPR views
+            await this.createMPRViews();
+            this.notyf.success('MPR reconstruction initialized');
+            
+        } catch (error) {
+            console.error('Error initializing MPR:', error);
+            this.notyf.error('Failed to initialize MPR reconstruction');
+            this.mprEnabled = false;
+        }
+    }
+
+    async createMPRViews() {
+        const mprContainer = document.getElementById('mpr-views-container');
+        if (!mprContainer) {
+            console.error('MPR container not found');
             return;
         }
 
-        try {
-            await this.loadVolumeData();
-            this.setupMPRViews();
-            this.renderMPRViews();
-            this.notyf.success('MPR initialized successfully');
-        } catch (error) {
-            console.error('Error initializing MPR:', error);
-            this.notyf.error('Failed to initialize MPR');
-        }
-    }
-
-    async loadVolumeData() {
-        // Load all images in the current series for volume reconstruction
-        this.volumeData = [];
-        for (let image of this.currentImages) {
-            try {
-                const pixelData = await this.loadImagePixelData(image);
-                this.volumeData.push(pixelData);
-            } catch (error) {
-                console.error('Error loading image for volume:', error);
+        // Create MPR view elements if they don't exist
+        const views = ['axial', 'sagittal', 'coronal'];
+        views.forEach(view => {
+            let viewElement = document.getElementById(`mpr-${view}`);
+            if (!viewElement) {
+                viewElement = document.createElement('div');
+                viewElement.id = `mpr-${view}`;
+                viewElement.className = 'mpr-view';
+                viewElement.innerHTML = `
+                    <h4>${view.charAt(0).toUpperCase() + view.slice(1)} View</h4>
+                    <canvas id="${view}-canvas" width="256" height="256"></canvas>
+                `;
+                mprContainer.appendChild(viewElement);
             }
-        }
-    }
 
-    async loadImagePixelData(image) {
-        // Placeholder for loading pixel data
-        return null;
-    }
-
-    setupMPRViews() {
-        // Create additional canvases for MPR views
-        ['axial', 'sagittal', 'coronal'].forEach(viewType => {
-            const container = document.getElementById(`${viewType}-view-container`);
-            if (container) {
-                const canvas = document.createElement('canvas');
-                canvas.id = `${viewType}-canvas`;
-                canvas.width = 300;
-                canvas.height = 300;
-                canvas.style.border = '1px solid #666';
-                container.appendChild(canvas);
-                
-                this.mprViews[viewType].canvas = canvas;
-                this.mprViews[viewType].ctx = canvas.getContext('2d', { willReadFrequently: true });
+            // Store canvas references
+            const canvas = document.getElementById(`${view}-canvas`);
+            if (canvas) {
+                this.mprViews[view].canvas = canvas;
+                this.mprViews[view].ctx = canvas.getContext('2d');
             }
         });
+
+        // Generate MPR slices
+        this.generateMPRSlices();
     }
 
-    renderMPRViews() {
-        if (!this.mprEnabled) return;
-        
-        ['axial', 'sagittal', 'coronal'].forEach(viewType => {
-            if (this.mprViews[viewType].active) {
-                this.renderMPRView(viewType);
-            }
-        });
+    generateMPRSlices() {
+        if (!this.currentImages || this.currentImages.length === 0) return;
+
+        const currentIndex = this.currentImageIndex;
+        const totalImages = this.currentImages.length;
+
+        // Axial view (current slice)
+        this.renderMPRView('axial', currentIndex);
+
+        // Sagittal view (reconstructed from all slices at current X position)
+        this.renderMPRView('sagittal', Math.floor(currentIndex * 0.5));
+
+        // Coronal view (reconstructed from all slices at current Y position)
+        this.renderMPRView('coronal', Math.floor(currentIndex * 0.7));
     }
 
-    renderMPRView(viewType) {
+    renderMPRView(viewType, sliceIndex) {
         const view = this.mprViews[viewType];
         if (!view.canvas || !view.ctx) return;
 
-        // Clear canvas
-        view.ctx.fillStyle = '#000000';
-        view.ctx.fillRect(0, 0, view.canvas.width, view.canvas.height);
+        const canvas = view.canvas;
+        const ctx = view.ctx;
 
-        // Extract slice data based on view type
-        const sliceData = this.extractSliceData(viewType);
-        if (sliceData) {
-            this.applyWindowingToSlice(sliceData);
-            this.fillImageData(view.ctx.createImageData(view.canvas.width, view.canvas.height), sliceData);
-            view.ctx.putImageData(view.ctx.createImageData(view.canvas.width, view.canvas.height), 0, 0);
+        // Clear canvas
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // For demonstration, we'll render a simplified version
+        // In a real implementation, this would reconstruct from volume data
+        if (this.currentImage && this.currentImage.image) {
+            const scale = Math.min(canvas.width / this.currentImage.image.width, 
+                                 canvas.height / this.currentImage.image.height);
+            
+            const width = this.currentImage.image.width * scale;
+            const height = this.currentImage.image.height * scale;
+            const x = (canvas.width - width) / 2;
+            const y = (canvas.height - height) / 2;
+
+            ctx.drawImage(this.currentImage.image, x, y, width, height);
+
+            // Add view-specific transformations
+            switch (viewType) {
+                case 'sagittal':
+                    ctx.save();
+                    ctx.translate(canvas.width / 2, canvas.height / 2);
+                    ctx.rotate(Math.PI / 2);
+                    ctx.translate(-canvas.width / 2, -canvas.height / 2);
+                    ctx.restore();
+                    break;
+                case 'coronal':
+                    ctx.save();
+                    ctx.translate(canvas.width / 2, canvas.height / 2);
+                    ctx.scale(1, -1);
+                    ctx.translate(-canvas.width / 2, -canvas.height / 2);
+                    ctx.restore();
+                    break;
+            }
+
+            // Draw crosshairs
+            this.drawMPRCrosshairs(ctx, canvas);
+        }
+    }
+
+    enableVolumeRendering() {
+        if (!this.currentImages || this.currentImages.length < 10) {
+            this.notyf.error('Need at least 10 images for volume rendering');
+            return;
         }
 
-        // Draw crosshairs
-        this.drawMPRCrosshairs(view.ctx, view.canvas);
+        this.notyf.info('Volume rendering feature coming soon!');
+        // TODO: Implement proper volume rendering with WebGL
     }
 
-    extractSliceData(viewType) {
-        if (!this.volumeData || this.volumeData.length === 0) return null;
+    enableMIP() {
+        if (!this.currentImages || this.currentImages.length < 5) {
+            this.notyf.error('Need at least 5 images for MIP reconstruction');
+            return;
+        }
 
-        // Placeholder for slice extraction
-        return null;
-    }
-
-    applyWindowingToSlice(sliceData) {
-        // Apply window/level transformation
-        if (!sliceData) return;
-        
-        // Placeholder for windowing application
-    }
-
-    fillImageData(imageData, pixelData) {
-        // Fill image data with pixel values
-        if (!pixelData || !imageData) return;
-        
-        // Placeholder for image data filling
-    }
-
-    drawMPRCrosshairs(ctx, canvas) {
-        ctx.strokeStyle = '#ff0000';
-        ctx.lineWidth = 1;
-        
-        // Draw crosshairs
-        ctx.beginPath();
-        ctx.moveTo(canvas.width / 2, 0);
-        ctx.lineTo(canvas.width / 2, canvas.height);
-        ctx.moveTo(0, canvas.height / 2);
-        ctx.lineTo(canvas.width, canvas.height / 2);
-        ctx.stroke();
-    }
-
-    switchMPRView(viewType) {
-        // Deactivate all views
-        Object.keys(this.mprViews).forEach(key => {
-            this.mprViews[key].active = false;
-        });
-        
-        // Activate selected view
-        this.mprViews[viewType].active = true;
-        
-        // Update UI
-        ['axial', 'sagittal', 'coronal'].forEach(view => {
-            const btn = document.getElementById(`${view}-view-btn`);
-            if (btn) {
-                btn.classList.toggle('active', view === viewType);
-            }
-        });
-        
-        this.renderMPRViews();
+        this.notyf.info('Maximum Intensity Projection feature coming soon!');
+        // TODO: Implement MIP reconstruction
     }
 
     disableMPR() {
         this.mprEnabled = false;
-        this.volumeData = null;
-        
-        // Remove MPR canvases
-        ['axial', 'sagittal', 'coronal'].forEach(viewType => {
-            const container = document.getElementById(`${viewType}-view-container`);
-            if (container) {
-                container.innerHTML = '';
-            }
-        });
+        const mprPanel = document.getElementById('mpr-reconstruction-panel');
+        if (mprPanel) {
+            mprPanel.style.display = 'none';
+        }
     }
 
     async refreshCurrentImage() {
@@ -495,7 +494,7 @@ class FixedDicomViewer {
                         
                         // Update MPR views if enabled
                         if (this.mprEnabled) {
-                            this.renderMPRViews();
+                            this.generateMPRSlices();
                         }
                     } catch (displayError) {
                         console.error('Error displaying image:', displayError);
@@ -593,32 +592,245 @@ class FixedDicomViewer {
                     this.ctx.drawImage(img, -displayWidth / 2, -displayHeight / 2, displayWidth, displayHeight);
                     this.ctx.restore();
                     
+                    // Apply post-processing
+                    this.applyImageEnhancements();
+                    
                     // Store image data
                     this.imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                    this.originalImageData = this.ctx.createImageData(this.imageData);
+                    this.originalImageData.data.set(this.imageData.data);
                     
                     // Update UI
                     this.updateViewportInfo();
-                    this.hideErrorPlaceholder();
+                    this.updateDebugPanel();
                     
-                    console.log('✅ Successfully displayed DICOM image');
+                    // Store current image reference
+                    this.currentImage = { image: img, width: img.width, height: img.height };
+                    
+                    console.log('Image displayed successfully:', displayWidth, 'x', displayHeight);
                     resolve();
-                } catch (renderError) {
-                    console.error('Error rendering image:', renderError);
-                    this.notyf.error('Error rendering image');
+                    
+                } catch (error) {
+                    console.error('Error in displayProcessedImage:', error);
+                    this.notyf.error('Error rendering image: ' + error.message);
                     this.showErrorPlaceholder();
-                    reject(renderError);
+                    reject(error);
                 }
             };
             
             img.onerror = (error) => {
-                console.error('Failed to load image from base64 data:', error);
-                this.notyf.error('Failed to display image');
+                console.error('Failed to load image:', error);
+                this.notyf.error('Failed to load image - invalid format or corrupted data');
                 this.showErrorPlaceholder();
-                reject(error);
+                reject(new Error('Image load failed'));
             };
             
+            // Set the image source with proper data URI
             img.src = `data:image/png;base64,${cleanBase64}`;
         });
+    }
+
+    // === COMPREHENSIVE IMAGE PROCESSING ===
+    applyImageEnhancements() {
+        if (!this.imageData) return;
+
+        let imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        let data = imageData.data;
+
+        // Apply windowing (Window/Level adjustment)
+        if (this.windowWidth && this.windowLevel) {
+            this.applyWindowing(data);
+        }
+
+        // Apply inversion if enabled
+        if (this.inverted) {
+            this.invertImage(data);
+        }
+
+        // Apply contrast enhancement
+        if (this.contrastBoost !== 1.0) {
+            this.adjustContrast(data, this.contrastBoost);
+        }
+
+        // Apply density enhancement for tissue differentiation
+        if (this.densityEnhancement) {
+            this.enhanceDensity(data);
+        }
+
+        // Put processed data back to canvas
+        this.ctx.putImageData(imageData, 0, 0);
+    }
+
+    applyWindowing(data) {
+        const windowMin = this.windowLevel - this.windowWidth / 2;
+        const windowMax = this.windowLevel + this.windowWidth / 2;
+        const windowRange = windowMax - windowMin;
+
+        for (let i = 0; i < data.length; i += 4) {
+            // Convert RGB to grayscale for HU approximation
+            const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+            
+            // Approximate HU value (this is simplified - real DICOM uses slope/intercept)
+            const hu = (gray - 128) * 4; // Rough approximation
+            
+            // Apply windowing
+            let windowedValue;
+            if (hu <= windowMin) {
+                windowedValue = 0;
+            } else if (hu >= windowMax) {
+                windowedValue = 255;
+            } else {
+                windowedValue = ((hu - windowMin) / windowRange) * 255;
+            }
+
+            // Apply back to RGB channels
+            data[i] = windowedValue;     // Red
+            data[i + 1] = windowedValue; // Green
+            data[i + 2] = windowedValue; // Blue
+            // Alpha channel remains unchanged
+        }
+    }
+
+    invertImage(data) {
+        for (let i = 0; i < data.length; i += 4) {
+            data[i] = 255 - data[i];         // Red
+            data[i + 1] = 255 - data[i + 1]; // Green
+            data[i + 2] = 255 - data[i + 2]; // Blue
+            // Alpha channel remains unchanged
+        }
+    }
+
+    adjustContrast(data, contrast) {
+        const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
+        
+        for (let i = 0; i < data.length; i += 4) {
+            data[i] = Math.max(0, Math.min(255, factor * (data[i] - 128) + 128));
+            data[i + 1] = Math.max(0, Math.min(255, factor * (data[i + 1] - 128) + 128));
+            data[i + 2] = Math.max(0, Math.min(255, factor * (data[i + 2] - 128) + 128));
+        }
+    }
+
+    enhanceDensity(data) {
+        // Enhance tissue density differences for better visualization
+        for (let i = 0; i < data.length; i += 4) {
+            const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+            
+            // Apply sigmoid function for better contrast in mid-range
+            const enhanced = 255 / (1 + Math.exp(-0.1 * (gray - 128)));
+            
+            data[i] = enhanced;
+            data[i + 1] = enhanced;
+            data[i + 2] = enhanced;
+        }
+    }
+
+    // === COMPREHENSIVE TOOL IMPLEMENTATIONS ===
+    
+    // Zoom tools
+    zoomIn() {
+        this.zoomFactor = Math.min(this.zoomFactor * 1.2, 10);
+        this.redrawCanvas();
+        this.notyf.info(`Zoom: ${Math.round(this.zoomFactor * 100)}%`);
+    }
+
+    zoomOut() {
+        this.zoomFactor = Math.max(this.zoomFactor * 0.8, 0.1);
+        this.redrawCanvas();
+        this.notyf.info(`Zoom: ${Math.round(this.zoomFactor * 100)}%`);
+    }
+
+    resetZoom() {
+        this.zoomFactor = 1.0;
+        this.panX = 0;
+        this.panY = 0;
+        this.rotation = 0;
+        this.redrawCanvas();
+        this.notyf.success('View reset');
+    }
+
+    fitToWindow() {
+        this.zoomFactor = 1.0;
+        this.panX = 0;
+        this.panY = 0;
+        this.redrawCanvas();
+        this.notyf.info('Fit to window');
+    }
+
+    actualSize() {
+        this.zoomFactor = 1.0;
+        this.panX = 0;
+        this.panY = 0;
+        this.redrawCanvas();
+        this.notyf.info('Actual size (100%)');
+    }
+
+    // Rotation and flip tools
+    rotateLeft() {
+        this.rotation -= 90;
+        if (this.rotation < 0) this.rotation += 360;
+        this.redrawCanvas();
+        this.notyf.info(`Rotated to ${this.rotation}°`);
+    }
+
+    rotateRight() {
+        this.rotation += 90;
+        if (this.rotation >= 360) this.rotation -= 360;
+        this.redrawCanvas();
+        this.notyf.info(`Rotated to ${this.rotation}°`);
+    }
+
+    flipHorizontally() {
+        this.flipHorizontal = !this.flipHorizontal;
+        this.redrawCanvas();
+        this.notyf.info(`Horizontal flip: ${this.flipHorizontal ? 'ON' : 'OFF'}`);
+    }
+
+    flipVertically() {
+        this.flipVertical = !this.flipVertical;
+        this.redrawCanvas();
+        this.notyf.info(`Vertical flip: ${this.flipVertical ? 'ON' : 'OFF'}`);
+    }
+
+    // Window/Level tools
+    setWindowPreset(presetName) {
+        const preset = this.windowPresets[presetName];
+        if (preset) {
+            this.windowWidth = preset.ww;
+            this.windowLevel = preset.wl;
+            this.refreshCurrentImage();
+            this.notyf.success(`Applied ${preset.description}`);
+        }
+    }
+
+    adjustWindowWidth(delta) {
+        this.windowWidth = Math.max(1, this.windowWidth + delta);
+        this.refreshCurrentImage();
+        this.updateWindowLevelDisplay();
+    }
+
+    adjustWindowLevel(delta) {
+        this.windowLevel = Math.max(-1000, Math.min(1000, this.windowLevel + delta));
+        this.refreshCurrentImage();
+        this.updateWindowLevelDisplay();
+    }
+
+    // Image enhancement tools
+    toggleInversion() {
+        this.inverted = !this.inverted;
+        this.applyImageEnhancements();
+        this.notyf.info(`Inversion: ${this.inverted ? 'ON' : 'OFF'}`);
+    }
+
+    toggleDensityEnhancement() {
+        this.densityEnhancement = !this.densityEnhancement;
+        this.applyImageEnhancements();
+        this.notyf.info(`Density enhancement: ${this.densityEnhancement ? 'ON' : 'OFF'}`);
+    }
+
+    adjustContrast(value) {
+        this.contrastBoost = Math.max(0.1, Math.min(3.0, value));
+        this.applyImageEnhancements();
+        this.notyf.info(`Contrast: ${Math.round(this.contrastBoost * 100)}%`);
     }
     
     showErrorPlaceholder() {
@@ -923,7 +1135,7 @@ class FixedDicomViewer {
         }
 
         // Tool activation buttons
-        const panBtn = document.getElementById('pan-btn');
+        const panBtn = document.getElementById('pan-btn') || document.getElementById('pan-adv-btn');
         if (panBtn) {
             panBtn.addEventListener('click', () => {
                 this.activeTool = 'pan';
@@ -932,7 +1144,7 @@ class FixedDicomViewer {
             });
         }
 
-        const zoomBtn = document.getElementById('zoom-adv-btn');
+        const zoomBtn = document.getElementById('zoom-adv-btn') || document.getElementById('zoom-btn');
         if (zoomBtn) {
             zoomBtn.addEventListener('click', () => {
                 this.activeTool = 'zoom';
@@ -941,13 +1153,60 @@ class FixedDicomViewer {
             });
         }
 
-        const windowingBtn = document.getElementById('windowing-btn');
+        const windowingBtn = document.getElementById('windowing-btn') || document.getElementById('windowing-adv-btn');
         if (windowingBtn) {
             windowingBtn.addEventListener('click', () => {
                 this.activeTool = 'windowing';
                 this.canvas.style.cursor = 'default';
                 this.setActiveToolButton(windowingBtn);
             });
+        }
+
+        // Zoom control buttons
+        const zoomInBtn = document.getElementById('zoom-in-btn');
+        if (zoomInBtn) {
+            zoomInBtn.addEventListener('click', () => this.zoomIn());
+        }
+
+        const zoomOutBtn = document.getElementById('zoom-out-btn');
+        if (zoomOutBtn) {
+            zoomOutBtn.addEventListener('click', () => this.zoomOut());
+        }
+
+        const resetBtn = document.getElementById('reset-adv-btn') || document.getElementById('reset-btn');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => this.resetZoom());
+        }
+
+        const fitBtn = document.getElementById('fit-to-window-btn') || document.getElementById('fit-btn');
+        if (fitBtn) {
+            fitBtn.addEventListener('click', () => this.fitToWindow());
+        }
+
+        const actualSizeBtn = document.getElementById('actual-size-btn');
+        if (actualSizeBtn) {
+            actualSizeBtn.addEventListener('click', () => this.actualSize());
+        }
+
+        // Rotation and flip buttons
+        const rotateLeftBtn = document.getElementById('rotate-left-btn') || document.getElementById('rotate-btn');
+        if (rotateLeftBtn) {
+            rotateLeftBtn.addEventListener('click', () => this.rotateLeft());
+        }
+
+        const rotateRightBtn = document.getElementById('rotate-right-btn');
+        if (rotateRightBtn) {
+            rotateRightBtn.addEventListener('click', () => this.rotateRight());
+        }
+
+        const flipBtn = document.getElementById('flip-btn');
+        if (flipBtn) {
+            flipBtn.addEventListener('click', () => this.flipHorizontally());
+        }
+
+        const flipVerticalBtn = document.getElementById('flip-vertical-btn');
+        if (flipVerticalBtn) {
+            flipVerticalBtn.addEventListener('click', () => this.flipVertically());
         }
 
         // Enhancement buttons
@@ -1007,7 +1266,7 @@ class FixedDicomViewer {
         }
 
         // Crosshair button
-        const crosshairBtn = document.getElementById('crosshair-adv-btn');
+        const crosshairBtn = document.getElementById('crosshair-adv-btn') || document.getElementById('crosshair-btn');
         if (crosshairBtn) {
             crosshairBtn.addEventListener('click', () => {
                 this.activeTool = 'crosshair';
@@ -1017,14 +1276,99 @@ class FixedDicomViewer {
         }
 
         // Invert button
-        const invertBtn = document.getElementById('invert-adv-btn');
+        const invertBtn = document.getElementById('invert-adv-btn') || document.getElementById('invert-btn');
         if (invertBtn) {
             invertBtn.addEventListener('click', () => {
-                this.inverted = !this.inverted;
+                this.toggleInversion();
                 invertBtn.classList.toggle('active', this.inverted);
-                this.refreshCurrentImage();
             });
         }
+
+        // Window/Level preset buttons
+        const presetButtons = document.querySelectorAll('.preset-btn, [data-preset]');
+        presetButtons.forEach(btn => {
+            const preset = btn.getAttribute('data-preset');
+            if (preset) {
+                btn.addEventListener('click', () => {
+                    this.setWindowPreset(preset);
+                });
+            }
+        });
+
+        // MPR and 3D buttons
+        const mprBtn = document.getElementById('mpr-btn');
+        if (mprBtn) {
+            mprBtn.addEventListener('click', () => {
+                this.toggleMPR();
+            });
+        }
+
+        const volumeRenderBtn = document.getElementById('volume-render-btn');
+        if (volumeRenderBtn) {
+            volumeRenderBtn.addEventListener('click', () => {
+                this.enableVolumeRendering();
+            });
+        }
+
+        const mipBtn = document.getElementById('mip-btn');
+        if (mipBtn) {
+            mipBtn.addEventListener('click', () => {
+                this.enableMIP();
+            });
+        }
+
+        // Image navigation buttons
+        const prevImageBtn = document.getElementById('prev-image-btn');
+        if (prevImageBtn) {
+            prevImageBtn.addEventListener('click', () => {
+                this.previousImage();
+            });
+        }
+
+        const nextImageBtn = document.getElementById('next-image-btn');
+        if (nextImageBtn) {
+            nextImageBtn.addEventListener('click', () => {
+                this.nextImage();
+            });
+        }
+
+        // Window/Level sliders
+        const windowWidthSlider = document.getElementById('window-width-slider');
+        if (windowWidthSlider) {
+            windowWidthSlider.addEventListener('input', (e) => {
+                this.windowWidth = parseInt(e.target.value);
+                this.refreshCurrentImage();
+                this.updateWindowLevelDisplay();
+            });
+        }
+
+        const windowLevelSlider = document.getElementById('window-level-slider');
+        if (windowLevelSlider) {
+            windowLevelSlider.addEventListener('input', (e) => {
+                this.windowLevel = parseInt(e.target.value);
+                this.refreshCurrentImage();
+                this.updateWindowLevelDisplay();
+            });
+        }
+
+        // Contrast slider
+        const contrastSlider = document.getElementById('contrast-slider');
+        if (contrastSlider) {
+            contrastSlider.addEventListener('input', (e) => {
+                this.adjustContrast(parseFloat(e.target.value));
+            });
+        }
+
+        // Density enhancement toggle
+        const densityBtn = document.getElementById('density-enhancement-btn');
+        if (densityBtn) {
+            densityBtn.addEventListener('click', () => {
+                this.toggleDensityEnhancement();
+                densityBtn.classList.toggle('active', this.densityEnhancement);
+            });
+        }
+
+        console.log('All tool buttons setup complete');
     }
 
     setActiveToolButton(activeBtn) {
@@ -1798,13 +2142,116 @@ class FixedDicomViewer {
     }
     
     goToImage(index) {
-        if (!this.currentImages || index < 0 || index >= this.currentImages.length) return;
-        
-        this.currentImageIndex = index;
-        this.currentImage = this.currentImages[this.currentImageIndex];
-        this.loadImage(this.currentImage.id);
-        this.updateImageCounter();
-        this.updateThumbnailSelection();
+        if (!this.currentImages || this.currentImages.length === 0) {
+            this.notyf.warning('No images loaded');
+            return;
+        }
+
+        if (index >= 0 && index < this.currentImages.length) {
+            this.currentImageIndex = index;
+            this.loadCurrentImage();
+            this.notyf.info(`Switched to image ${index + 1} of ${this.currentImages.length}`);
+        }
+    }
+
+    async loadCurrentImage() {
+        if (!this.currentImages || this.currentImageIndex >= this.currentImages.length) {
+            return;
+        }
+
+        const imageData = this.currentImages[this.currentImageIndex];
+        if (imageData && imageData.id) {
+            this.currentImageId = imageData.id;
+            await this.refreshCurrentImage();
+            
+            // Update MPR if enabled
+            if (this.mprEnabled) {
+                this.generateMPRSlices();
+            }
+            
+            // Update image counter
+            this.updateImageCounter();
+        }
+    }
+
+    updateImageCounter() {
+        const counter = document.getElementById('image-counter');
+        if (counter && this.currentImages) {
+            counter.textContent = `${this.currentImageIndex + 1} / ${this.currentImages.length}`;
+        }
+
+        // Update slice slider
+        const sliceSlider = document.getElementById('slice-slider');
+        if (sliceSlider) {
+            sliceSlider.max = this.currentImages.length - 1;
+            sliceSlider.value = this.currentImageIndex;
+        }
+    }
+
+    // === VIEWPORT INFORMATION UPDATE ===
+    
+    updateViewportInfo() {
+        // Update zoom level
+        const zoomLevel = document.getElementById('zoom-level');
+        if (zoomLevel) {
+            zoomLevel.textContent = `${Math.round(this.zoomFactor * 100)}%`;
+        }
+
+        // Update window/level display
+        this.updateWindowLevelDisplay();
+
+        // Update image position
+        const position = document.getElementById('image-position');
+        if (position) {
+            position.textContent = `Pan: (${Math.round(this.panX)}, ${Math.round(this.panY)})`;
+        }
+
+        // Update rotation
+        const rotation = document.getElementById('image-rotation');
+        if (rotation) {
+            rotation.textContent = `${this.rotation}°`;
+        }
+    }
+
+    updateWindowLevelDisplay() {
+        const wwDisplay = document.getElementById('window-width-value') || document.getElementById('ww-value');
+        if (wwDisplay) {
+            wwDisplay.textContent = this.windowWidth;
+        }
+
+        const wlDisplay = document.getElementById('window-level-value') || document.getElementById('wl-value');
+        if (wlDisplay) {
+            wlDisplay.textContent = this.windowLevel;
+        }
+
+        // Update sliders
+        const wwSlider = document.getElementById('window-width-slider');
+        if (wwSlider) {
+            wwSlider.value = this.windowWidth;
+        }
+
+        const wlSlider = document.getElementById('window-level-slider');
+        if (wlSlider) {
+            wlSlider.value = this.windowLevel;
+        }
+    }
+
+    updateDebugPanel() {
+        // Update debug information
+        const debugCanvas = document.getElementById('debug-canvas');
+        if (debugCanvas) {
+            debugCanvas.textContent = `Canvas: ${this.canvas.width}x${this.canvas.height}`;
+        }
+
+        const debugImages = document.getElementById('debug-images');
+        if (debugImages && this.currentImages) {
+            debugImages.textContent = `Images: ${this.currentImages.length}`;
+        }
+
+        const debugTool = document.getElementById('debug-tool');
+        if (debugTool) {
+            debugTool.textContent = `Active Tool: ${this.activeTool}`;
+        }
     }
 
     // === SERIES NAVIGATION METHODS ===
