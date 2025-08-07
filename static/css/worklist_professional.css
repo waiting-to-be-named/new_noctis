@@ -1,4 +1,4 @@
-/* Professional Medical Worklist CSS - Modern & Clean Design */
+/* Professional Medical Worklist CSS - Modern & Clean Design with Green Glow Theme */
 
 /* Global Reset & Base Styles */
 * {
@@ -9,8 +9,8 @@
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-    color: #1e293b;
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+    color: #e0e0e0;
     line-height: 1.6;
     overflow-x: hidden;
     min-height: 100vh;
@@ -21,16 +21,16 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    background: #ffffff;
-    box-shadow: 0 0 50px rgba(0, 0, 0, 0.05);
+    background: #111111;
+    box-shadow: 0 0 50px rgba(0, 255, 0, 0.1);
 }
 
-/* Professional Header */
+/* Professional Header with Green Glow */
 .header {
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    background: linear-gradient(135deg, #0d4f0c 0%, #0a3d0a 100%);
     padding: 20px 30px;
     color: white;
-    box-shadow: 0 4px 20px rgba(37, 99, 235, 0.3);
+    box-shadow: 0 4px 20px rgba(0, 255, 0, 0.3);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -38,21 +38,23 @@ body {
     top: 0;
     z-index: 1000;
     backdrop-filter: blur(10px);
+    border-bottom: 2px solid #00ff00;
 }
 
 .header h1 {
     font-size: 28px;
     font-weight: 700;
     color: #ffffff;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
     display: flex;
     align-items: center;
     gap: 12px;
 }
 
 .header h1 i {
-    color: #93c5fd;
+    color: #00ff00;
     font-size: 26px;
+    text-shadow: 0 0 15px rgba(0, 255, 0, 0.8);
 }
 
 .header-actions {
@@ -61,7 +63,7 @@ body {
     align-items: center;
 }
 
-/* Professional Buttons */
+/* Professional Buttons with Green Glow */
 .btn {
     padding: 10px 20px;
     border: none;
@@ -74,238 +76,370 @@ body {
     align-items: center;
     gap: 8px;
     text-decoration: none;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 255, 0, 0.4);
+}
+
+.btn-viewer {
+    background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+    color: #000000;
+    border: 2px solid #00ff00;
+    text-shadow: none;
+    font-weight: bold;
+}
+
+.btn-viewer:hover {
+    background: linear-gradient(135deg, #00cc00 0%, #009900 100%);
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.6);
+    text-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
 }
 
 .btn-view {
     background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     color: white;
+    border: 1px solid #00ff00;
 }
 
 .btn-view:hover {
     background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.4);
 }
 
 .btn-logout {
-    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
     color: white;
+    border: 1px solid #ff4444;
 }
 
 .btn-logout:hover {
-    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    background: linear-gradient(135deg, #cc0000 0%, #990000 100%);
+    box-shadow: 0 0 15px rgba(255, 68, 68, 0.4);
 }
 
-/* Upload Section */
+.btn-upload-unified {
+    background: linear-gradient(135deg, #00aa00 0%, #008800 100%);
+    color: white;
+    border: 2px solid #00ff00;
+    padding: 15px 25px;
+    font-size: 16px;
+    border-radius: 10px;
+}
+
+.btn-upload-unified:hover {
+    background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+    color: #000000;
+    box-shadow: 0 0 25px rgba(0, 255, 0, 0.6);
+    transform: translateY(-3px);
+}
+
+/* Upload Modal Styles */
+.modal {
+    position: fixed;
+    z-index: 10000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(5px);
+}
+
+.modal-content.upload-modal {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+    margin: 10% auto;
+    padding: 0;
+    border: 2px solid #00ff00;
+    border-radius: 15px;
+    width: 500px;
+    max-width: 90%;
+    box-shadow: 0 0 50px rgba(0, 255, 0, 0.3);
+    color: white;
+}
+
+.modal-header {
+    background: linear-gradient(135deg, #0d4f0c 0%, #0a3d0a 100%);
+    padding: 20px;
+    border-radius: 13px 13px 0 0;
+    border-bottom: 1px solid #00ff00;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: #ffffff;
+    text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-header h3 i {
+    color: #00ff00;
+    text-shadow: 0 0 15px rgba(0, 255, 0, 0.8);
+}
+
+.close {
+    color: #00ff00;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 5px;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+}
+
+.close:hover {
+    background: rgba(255, 0, 0, 0.2);
+    color: #ff4444;
+    box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+}
+
+.modal-body {
+    padding: 30px;
+}
+
+.upload-options {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+}
+
+.upload-option-btn {
+    background: linear-gradient(135deg, #2a2a2a 0%, #3a3a3a 100%);
+    border: 2px solid #00ff00;
+    border-radius: 15px;
+    padding: 30px 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+    min-width: 180px;
+    color: white;
+}
+
+.upload-option-btn:hover {
+    background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+    color: #000000;
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(0, 255, 0, 0.4);
+}
+
+.upload-option-btn i {
+    font-size: 48px;
+    color: #00ff00;
+    margin-bottom: 15px;
+    display: block;
+    text-shadow: 0 0 15px rgba(0, 255, 0, 0.6);
+}
+
+.upload-option-btn:hover i {
+    color: #000000;
+    text-shadow: none;
+}
+
+.upload-option-btn h4 {
+    margin: 15px 0 10px;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.upload-option-btn p {
+    font-size: 14px;
+    opacity: 0.8;
+    margin: 0;
+}
+
+/* Upload Section Styling */
 .upload-section {
-    padding: 25px 30px;
-    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
-    border-bottom: 1px solid #e2e8f0;
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+    padding: 30px;
+    border-bottom: 2px solid #00ff00;
+    box-shadow: 0 4px 20px rgba(0, 255, 0, 0.1);
 }
 
 .upload-container {
     display: flex;
-    gap: 20px;
     align-items: center;
-    justify-content: center;
+    gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
 }
 
 .upload-zone {
-    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    border: 2px dashed #cbd5e1;
-    border-radius: 16px;
+    flex: 1;
+    border: 3px dashed #00ff00;
+    border-radius: 15px;
     padding: 40px;
     text-align: center;
+    background: rgba(0, 255, 0, 0.05);
     cursor: pointer;
     transition: all 0.3s ease;
-    flex: 1;
-    max-width: 600px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    color: #e0e0e0;
 }
 
 .upload-zone:hover {
-    border-color: #2563eb;
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    background: rgba(0, 255, 0, 0.1);
+    border-color: #00cc00;
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
 }
 
-.upload-zone i {
-    color: #2563eb;
-    font-size: 32px;
-    margin-bottom: 15px;
-    display: block;
-}
-
-.upload-zone p {
-    color: #475569;
-    font-size: 16px;
-    margin-bottom: 8px;
-}
-
-/* Enhanced Upload Buttons */
-.upload-buttons {
-    display: flex;
-    gap: 15px;
-    align-items: center;
-}
-
-.btn-upload {
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-    color: white;
-    padding: 12px 24px;
-    border-radius: 10px;
-    font-weight: 600;
-    border: none;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-}
-
-.btn-upload:hover {
-    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+.upload-zone.dragover {
+    background: rgba(0, 255, 0, 0.15);
+    border-color: #00ff00;
+    box-shadow: 0 0 30px rgba(0, 255, 0, 0.4);
 }
 
 /* Filters Section */
-.filters-section {
+.filters {
+    background: #222222;
     padding: 20px 30px;
-    background: #ffffff;
-    border-bottom: 1px solid #e2e8f0;
     display: flex;
-    gap: 20px;
+    gap: 15px;
     align-items: center;
-    flex-wrap: wrap;
+    border-bottom: 1px solid #333333;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
 
-.form-select {
+.form-control, .form-select {
+    background: #333333;
+    border: 2px solid #444444;
+    color: #e0e0e0;
     padding: 10px 15px;
-    border: 1px solid #d1d5db;
     border-radius: 8px;
-    background: white;
-    font-size: 14px;
-    color: #374151;
-    min-width: 150px;
     transition: all 0.3s ease;
 }
 
-.form-select:focus {
+.form-control:focus, .form-select:focus {
     outline: none;
-    border-color: #2563eb;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    border-color: #00ff00;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+    background: #3a3a3a;
 }
 
-/* Main Table Container - Professional Scrolling */
+/* Worklist Table */
 .worklist-table-container {
+    background: #1a1a1a;
     flex: 1;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    background: #ffffff;
+    overflow-y: auto;
 }
 
-.worklist-table {
-    flex: 1;
-    overflow: auto;
-    position: relative;
-}
-
-/* Professional Table Styling */
-table {
+.worklist-table table {
     width: 100%;
     border-collapse: collapse;
-    background: white;
-    font-size: 14px;
+    background: #1a1a1a;
 }
 
-thead {
+.worklist-table th {
+    background: linear-gradient(135deg, #0d4f0c 0%, #0a3d0a 100%);
+    color: white;
+    padding: 15px;
+    text-align: left;
+    border-bottom: 2px solid #00ff00;
     position: sticky;
     top: 0;
-    z-index: 100;
-    background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
+    z-index: 10;
+    text-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
 }
 
-thead th {
-    padding: 18px 15px;
-    text-align: left;
-    font-weight: 700;
+.worklist-table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #333333;
+    color: #e0e0e0;
+    background: #1a1a1a;
+    transition: all 0.3s ease;
+}
+
+.worklist-table tr:hover td {
+    background: rgba(0, 255, 0, 0.05);
     color: #ffffff;
-    text-transform: uppercase;
+}
+
+/* Status badges with green theme */
+.status-scheduled { 
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); 
+    color: #000;
+    padding: 4px 12px;
+    border-radius: 20px;
     font-size: 12px;
-    letter-spacing: 0.5px;
-    border-bottom: 3px solid #2563eb;
+    font-weight: bold;
+}
+
+.status-in_progress { 
+    background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%); 
+    color: #000;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.4);
+}
+
+.status-completed { 
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%); 
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* Notification and Chat Panels */
+.notification-bell, .chat-bell {
+    background: rgba(0, 255, 0, 0.1);
+    border: 2px solid #00ff00;
+    color: #00ff00;
+    padding: 10px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease;
     position: relative;
 }
 
-thead th:after {
-    content: '';
+.notification-bell:hover, .chat-bell:hover {
+    background: #00ff00;
+    color: #000000;
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.6);
+}
+
+.notification-count, .chat-count {
     position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%);
-}
-
-/* Table Body - Enhanced Rows */
-tbody tr {
-    transition: all 0.2s ease;
-    border-bottom: 1px solid #f1f5f9;
-}
-
-tbody tr:nth-child(even) {
-    background: #f8fafc;
-}
-
-tbody tr:hover {
-    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-    transform: scale(1.001);
-    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.1);
-}
-
-tbody td {
-    padding: 16px 15px;
-    vertical-align: middle;
-    border-bottom: 1px solid #f1f5f9;
-    font-size: 14px;
-}
-
-/* Status Badges - Professional Design */
-.status-badge {
-    padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    display: inline-flex;
+    top: -8px;
+    right: -8px;
+    background: #ff4444;
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+    display: flex;
     align-items: center;
-    gap: 5px;
+    justify-content: center;
+    font-weight: bold;
+    border: 2px solid #000000;
 }
 
-.status-scheduled {
-    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-    color: #92400e;
+/* Progress Bar */
+.progress-bar {
+    background: #333333;
+    border-radius: 25px;
+    overflow: hidden;
+    height: 8px;
+    margin: 10px 0;
 }
 
-.status-in-progress {
-    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
-    color: #1e40af;
-}
-
-.status-completed {
-    background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
-    color: #065f46;
-}
-
-.status-cancelled {
-    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
-    color: #991b1b;
+.progress-fill {
+    background: linear-gradient(90deg, #00ff00, #00cc00);
+    height: 100%;
+    border-radius: 25px;
+    transition: width 0.3s ease;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
 }
 
 /* Action Buttons - Clean & Professional */
@@ -404,47 +538,6 @@ tbody td {
     box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
 }
 
-/* Notification Systems */
-.notification-area {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-}
-
-.notification-bell,
-.chat-bell {
-    position: relative;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: white;
-    padding: 10px;
-    border-radius: 50%;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    backdrop-filter: blur(10px);
-}
-
-.notification-bell:hover,
-.chat-bell:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: scale(1.1);
-}
-
-.notification-count,
-.chat-count {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    background: #ef4444;
-    color: white;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 50%;
-    min-width: 18px;
-    text-align: center;
-}
-
 /* Enhanced Scrollbar for Professional Look */
 .worklist-table::-webkit-scrollbar {
     width: 8px;
@@ -490,31 +583,28 @@ tbody td {
         font-size: 24px;
     }
     
-    .upload-section {
-        padding: 20px;
+    .upload-container {
+        flex-direction: column;
     }
     
-    .filters-section {
-        padding: 15px 20px;
+    .upload-options {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .upload-option-btn {
+        min-width: auto;
+        width: 100%;
+    }
+    
+    .filters {
         flex-direction: column;
         align-items: stretch;
     }
     
-    .form-select {
-        width: 100%;
-    }
-    
-    table {
-        font-size: 12px;
-    }
-    
-    thead th {
-        padding: 12px 8px;
-        font-size: 10px;
-    }
-    
-    tbody td {
-        padding: 12px 8px;
+    .modal-content.upload-modal {
+        width: 95%;
+        margin: 5% auto;
     }
 }
 
