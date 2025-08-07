@@ -345,3 +345,266 @@ class AuditLog(models.Model):
     
     def __str__(self):
         return f"{self.user} - {self.action} at {self.timestamp}"
+
+class Report(models.Model):
+    """Radiology Report model with role-based access control"""
+    
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('preliminary', 'Preliminary'),
+        ('final', 'Final'),
+        ('amended', 'Amended'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    REPORT_TYPE_CHOICES = [
+        ('diagnostic', 'Diagnostic Report'),
+        ('consultation', 'Consultation'),
+        ('addendum', 'Addendum'),
+        ('amended', 'Amended Report'),
+    ]
+    
+    # Core relationships
+    study = models.ForeignKey(Study, on_delete=models.CASCADE, related_name='reports')
+    radiologist = models.ForeignKey(
+        CustomUser,
+        on_delete=models.PROTECT,
+        limit_choices_to={'role': UserRole.RADIOLOGIST},
+        related_name='authored_reports'
+    )
+    
+    # Report metadata
+    report_type = models.CharField(max_length=20, choices=REPORT_TYPE_CHOICES, default='diagnostic')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    accession_number = models.CharField(max_length=16, blank=True)
+    
+    # Report content
+    clinical_history = models.TextField(blank=True, help_text="Clinical history and indication")
+    technique = models.TextField(blank=True, help_text="Imaging technique and parameters")
+    findings = models.TextField(help_text="Detailed findings")
+    impression = models.TextField(help_text="Clinical impression and diagnosis")
+    recommendations = models.TextField(blank=True, help_text="Recommendations and follow-up")
+    
+    # Additional fields
+    comparison_studies = models.TextField(blank=True, help_text="Comparison with prior studies")
+    limitations = models.TextField(blank=True, help_text="Study limitations")
+    
+    # Signatures and verification
+    radiologist_signature = models.TextField(blank=True, help_text="Digital signature")
+    signed_at = models.DateTimeField(null=True, blank=True)
+    verified_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        limit_choices_to={'role__in': [UserRole.RADIOLOGIST, UserRole.ADMIN]},
+        related_name='verified_reports'
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    finalized_at = models.DateTimeField(null=True, blank=True)
+    
+    # Version control for amendments
+    version = models.PositiveIntegerField(default=1)
+    parent_report = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='amendments'
+    )
+    amendment_reason = models.TextField(blank=True)
+    
+    # Print tracking
+    print_count = models.PositiveIntegerField(default=0)
+    last_printed_at = models.DateTimeField(null=True, blank=True)
+    last_printed_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='printed_reports'
+    )
+    
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ['study', 'version']
+        indexes = [
+            models.Index(fields=['study', 'status']),
+            models.Index(fields=['radiologist', 'status']),
+            models.Index(fields=['status', 'finalized_at']),
+        ]
+    
+    def __str__(self):
+        return f"Report for {self.study.patient_name} - {self.study.study_description} (v{self.version})"
+    
+    def can_edit(self, user):
+        """Check if user can edit this report"""
+        if user.role == UserRole.ADMIN:
+            return True
+        elif user.role == UserRole.RADIOLOGIST:
+            # Radiologists can edit their own reports if not finalized
+            return (self.radiologist == user and 
+                   self.status in ['draft', 'preliminary'])
+        return False
+    
+    def can_view(self, user):
+        """Check if user can view this report"""
+        if user.role == UserRole.ADMIN:
+            return True
+        elif user.role == UserRole.RADIOLOGIST:
+            return True  # All radiologists can view all reports
+        elif user.role in [UserRole.FACILITY, UserRole.TECHNICIAN]:
+            # Facility users can only view reports for their facility's studies
+            return (self.study.facility == user.facility and 
+                   self.status in ['final', 'amended'])
+        return False
+    
+    def can_print(self, user):
+        """Check if user can print this report"""
+        if user.role == UserRole.ADMIN:
+            return True
+        elif user.role == UserRole.RADIOLOGIST:
+            return self.status in ['final', 'amended']
+        elif user.role in [UserRole.FACILITY, UserRole.TECHNICIAN]:
+            # Facility users can only print reports for their facility's studies
+            return (self.study.facility == user.facility and 
+                   self.status in ['final', 'amended'])
+        return False
+    
+    def finalize(self, user):
+        """Finalize the report (only radiologists can do this)"""
+        if user.role == UserRole.RADIOLOGIST and self.radiologist == user:
+            self.status = 'final'
+            self.finalized_at = timezone.now()
+            self.signed_at = timezone.now()
+            self.save(update_fields=['status', 'finalized_at', 'signed_at'])
+            
+            # Create notification for facility
+            self.create_report_notification()
+            
+            return True
+        return False
+    
+    def create_amendment(self, user, reason):
+        """Create an amended version of this report"""
+        if not self.can_edit(user):
+            return None
+        
+        # Create new report version
+        amended_report = Report.objects.create(
+            study=self.study,
+            radiologist=user,
+            report_type='amended',
+            status='draft',
+            version=self.version + 1,
+            parent_report=self,
+            amendment_reason=reason,
+            clinical_history=self.clinical_history,
+            technique=self.technique,
+            findings=self.findings,
+            impression=self.impression,
+            recommendations=self.recommendations,
+            comparison_studies=self.comparison_studies,
+            limitations=self.limitations,
+        )
+        
+        # Mark original as amended
+        self.status = 'amended'
+        self.save(update_fields=['status'])
+        
+        return amended_report
+    
+    def record_print(self, user):
+        """Record that this report was printed"""
+        self.print_count += 1
+        self.last_printed_at = timezone.now()
+        self.last_printed_by = user
+        self.save(update_fields=['print_count', 'last_printed_at', 'last_printed_by'])
+        
+        # Log the print action
+        AuditLog.objects.create(
+            user=user,
+            action='print_report',
+            description=f"Printed report for study {self.study.study_instance_uid}",
+            study=self.study,
+            facility=user.facility,
+            ip_address=getattr(user, '_current_ip', None),
+        )
+    
+    def create_report_notification(self):
+        """Create notifications when report is finalized"""
+        # Notify facility users
+        facility_users = CustomUser.objects.filter(
+            facility=self.study.facility,
+            role__in=[UserRole.FACILITY, UserRole.TECHNICIAN],
+            email_notifications=True
+        )
+        
+        for user in facility_users:
+            Notification.objects.create(
+                recipient=user,
+                notification_type='report_ready',
+                title=f'Report Ready - {self.study.patient_name}',
+                message=f'Radiology report is now available for study: {self.study.study_description}',
+                study=self.study,
+                facility=self.study.facility
+            )
+        
+        # Notify admins
+        admin_users = CustomUser.objects.filter(
+            role=UserRole.ADMIN,
+            email_notifications=True
+        )
+        
+        for user in admin_users:
+            Notification.objects.create(
+                recipient=user,
+                notification_type='report_ready',
+                title=f'Report Completed - {self.study.patient_name}',
+                message=f'Dr. {self.radiologist.get_full_name()} completed report for {self.study.study_description}',
+                study=self.study,
+                facility=self.study.facility
+            )
+    
+    def get_printable_content(self):
+        """Get formatted content for printing"""
+        return {
+            'header': {
+                'patient_name': self.study.patient_name,
+                'patient_id': self.study.patient_id,
+                'dob': self.study.patient_birth_date,
+                'study_date': self.study.study_date,
+                'accession_number': self.study.accession_number,
+                'study_description': self.study.study_description,
+                'facility': self.study.facility.name,
+                'radiologist': self.radiologist.get_full_name(),
+                'report_date': self.finalized_at or self.created_at,
+                'version': self.version,
+            },
+            'content': {
+                'clinical_history': self.clinical_history,
+                'technique': self.technique,
+                'findings': self.findings,
+                'impression': self.impression,
+                'recommendations': self.recommendations,
+                'comparison_studies': self.comparison_studies,
+                'limitations': self.limitations,
+            },
+            'signature': {
+                'radiologist': self.radiologist.get_full_name(),
+                'license': self.radiologist.license_number,
+                'signed_at': self.signed_at,
+                'verified_by': self.verified_by.get_full_name() if self.verified_by else None,
+                'verified_at': self.verified_at,
+            },
+            'metadata': {
+                'print_count': self.print_count,
+                'printed_at': timezone.now(),
+                'printed_by': getattr(self, '_printed_by', None),
+                'status': self.get_status_display(),
+            }
+        }
