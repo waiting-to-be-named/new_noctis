@@ -17,8 +17,8 @@
         <div class="header">
             <h1><i class="fas fa-list-alt"></i> Noctis Worklist</h1>
             <div class="header-actions">
-                <button class="btn btn-view" onclick="window.location.href='/home/'">
-                    <i class="fas fa-home"></i> Home
+                <button class="btn btn-viewer" onclick="openDICOMViewer()">
+                    <i class="fas fa-x-ray"></i> DICOM Viewer
                 </button>
                 {% if is_admin or is_radiologist %}
                 <div class="notification-area">
@@ -51,11 +51,8 @@
                     <input type="file" id="file-input" multiple webkitdirectory style="display: none;">
                     <input type="file" id="file-input-files" multiple accept=".dcm,.dicom" style="display: none;">
                 </div>
-                <button class="btn btn-upload" onclick="selectUploadType()">
-                    <i class="fas fa-folder-open"></i> Upload Folder
-                </button>
-                <button class="btn btn-upload" onclick="document.getElementById('file-input-files').click()">
-                    <i class="fas fa-file-medical"></i> Upload Files
+                <button class="btn btn-upload-unified" onclick="showUploadModal()">
+                    <i class="fas fa-upload"></i> Upload Files/Folders
                 </button>
             </div>
             <div class="upload-progress" id="upload-progress">
@@ -1340,6 +1337,62 @@
                 card.style.display = text.includes(searchTerm) ? 'block' : 'none';
             });
         }
+
+        // DICOM Viewer function
+        function openDICOMViewer() {
+            window.open('/viewer/', '_blank');
+        }
+
+        // Upload Modal functions
+        function showUploadModal() {
+            document.getElementById('upload-modal').style.display = 'block';
+        }
+
+        function closeUploadModal() {
+            document.getElementById('upload-modal').style.display = 'none';
+        }
+
+        function uploadFolder() {
+            document.getElementById('file-input').click();
+            closeUploadModal();
+        }
+
+        function uploadFiles() {
+            document.getElementById('file-input-files').click();
+            closeUploadModal();
+        }
+
+        // Close modal when clicking outside
+        window.addEventListener('click', function(event) {
+            const uploadModal = document.getElementById('upload-modal');
+            if (event.target === uploadModal) {
+                closeUploadModal();
+            }
+        });
         </script>
+
+        <!-- Upload Modal -->
+        <div id="upload-modal" class="modal" style="display: none;">
+            <div class="modal-content upload-modal">
+                <div class="modal-header">
+                    <h3><i class="fas fa-upload"></i> Upload DICOM Files</h3>
+                    <span class="close" onclick="closeUploadModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="upload-options">
+                        <button class="upload-option-btn" onclick="uploadFolder()">
+                            <i class="fas fa-folder-open"></i>
+                            <h4>Upload Folder</h4>
+                            <p>Select an entire folder containing DICOM files</p>
+                        </button>
+                        <button class="upload-option-btn" onclick="uploadFiles()">
+                            <i class="fas fa-file-medical"></i>
+                            <h4>Upload Files</h4>
+                            <p>Select individual DICOM files</p>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </body>
 </html>

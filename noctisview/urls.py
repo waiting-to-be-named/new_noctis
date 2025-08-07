@@ -20,18 +20,21 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib.auth import views as auth_views
-from viewer.views import HomeView
+from django.views.generic import RedirectView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', HomeView.as_view(), name='home'),
-    path('home/', HomeView.as_view(), name='home_alt'),
+    path('', RedirectView.as_view(url='/accounts/login/', permanent=False), name='home'),
     path('viewer/', include('viewer.urls')),
     path('worklist/', include('worklist.urls')),
     
     # Authentication URLs
-    path('accounts/login/', auth_views.LoginView.as_view(template_name='registration/login.html'), name='login'),
-    path('accounts/logout/', auth_views.LogoutView.as_view(next_page='/'), name='logout'),
+    path('accounts/login/', auth_views.LoginView.as_view(
+        template_name='registration/login.html',
+        redirect_authenticated_user=True,
+        next_page='/worklist/'
+    ), name='login'),
+    path('accounts/logout/', auth_views.LogoutView.as_view(next_page='/accounts/login/'), name='logout'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 
