@@ -9,6 +9,7 @@ import sys
 import subprocess
 import sqlite3
 from pathlib import Path
+from datetime import date
 
 def print_status(message, status="INFO"):
     colors = {
@@ -88,61 +89,60 @@ def install_dependencies():
         return False
 
 def create_test_data():
-    """Create test data if database is empty"""
-    print_status("Creating test data...", "INFO")
+    """Create sample data if database is empty"""
+    print_status("Creating sample medical data...", "INFO")
     
     try:
-        # Set up Django environment
-        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'noctisview.settings')
-        import django
-        django.setup()
+        from worklist.models import Study, Series, DICOMImage
         
-        from viewer.models import DicomStudy, DicomSeries, DicomImage
+        # Check if data already exists
+        if Study.objects.exists():
+            print_status("Sample data already exists", "INFO")
+            return True
         
-        # Create a test study if none exists
-        if DicomStudy.objects.count() == 0:
-            study = DicomStudy.objects.create(
-                patient_name="Test Patient",
-                patient_id="TEST001",
-                study_instance_uid="1.2.3.4.5.6.7.8.9.10",
-                study_date="2024-01-01",
-                study_description="Test CT Study",
-                modality="CT",
-                institution_name="Test Hospital"
-            )
-            
-            # Create a test series
-            series = DicomSeries.objects.create(
-                study=study,
-                series_instance_uid="1.2.3.4.5.6.7.8.9.11",
-                series_number=1,
-                series_description="Test Series",
-                modality="CT"
-            )
-            
-            # Create a test image
-            image = DicomImage.objects.create(
-                series=series,
-                sop_instance_uid="1.2.3.4.5.6.7.8.9.12",
-                instance_number=1,
-                rows=512,
-                columns=512,
-                pixel_spacing_x=1.0,
-                pixel_spacing_y=1.0,
-                slice_thickness=1.0,
-                window_width=1500,
-                window_center=-600
-            )
-            
-            print_status("Test data created successfully", "SUCCESS")
-            print_status(f"Created study ID: {study.id}", "INFO")
-            return True
-        else:
-            print_status("Database already contains data", "INFO")
-            return True
-            
+        # Create a sample study if none exists
+        study = Study.objects.create(
+            study_instance_uid="1.2.826.0.1.3680043.2.1125.1.12345678901234567890123456789012",
+            patient_name="Smith, John M",
+            patient_id="MRN789456",
+            patient_birth_date=date(1975, 3, 15),
+            accession_number="ACC2024001234",
+            study_description="CT Chest with Contrast",
+            study_date=date.today(),
+            institution_name="General Medical Center"
+        )
+        
+        # Create a sample series
+        series = Series.objects.create(
+            study=study,
+            series_instance_uid="1.2.826.0.1.3680043.2.1125.2.12345678901234567890123456789012",
+            series_number=1,
+            series_description="Axial CT Chest",
+            modality="CT"
+        )
+        
+        # Create a sample image
+        dicom_image = DICOMImage.objects.create(
+            series=series,
+            sop_instance_uid="1.2.826.0.1.3680043.2.1125.3.12345678901234567890123456789012",
+            instance_number=1,
+            slice_location=0.0,
+            image_position_patient="0.0\\0.0\\0.0",
+            image_orientation_patient="1.0\\0.0\\0.0\\0.0\\1.0\\0.0",
+            pixel_spacing="0.976562\\0.976562",
+            slice_thickness=5.0,
+            rows=512,
+            columns=512,
+            bits_allocated=16,
+            bits_stored=12,
+            high_bit=11
+        )
+        
+        print_status("Sample medical data created successfully", "SUCCESS")
+        return True
+        
     except Exception as e:
-        print_status(f"Failed to create test data: {e}", "ERROR")
+        print_status(f"Failed to create sample data: {e}", "ERROR")
         return False
 
 def start_server():
