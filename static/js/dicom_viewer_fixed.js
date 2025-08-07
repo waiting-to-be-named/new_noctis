@@ -705,96 +705,337 @@ class FixedDicomViewer {
     setupEventListeners() {
         if (!this.canvas) return;
 
-        // Mouse events for interaction
-        this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
-        this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
-        this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
-        this.canvas.addEventListener('wheel', (e) => this.handleWheel(e));
-        
-        // Touch events for mobile support
-        this.canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e));
-        this.canvas.addEventListener('touchmove', (e) => this.handleTouchMove(e));
-        this.canvas.addEventListener('touchend', (e) => this.handleTouchEnd(e));
-        
-        // Setup tool buttons
+        let isDrawing = false;
+        let startPoint = null;
+
+        // Mouse down event
+        this.canvas.addEventListener('mousedown', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const canvasX = e.clientX - rect.left;
+            const canvasY = e.clientY - rect.top;
+            const imageCoords = this.canvasToImageCoords(canvasX, canvasY);
+
+            if (this.activeTool.startsWith('measure_')) {
+                isDrawing = true;
+                startPoint = imageCoords;
+                this.isDragging = true;
+            } else if (this.activeTool.startsWith('roi_')) {
+                isDrawing = true;
+                startPoint = imageCoords;
+                this.isDragging = true;
+            } else if (this.activeTool === 'windowing') {
+                this.isDragging = true;
+                this.dragStart = { x: e.clientX, y: e.clientY };
+                this.lastMousePos = { x: e.clientX, y: e.clientY };
+            } else if (this.activeTool === 'pan') {
+                this.isDragging = true;
+                this.dragStart = { x: canvasX, y: canvasY };
+            } else if (this.activeTool === 'zoom') {
+                // Handle zoom clicks
+                const factor = e.button === 0 ? 1.2 : 0.8; // Left click zoom in, right click zoom out
+                this.zoomFactor *= factor;
+                this.redrawCanvas();
+            }
+        });
+
+        // Mouse move event
+        this.canvas.addEventListener('mousemove', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const canvasX = e.clientX - rect.left;
+            const canvasY = e.clientY - rect.top;
+
+            // Handle magnification
+            if (this.magnificationEnabled && !isDrawing) {
+                this.magnificationPos = { x: canvasX, y: canvasY };
+                this.redrawCanvas();
+                this.drawMagnifier(canvasX, canvasY);
+            }
+
+            // Handle measurement drawing
+            if (isDrawing && this.activeTool.startsWith('measure_') && startPoint) {
+                const imageCoords = this.canvasToImageCoords(canvasX, canvasY);
+                
+                // Show temporary measurement line
+                this.redrawCanvas();
+                this.ctx.save();
+                this.ctx.strokeStyle = '#00ff88';
+                this.ctx.lineWidth = 2;
+                this.ctx.setLineDash([5, 5]);
+                
+                const startCanvas = this.imageToCanvasCoords(startPoint.x, startPoint.y);
+                this.ctx.beginPath();
+                this.ctx.moveTo(startCanvas.x, startCanvas.y);
+                this.ctx.lineTo(canvasX, canvasY);
+                this.ctx.stroke();
+                this.ctx.restore();
+            }
+
+            // Handle ROI drawing
+            if (isDrawing && this.activeTool.startsWith('roi_') && startPoint) {
+                const imageCoords = this.canvasToImageCoords(canvasX, canvasY);
+                
+                // Show temporary ROI rectangle
+                this.redrawCanvas();
+                this.ctx.save();
+                this.ctx.strokeStyle = '#ff6b35';
+                this.ctx.fillStyle = 'rgba(255, 107, 53, 0.2)';
+                this.ctx.lineWidth = 2;
+                this.ctx.setLineDash([5, 5]);
+                
+                const startCanvas = this.imageToCanvasCoords(startPoint.x, startPoint.y);
+                const width = canvasX - startCanvas.x;
+                const height = canvasY - startCanvas.y;
+                
+                this.ctx.fillRect(startCanvas.x, startCanvas.y, width, height);
+                this.ctx.strokeRect(startCanvas.x, startCanvas.y, width, height);
+                this.ctx.restore();
+            }
+
+            // Handle windowing
+            if (this.isDragging && this.activeTool === 'windowing' && this.lastMousePos) {
+                const deltaX = e.clientX - this.lastMousePos.x;
+                const deltaY = e.clientY - this.lastMousePos.y;
+
+                this.windowWidth += deltaX * 4;
+                this.windowLevel += deltaY * 4;
+
+                this.windowWidth = Math.max(1, this.windowWidth);
+                this.windowLevel = Math.max(-1000, Math.min(1000, this.windowLevel));
+
+                this.lastMousePos = { x: e.clientX, y: e.clientY };
+                this.refreshCurrentImage();
+            }
+
+            // Handle panning
+            if (this.isDragging && this.activeTool === 'pan' && this.dragStart) {
+                this.panX += canvasX - this.dragStart.x;
+                this.panY += canvasY - this.dragStart.y;
+                this.dragStart = { x: canvasX, y: canvasY };
+                this.redrawCanvas();
+            }
+        });
+
+        // Mouse up event
+        this.canvas.addEventListener('mouseup', (e) => {
+            if (isDrawing && this.activeTool.startsWith('measure_') && startPoint) {
+                const rect = this.canvas.getBoundingClientRect();
+                const canvasX = e.clientX - rect.left;
+                const canvasY = e.clientY - rect.top;
+                const endPoint = this.canvasToImageCoords(canvasX, canvasY);
+
+                const measurementType = this.activeTool.replace('measure_', '');
+                this.addMeasurement(startPoint, endPoint, measurementType);
+                
+                isDrawing = false;
+                startPoint = null;
+            }
+
+            if (isDrawing && this.activeTool.startsWith('roi_') && startPoint) {
+                const rect = this.canvas.getBoundingClientRect();
+                const canvasX = e.clientX - rect.left;
+                const canvasY = e.clientY - rect.top;
+                const endPoint = this.canvasToImageCoords(canvasX, canvasY);
+
+                const roiType = this.activeTool.replace('roi_', '');
+                this.addROI(startPoint, endPoint, roiType);
+                
+                isDrawing = false;
+                startPoint = null;
+            }
+
+            this.isDragging = false;
+            this.dragStart = null;
+            this.lastMousePos = null;
+        });
+
+        // Mouse wheel for zooming
+        this.canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const factor = e.deltaY > 0 ? 0.9 : 1.1;
+            this.zoomFactor *= factor;
+            this.zoomFactor = Math.max(0.1, Math.min(10, this.zoomFactor));
+            this.redrawCanvas();
+        });
+
+        // Right click context menu (disable)
+        this.canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+
+        // Double click to reset zoom
+        this.canvas.addEventListener('dblclick', () => {
+            this.zoomFactor = 1.0;
+            this.panX = 0;
+            this.panY = 0;
+            this.redrawCanvas();
+        });
+
+        // Set up tool buttons
         this.setupToolButtons();
-        
-        // Setup preset buttons
-        this.setupPresetButtons();
     }
-    
+
     setupToolButtons() {
-        console.log('Setting up tool buttons...');
-        
-        // Navigation tools
-        const windowingBtn = document.getElementById('windowing-adv-btn');
-        const panBtn = document.getElementById('pan-adv-btn');
-        const zoomBtn = document.getElementById('zoom-adv-btn');
-        const rotateBtn = document.getElementById('rotate-btn');
-        const flipBtn = document.getElementById('flip-btn');
-        
-        // Measurement tools
-        const distanceBtn = document.getElementById('measure-distance-btn');
-        const angleBtn = document.getElementById('measure-angle-btn');
-        const areaBtn = document.getElementById('measure-area-btn');
-        const volumeBtn = document.getElementById('measure-volume-btn');
-        const huBtn = document.getElementById('hu-measurement-btn');
-        
-        // Enhancement tools
-        const invertBtn = document.getElementById('invert-adv-btn');
-        const crosshairBtn = document.getElementById('crosshair-adv-btn');
+        // Measurement tool buttons
+        const measureDistanceBtn = document.getElementById('measure-distance-btn');
+        if (measureDistanceBtn) {
+            measureDistanceBtn.addEventListener('click', () => {
+                this.enableMeasurementTool('distance');
+                this.setActiveToolButton(measureDistanceBtn);
+            });
+        }
+
+        const measureAngleBtn = document.getElementById('measure-angle-btn');
+        if (measureAngleBtn) {
+            measureAngleBtn.addEventListener('click', () => {
+                this.enableMeasurementTool('angle');
+                this.setActiveToolButton(measureAngleBtn);
+            });
+        }
+
+        const measureAreaBtn = document.getElementById('measure-area-btn');
+        if (measureAreaBtn) {
+            measureAreaBtn.addEventListener('click', () => {
+                this.enableMeasurementTool('area');
+                this.setActiveToolButton(measureAreaBtn);
+            });
+        }
+
+        // Magnification tool button
         const magnifyBtn = document.getElementById('magnify-btn');
-        const sharpenBtn = document.getElementById('sharpen-btn');
-        
-        // 3D/MPR tools
-        const mprBtn = document.getElementById('mpr-btn');
-        const volumeRenderBtn = document.getElementById('volume-render-btn');
-        const mipBtn = document.getElementById('mip-btn');
-        
-        // Utility tools
-        const resetBtn = document.getElementById('reset-adv-btn');
-        const fitBtn = document.getElementById('fit-to-window-btn');
-        const actualSizeBtn = document.getElementById('actual-size-btn');
-        
-        // Set up event listeners
-        if (windowingBtn) windowingBtn.addEventListener('click', () => this.setActiveTool('windowing'));
-        if (panBtn) panBtn.addEventListener('click', () => this.setActiveTool('pan'));
-        if (zoomBtn) zoomBtn.addEventListener('click', () => this.setActiveTool('zoom'));
-        if (rotateBtn) rotateBtn.addEventListener('click', () => this.rotateImage());
-        if (flipBtn) flipBtn.addEventListener('click', () => this.flipImage());
-        
-        if (distanceBtn) distanceBtn.addEventListener('click', () => this.setActiveTool('distance'));
-        if (angleBtn) angleBtn.addEventListener('click', () => this.setActiveTool('angle'));
-        if (areaBtn) areaBtn.addEventListener('click', () => this.setActiveTool('area'));
-        if (volumeBtn) volumeBtn.addEventListener('click', () => this.setActiveTool('volume'));
-        if (huBtn) huBtn.addEventListener('click', () => this.setActiveTool('hu'));
-        
-        if (invertBtn) invertBtn.addEventListener('click', () => this.toggleInversion());
-        if (crosshairBtn) crosshairBtn.addEventListener('click', () => this.setActiveTool('crosshair'));
-        if (magnifyBtn) magnifyBtn.addEventListener('click', () => this.setActiveTool('magnify'));
-        if (sharpenBtn) sharpenBtn.addEventListener('click', () => this.toggleSharpen());
-        
-        if (mprBtn) mprBtn.addEventListener('click', () => this.enableMPR());
-        if (volumeRenderBtn) volumeRenderBtn.addEventListener('click', () => this.enableVolumeRendering());
-        if (mipBtn) mipBtn.addEventListener('click', () => this.enableMIP());
-        
-        if (resetBtn) resetBtn.addEventListener('click', () => this.resetView());
-        if (fitBtn) fitBtn.addEventListener('click', () => this.fitToWindow());
-        if (actualSizeBtn) actualSizeBtn.addEventListener('click', () => this.actualSize());
-        
-        console.log('Tool buttons setup complete');
-    }
-    
-    setupPresetButtons() {
-        const presetButtons = document.querySelectorAll('.preset-btn');
-        presetButtons.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const preset = e.target.getAttribute('data-preset');
-                if (preset && this.windowPresets[preset]) {
-                    this.applyWindowPreset(preset);
+        if (magnifyBtn) {
+            magnifyBtn.addEventListener('click', () => {
+                if (this.magnificationEnabled) {
+                    this.disableMagnification();
+                    magnifyBtn.classList.remove('active');
+                } else {
+                    this.enableMagnification();
+                    this.setActiveToolButton(magnifyBtn);
                 }
             });
-        });
+        }
+
+        // Clear measurements button
+        const clearMeasurementsBtn = document.getElementById('clear-measurements-btn');
+        if (clearMeasurementsBtn) {
+            clearMeasurementsBtn.addEventListener('click', () => {
+                this.clearMeasurements();
+            });
+        }
+
+        // Tool activation buttons
+        const panBtn = document.getElementById('pan-btn');
+        if (panBtn) {
+            panBtn.addEventListener('click', () => {
+                this.activeTool = 'pan';
+                this.canvas.style.cursor = 'move';
+                this.setActiveToolButton(panBtn);
+            });
+        }
+
+        const zoomBtn = document.getElementById('zoom-adv-btn');
+        if (zoomBtn) {
+            zoomBtn.addEventListener('click', () => {
+                this.activeTool = 'zoom';
+                this.canvas.style.cursor = 'zoom-in';
+                this.setActiveToolButton(zoomBtn);
+            });
+        }
+
+        const windowingBtn = document.getElementById('windowing-btn');
+        if (windowingBtn) {
+            windowingBtn.addEventListener('click', () => {
+                this.activeTool = 'windowing';
+                this.canvas.style.cursor = 'default';
+                this.setActiveToolButton(windowingBtn);
+            });
+        }
+
+        // Enhancement buttons
+        const sharpenBtn = document.getElementById('sharpen-btn');
+        if (sharpenBtn) {
+            sharpenBtn.addEventListener('click', () => {
+                this.applySharpenFilter();
+            });
+        }
+
+        const edgeBtn = document.getElementById('edge-enhancement-btn');
+        if (edgeBtn) {
+            edgeBtn.addEventListener('click', () => {
+                this.applyEdgeEnhancement();
+            });
+        }
+
+        // Unit toggle button
+        const unitsBtn = document.getElementById('toggle-units-btn');
+        if (unitsBtn) {
+            unitsBtn.addEventListener('click', () => {
+                this.toggleMeasurementUnits();
+            });
+        }
+
+        // ROI analysis button
+        const roiBtn = document.getElementById('roi-btn');
+        if (roiBtn) {
+            roiBtn.addEventListener('click', () => {
+                this.enableROITool('rectangle');
+                this.setActiveToolButton(roiBtn);
+            });
+        }
+
+        // Clear ROI button
+        const clearROIBtn = document.getElementById('clear-roi-btn');
+        if (clearROIBtn) {
+            clearROIBtn.addEventListener('click', () => {
+                this.clearROIs();
+            });
+        }
+
+        // Histogram button
+        const histogramBtn = document.getElementById('histogram-btn');
+        if (histogramBtn) {
+            histogramBtn.addEventListener('click', () => {
+                this.generateHistogram();
+            });
+        }
+
+        // DICOM metadata button
+        const metadataBtn = document.getElementById('metadata-btn');
+        if (metadataBtn) {
+            metadataBtn.addEventListener('click', () => {
+                this.showDICOMMetadata();
+            });
+        }
+
+        // Crosshair button
+        const crosshairBtn = document.getElementById('crosshair-adv-btn');
+        if (crosshairBtn) {
+            crosshairBtn.addEventListener('click', () => {
+                this.activeTool = 'crosshair';
+                this.setActiveToolButton(crosshairBtn);
+                this.redrawCanvas();
+            });
+        }
+
+        // Invert button
+        const invertBtn = document.getElementById('invert-adv-btn');
+        if (invertBtn) {
+            invertBtn.addEventListener('click', () => {
+                this.inverted = !this.inverted;
+                invertBtn.classList.toggle('active', this.inverted);
+                this.refreshCurrentImage();
+            });
+        }
+    }
+
+    setActiveToolButton(activeBtn) {
+        // Remove active class from all tool buttons
+        const toolButtons = document.querySelectorAll('.tool-btn-advanced');
+        toolButtons.forEach(btn => btn.classList.remove('active'));
+        
+        // Add active class to the selected button
+        if (activeBtn) {
+            activeBtn.classList.add('active');
+        }
     }
 
     setupKeyboardShortcuts() {
@@ -1729,6 +1970,796 @@ class FixedDicomViewer {
             this.windowCenter = preset.windowCenter;
             this.applyWindowLevel();
             this.updateWindowLevelDisplay();
+        }
+    }
+
+    // === MAGNIFICATION TOOLS ===
+    enableMagnification() {
+        this.magnificationEnabled = true;
+        this.canvas.style.cursor = 'zoom-in';
+        this.activeTool = 'magnify';
+        this.notyf.success('Magnification tool activated');
+    }
+
+    disableMagnification() {
+        this.magnificationEnabled = false;
+        this.canvas.style.cursor = 'default';
+        this.activeTool = 'windowing';
+        this.redrawCanvas();
+    }
+
+    drawMagnifier(mouseX, mouseY) {
+        if (!this.magnificationEnabled || !this.currentImage) return;
+
+        const magnifierCanvas = document.createElement('canvas');
+        const magnifierCtx = magnifierCanvas.getContext('2d');
+        const radius = this.magnificationRadius;
+        
+        magnifierCanvas.width = radius * 2;
+        magnifierCanvas.height = radius * 2;
+
+        // Create circular clipping path
+        magnifierCtx.beginPath();
+        magnifierCtx.arc(radius, radius, radius - 2, 0, 2 * Math.PI);
+        magnifierCtx.clip();
+
+        // Draw magnified portion of the main image
+        const sourceX = mouseX - radius / this.magnificationLevel;
+        const sourceY = mouseY - radius / this.magnificationLevel;
+        const sourceWidth = (radius * 2) / this.magnificationLevel;
+        const sourceHeight = (radius * 2) / this.magnificationLevel;
+
+        magnifierCtx.drawImage(
+            this.canvas,
+            sourceX, sourceY, sourceWidth, sourceHeight,
+            0, 0, radius * 2, radius * 2
+        );
+
+        // Draw magnifier border
+        magnifierCtx.globalCompositeOperation = 'source-over';
+        magnifierCtx.beginPath();
+        magnifierCtx.arc(radius, radius, radius - 1, 0, 2 * Math.PI);
+        magnifierCtx.strokeStyle = '#00ff88';
+        magnifierCtx.lineWidth = 2;
+        magnifierCtx.stroke();
+
+        // Draw crosshairs
+        magnifierCtx.beginPath();
+        magnifierCtx.moveTo(radius - 10, radius);
+        magnifierCtx.lineTo(radius + 10, radius);
+        magnifierCtx.moveTo(radius, radius - 10);
+        magnifierCtx.lineTo(radius, radius + 10);
+        magnifierCtx.strokeStyle = '#ff0000';
+        magnifierCtx.lineWidth = 1;
+        magnifierCtx.stroke();
+
+        // Draw the magnifier on main canvas
+        this.ctx.drawImage(magnifierCanvas, mouseX - radius, mouseY - radius);
+    }
+
+    // === MEASUREMENT TOOLS ===
+    enableMeasurementTool(type = 'distance') {
+        this.activeTool = `measure_${type}`;
+        this.canvas.style.cursor = 'crosshair';
+        this.notyf.info(`${type.charAt(0).toUpperCase() + type.slice(1)} measurement tool activated`);
+    }
+
+    addMeasurement(startPoint, endPoint, type = 'distance') {
+        const measurement = {
+            id: Date.now(),
+            type: type,
+            start: startPoint,
+            end: endPoint,
+            value: 0,
+            unit: this.measurementUnits
+        };
+
+        // Calculate measurement based on type
+        switch (type) {
+            case 'distance':
+                measurement.value = this.calculateDistance(startPoint, endPoint);
+                break;
+            case 'area':
+                measurement.value = this.calculateArea(startPoint, endPoint);
+                measurement.unit = this.measurementUnits === 'mm' ? 'mm²' : 'cm²';
+                break;
+            case 'angle':
+                measurement.value = this.calculateAngle(startPoint, endPoint);
+                measurement.unit = '°';
+                break;
+        }
+
+        this.measurements.push(measurement);
+        this.updateMeasurementsPanel();
+        this.redrawCanvas();
+        
+        this.notyf.success(`${type} measurement added: ${measurement.value.toFixed(2)} ${measurement.unit}`);
+    }
+
+    calculateDistance(start, end) {
+        const pixelDistance = Math.sqrt(
+            Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)
+        );
+        
+        // Convert to real-world units using pixel spacing
+        const realDistance = pixelDistance * this.pixelSpacing.x * this.calibrationFactor;
+        
+        // Convert to appropriate units
+        if (this.measurementUnits === 'cm') {
+            return realDistance / 10; // mm to cm
+        }
+        return realDistance; // mm
+    }
+
+    calculateArea(start, end) {
+        const width = Math.abs(end.x - start.x) * this.pixelSpacing.x * this.calibrationFactor;
+        const height = Math.abs(end.y - start.y) * this.pixelSpacing.y * this.calibrationFactor;
+        const area = width * height;
+        
+        if (this.measurementUnits === 'cm') {
+            return area / 100; // mm² to cm²
+        }
+        return area; // mm²
+    }
+
+    calculateAngle(start, end) {
+        const deltaX = end.x - start.x;
+        const deltaY = end.y - start.y;
+        return Math.abs(Math.atan2(deltaY, deltaX) * (180 / Math.PI));
+    }
+
+    drawMeasurements() {
+        this.measurements.forEach(measurement => {
+            this.ctx.save();
+            this.ctx.strokeStyle = '#00ff88';
+            this.ctx.fillStyle = '#00ff88';
+            this.ctx.lineWidth = 2;
+            this.ctx.font = '14px Arial';
+
+            const start = this.imageToCanvasCoords(measurement.start.x, measurement.start.y);
+            const end = this.imageToCanvasCoords(measurement.end.x, measurement.end.y);
+
+            // Draw measurement line
+            this.ctx.beginPath();
+            this.ctx.moveTo(start.x, start.y);
+            this.ctx.lineTo(end.x, end.y);
+            this.ctx.stroke();
+
+            // Draw endpoints
+            this.ctx.beginPath();
+            this.ctx.arc(start.x, start.y, 3, 0, 2 * Math.PI);
+            this.ctx.arc(end.x, end.y, 3, 0, 2 * Math.PI);
+            this.ctx.fill();
+
+            // Draw measurement text
+            const midX = (start.x + end.x) / 2;
+            const midY = (start.y + end.y) / 2;
+            const text = `${measurement.value.toFixed(2)} ${measurement.unit}`;
+            
+            this.ctx.fillStyle = '#000000';
+            this.ctx.fillRect(midX - 30, midY - 10, 60, 20);
+            this.ctx.fillStyle = '#00ff88';
+            this.ctx.fillText(text, midX - 25, midY + 5);
+
+            this.ctx.restore();
+        });
+    }
+
+    clearMeasurements() {
+        this.measurements = [];
+        this.updateMeasurementsPanel();
+        this.redrawCanvas();
+        this.notyf.success('All measurements cleared');
+    }
+
+    updateMeasurementsPanel() {
+        const panel = document.getElementById('measurements-list');
+        if (!panel) return;
+
+        panel.innerHTML = '';
+        this.measurements.forEach((measurement, index) => {
+            const item = document.createElement('div');
+            item.className = 'measurement-item';
+            item.innerHTML = `
+                <div class="measurement-info">
+                    <strong>${measurement.type.charAt(0).toUpperCase() + measurement.type.slice(1)} ${index + 1}</strong>
+                    <span>${measurement.value.toFixed(2)} ${measurement.unit}</span>
+                </div>
+                <button onclick="window.fixedViewer.removeMeasurement(${measurement.id})" class="btn-remove">
+                    <i class="fas fa-trash"></i>
+                </button>
+            `;
+            panel.appendChild(item);
+        });
+    }
+
+    removeMeasurement(id) {
+        this.measurements = this.measurements.filter(m => m.id !== id);
+        this.updateMeasurementsPanel();
+        this.redrawCanvas();
+    }
+
+    // === CALIBRATION TOOLS ===
+    calibratePixelSpacing(knownDistance, measuredPixels) {
+        this.calibrationFactor = knownDistance / measuredPixels;
+        this.notyf.success(`Calibration updated: ${this.calibrationFactor.toFixed(4)} mm/pixel`);
+    }
+
+    setPixelSpacing(spacingX, spacingY) {
+        this.pixelSpacing.x = spacingX;
+        this.pixelSpacing.y = spacingY;
+        this.notyf.info(`Pixel spacing set: ${spacingX}mm × ${spacingY}mm`);
+    }
+
+    toggleMeasurementUnits() {
+        this.measurementUnits = this.measurementUnits === 'mm' ? 'cm' : 'mm';
+        this.updateMeasurementsPanel();
+        this.notyf.info(`Measurement units: ${this.measurementUnits}`);
+    }
+
+    // === ENHANCED IMAGE PROCESSING ===
+    applySharpenFilter() {
+        if (!this.currentImage) return;
+
+        const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        const data = imageData.data;
+        const width = imageData.width;
+        const height = imageData.height;
+
+        // Sharpening kernel
+        const kernel = [
+            0, -1, 0,
+            -1, 5, -1,
+            0, -1, 0
+        ];
+
+        const newData = new Uint8ClampedArray(data);
+
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                for (let c = 0; c < 3; c++) {
+                    let sum = 0;
+                    for (let ky = -1; ky <= 1; ky++) {
+                        for (let kx = -1; kx <= 1; kx++) {
+                            const pos = ((y + ky) * width + (x + kx)) * 4 + c;
+                            sum += data[pos] * kernel[(ky + 1) * 3 + (kx + 1)];
+                        }
+                    }
+                    newData[(y * width + x) * 4 + c] = Math.max(0, Math.min(255, sum));
+                }
+            }
+        }
+
+        imageData.data.set(newData);
+        this.ctx.putImageData(imageData, 0, 0);
+        this.notyf.success('Sharpening filter applied');
+    }
+
+    applyEdgeEnhancement() {
+        if (!this.currentImage) return;
+
+        const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        const data = imageData.data;
+        const width = imageData.width;
+        const height = imageData.height;
+
+        // Edge detection kernel (Sobel)
+        const sobelX = [-1, 0, 1, -2, 0, 2, -1, 0, 1];
+        const sobelY = [-1, -2, -1, 0, 0, 0, 1, 2, 1];
+
+        const newData = new Uint8ClampedArray(data);
+
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                let sumX = 0, sumY = 0;
+                
+                for (let ky = -1; ky <= 1; ky++) {
+                    for (let kx = -1; kx <= 1; kx++) {
+                        const pos = ((y + ky) * width + (x + kx)) * 4;
+                        const gray = (data[pos] + data[pos + 1] + data[pos + 2]) / 3;
+                        const kernelIndex = (ky + 1) * 3 + (kx + 1);
+                        sumX += gray * sobelX[kernelIndex];
+                        sumY += gray * sobelY[kernelIndex];
+                    }
+                }
+
+                const magnitude = Math.sqrt(sumX * sumX + sumY * sumY);
+                const enhanced = Math.min(255, magnitude);
+                
+                const pos = (y * width + x) * 4;
+                newData[pos] = enhanced;
+                newData[pos + 1] = enhanced;
+                newData[pos + 2] = enhanced;
+                newData[pos + 3] = data[pos + 3];
+            }
+        }
+
+        imageData.data.set(newData);
+        this.ctx.putImageData(imageData, 0, 0);
+        this.notyf.success('Edge enhancement applied');
+    }
+
+    // === ANNOTATION TOOLS ===
+    addTextAnnotation(x, y, text) {
+        const annotation = {
+            id: Date.now(),
+            type: 'text',
+            x: x,
+            y: y,
+            text: text,
+            color: '#ffff00'
+        };
+
+        if (!this.annotations) this.annotations = [];
+        this.annotations.push(annotation);
+        this.redrawCanvas();
+        this.notyf.success('Text annotation added');
+    }
+
+    drawAnnotations() {
+        if (!this.annotations) return;
+
+        this.annotations.forEach(annotation => {
+            this.ctx.save();
+            this.ctx.fillStyle = annotation.color;
+            this.ctx.font = '16px Arial';
+            this.ctx.strokeStyle = '#000000';
+            this.ctx.lineWidth = 3;
+
+            const canvasCoords = this.imageToCanvasCoords(annotation.x, annotation.y);
+            
+            // Draw text with outline
+            this.ctx.strokeText(annotation.text, canvasCoords.x, canvasCoords.y);
+            this.ctx.fillText(annotation.text, canvasCoords.x, canvasCoords.y);
+            
+            this.ctx.restore();
+        });
+    }
+
+    // === COORDINATE CONVERSION ===
+    imageToCanvasCoords(imageX, imageY) {
+        if (!this.currentImage) return { x: imageX, y: imageY };
+
+        const img = this.currentImage.image;
+        const scale = Math.min(
+            (this.canvas.width * this.zoomFactor) / img.width,
+            (this.canvas.height * this.zoomFactor) / img.height
+        );
+
+        const displayWidth = img.width * scale;
+        const displayHeight = img.height * scale;
+        const offsetX = (this.canvas.width - displayWidth) / 2 + this.panX;
+        const offsetY = (this.canvas.height - displayHeight) / 2 + this.panY;
+
+        return {
+            x: offsetX + (imageX * scale),
+            y: offsetY + (imageY * scale)
+        };
+    }
+
+    canvasToImageCoords(canvasX, canvasY) {
+        if (!this.currentImage) return { x: canvasX, y: canvasY };
+
+        const img = this.currentImage.image;
+        const scale = Math.min(
+            (this.canvas.width * this.zoomFactor) / img.width,
+            (this.canvas.height * this.zoomFactor) / img.height
+        );
+
+        const displayWidth = img.width * scale;
+        const displayHeight = img.height * scale;
+        const offsetX = (this.canvas.width - displayWidth) / 2 + this.panX;
+        const offsetY = (this.canvas.height - displayHeight) / 2 + this.panY;
+
+        return {
+            x: (canvasX - offsetX) / scale,
+            y: (canvasY - offsetY) / scale
+        };
+    }
+
+    // === ENHANCED CANVAS REDRAW ===
+    redrawCanvas() {
+        if (!this.currentImage || !this.canvas) return;
+
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Draw main image
+        this.displayProcessedImage();
+
+        // Draw overlays
+        this.drawMeasurements();
+        this.drawAnnotations();
+
+        // Draw crosshairs if enabled
+        if (this.activeTool === 'crosshair') {
+            this.drawCrosshairs();
+        }
+    }
+
+    drawCrosshairs() {
+        this.ctx.save();
+        this.ctx.strokeStyle = '#ff0000';
+        this.ctx.lineWidth = 1;
+        this.ctx.setLineDash([5, 5]);
+
+        // Vertical line
+        this.ctx.beginPath();
+        this.ctx.moveTo(this.canvas.width / 2, 0);
+        this.ctx.lineTo(this.canvas.width / 2, this.canvas.height);
+        this.ctx.stroke();
+
+        // Horizontal line
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, this.canvas.height / 2);
+        this.ctx.lineTo(this.canvas.width, this.canvas.height / 2);
+        this.ctx.stroke();
+
+        this.ctx.restore();
+    }
+
+    // === ROI ANALYSIS TOOLS ===
+    enableROITool(type = 'rectangle') {
+        this.activeTool = `roi_${type}`;
+        this.canvas.style.cursor = 'crosshair';
+        this.notyf.info(`ROI ${type} tool activated`);
+    }
+
+    addROI(startPoint, endPoint, type = 'rectangle') {
+        const roi = {
+            id: Date.now(),
+            type: type,
+            start: startPoint,
+            end: endPoint,
+            statistics: null
+        };
+
+        // Calculate ROI statistics
+        roi.statistics = this.calculateROIStatistics(roi);
+        
+        if (!this.rois) this.rois = [];
+        this.rois.push(roi);
+        this.updateROIPanel();
+        this.redrawCanvas();
+        
+        this.notyf.success(`ROI added - Mean: ${roi.statistics.mean.toFixed(1)} HU`);
+    }
+
+    calculateROIStatistics(roi) {
+        if (!this.currentImage) return { mean: 0, std: 0, min: 0, max: 0, area: 0 };
+
+        const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        const data = imageData.data;
+        
+        const startCanvas = this.imageToCanvasCoords(roi.start.x, roi.start.y);
+        const endCanvas = this.imageToCanvasCoords(roi.end.x, roi.end.y);
+        
+        const minX = Math.min(startCanvas.x, endCanvas.x);
+        const maxX = Math.max(startCanvas.x, endCanvas.x);
+        const minY = Math.min(startCanvas.y, endCanvas.y);
+        const maxY = Math.max(startCanvas.y, endCanvas.y);
+        
+        let pixels = [];
+        
+        for (let y = Math.floor(minY); y < Math.ceil(maxY); y++) {
+            for (let x = Math.floor(minX); x < Math.ceil(maxX); x++) {
+                if (x >= 0 && x < imageData.width && y >= 0 && y < imageData.height) {
+                    const index = (y * imageData.width + x) * 4;
+                    // Convert RGB to grayscale and approximate HU values
+                    const gray = (data[index] + data[index + 1] + data[index + 2]) / 3;
+                    const hu = (gray - 128) * 4; // Rough HU approximation
+                    pixels.push(hu);
+                }
+            }
+        }
+        
+        if (pixels.length === 0) return { mean: 0, std: 0, min: 0, max: 0, area: 0 };
+        
+        const mean = pixels.reduce((a, b) => a + b, 0) / pixels.length;
+        const variance = pixels.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / pixels.length;
+        const std = Math.sqrt(variance);
+        const min = Math.min(...pixels);
+        const max = Math.max(...pixels);
+        const area = Math.abs(roi.end.x - roi.start.x) * Math.abs(roi.end.y - roi.start.y) * 
+                    this.pixelSpacing.x * this.pixelSpacing.y; // in mm²
+        
+        return { mean, std, min, max, area, pixelCount: pixels.length };
+    }
+
+    drawROIs() {
+        if (!this.rois) return;
+
+        this.rois.forEach((roi, index) => {
+            this.ctx.save();
+            this.ctx.strokeStyle = '#ff6b35';
+            this.ctx.fillStyle = 'rgba(255, 107, 53, 0.2)';
+            this.ctx.lineWidth = 2;
+
+            const start = this.imageToCanvasCoords(roi.start.x, roi.start.y);
+            const end = this.imageToCanvasCoords(roi.end.x, roi.end.y);
+
+            const width = end.x - start.x;
+            const height = end.y - start.y;
+
+            // Draw ROI rectangle
+            this.ctx.fillRect(start.x, start.y, width, height);
+            this.ctx.strokeRect(start.x, start.y, width, height);
+
+            // Draw ROI label
+            this.ctx.fillStyle = '#ff6b35';
+            this.ctx.font = 'bold 12px Arial';
+            this.ctx.fillText(`ROI ${index + 1}`, start.x + 5, start.y - 5);
+
+            // Draw statistics if available
+            if (roi.statistics) {
+                const stats = [
+                    `Mean: ${roi.statistics.mean.toFixed(1)} HU`,
+                    `Std: ${roi.statistics.std.toFixed(1)}`,
+                    `Area: ${roi.statistics.area.toFixed(1)} mm²`
+                ];
+                
+                stats.forEach((stat, i) => {
+                    this.ctx.fillText(stat, start.x + 5, start.y + 15 + (i * 15));
+                });
+            }
+
+            this.ctx.restore();
+        });
+    }
+
+    updateROIPanel() {
+        const panel = document.getElementById('roi-list');
+        if (!panel || !this.rois) return;
+
+        panel.innerHTML = '';
+        this.rois.forEach((roi, index) => {
+            const item = document.createElement('div');
+            item.className = 'roi-item';
+            item.innerHTML = `
+                <div class="roi-info">
+                    <strong>ROI ${index + 1}</strong>
+                    <div class="roi-stats">
+                        <span>Mean: ${roi.statistics.mean.toFixed(1)} HU</span>
+                        <span>Std: ${roi.statistics.std.toFixed(1)}</span>
+                        <span>Area: ${roi.statistics.area.toFixed(1)} mm²</span>
+                        <span>Pixels: ${roi.statistics.pixelCount}</span>
+                    </div>
+                </div>
+                <button onclick="window.fixedViewer.removeROI(${roi.id})" class="btn-remove">
+                    <i class="fas fa-trash"></i>
+                </button>
+            `;
+            panel.appendChild(item);
+        });
+    }
+
+    removeROI(id) {
+        if (!this.rois) return;
+        this.rois = this.rois.filter(r => r.id !== id);
+        this.updateROIPanel();
+        this.redrawCanvas();
+    }
+
+    clearROIs() {
+        this.rois = [];
+        this.updateROIPanel();
+        this.redrawCanvas();
+        this.notyf.success('All ROIs cleared');
+    }
+
+    // === HISTOGRAM ANALYSIS ===
+    generateHistogram() {
+        if (!this.currentImage) {
+            this.notyf.error('No image loaded for histogram analysis');
+            return;
+        }
+
+        const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        const data = imageData.data;
+        const histogram = new Array(256).fill(0);
+        
+        // Count pixel intensities
+        for (let i = 0; i < data.length; i += 4) {
+            const gray = Math.floor((data[i] + data[i + 1] + data[i + 2]) / 3);
+            histogram[gray]++;
+        }
+        
+        this.displayHistogram(histogram);
+    }
+
+    displayHistogram(histogram) {
+        const modal = this.createHistogramModal();
+        const canvas = modal.querySelector('#histogram-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas size
+        canvas.width = 400;
+        canvas.height = 200;
+        
+        // Clear canvas
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Find max value for scaling
+        const maxCount = Math.max(...histogram);
+        
+        // Draw histogram bars
+        ctx.fillStyle = '#00ff88';
+        const barWidth = canvas.width / histogram.length;
+        
+        histogram.forEach((count, intensity) => {
+            const barHeight = (count / maxCount) * canvas.height;
+            const x = intensity * barWidth;
+            const y = canvas.height - barHeight;
+            
+            ctx.fillRect(x, y, barWidth - 1, barHeight);
+        });
+        
+        // Draw labels
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '12px Arial';
+        ctx.fillText('0', 5, canvas.height - 5);
+        ctx.fillText('255', canvas.width - 25, canvas.height - 5);
+        ctx.fillText('Intensity', canvas.width / 2 - 25, canvas.height - 5);
+        
+        // Calculate statistics
+        this.calculateHistogramStatistics(histogram, modal);
+        
+        // Show modal
+        modal.style.display = 'block';
+    }
+
+    createHistogramModal() {
+        let modal = document.getElementById('histogram-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'histogram-modal';
+            modal.innerHTML = `
+                <div class="modal-content" style="background: #1a1a1a; color: white; padding: 20px; border-radius: 8px; max-width: 500px; margin: 100px auto;">
+                    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3>Image Histogram</h3>
+                        <button onclick="this.closest('.modal').style.display='none'" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer;">×</button>
+                    </div>
+                    <canvas id="histogram-canvas" style="border: 1px solid #666; width: 100%;"></canvas>
+                    <div id="histogram-stats" style="margin-top: 15px; font-size: 14px;"></div>
+                </div>
+            `;
+            modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; display: none;';
+            document.body.appendChild(modal);
+        }
+        return modal;
+    }
+
+    calculateHistogramStatistics(histogram, modal) {
+        const totalPixels = histogram.reduce((a, b) => a + b, 0);
+        let mean = 0;
+        let weightedSum = 0;
+        
+        histogram.forEach((count, intensity) => {
+            weightedSum += intensity * count;
+        });
+        mean = weightedSum / totalPixels;
+        
+        // Calculate standard deviation
+        let variance = 0;
+        histogram.forEach((count, intensity) => {
+            variance += count * Math.pow(intensity - mean, 2);
+        });
+        variance /= totalPixels;
+        const std = Math.sqrt(variance);
+        
+        // Find min and max non-zero values
+        let min = histogram.findIndex(count => count > 0);
+        let max = histogram.length - 1 - histogram.slice().reverse().findIndex(count => count > 0);
+        
+        const statsDiv = modal.querySelector('#histogram-stats');
+        statsDiv.innerHTML = `
+            <div><strong>Statistics:</strong></div>
+            <div>Mean: ${mean.toFixed(2)}</div>
+            <div>Std Dev: ${std.toFixed(2)}</div>
+            <div>Min: ${min}</div>
+            <div>Max: ${max}</div>
+            <div>Total Pixels: ${totalPixels.toLocaleString()}</div>
+        `;
+    }
+
+    // === DICOM METADATA VIEWER ===
+    showDICOMMetadata() {
+        if (!this.currentImage) {
+            this.notyf.error('No image loaded');
+            return;
+        }
+
+        // Get metadata from current image or fetch from server
+        this.fetchDICOMMetadata(this.currentImage.id);
+    }
+
+    async fetchDICOMMetadata(imageId) {
+        try {
+            const response = await fetch(`/viewer/api/images/${imageId}/metadata/`);
+            const metadata = await response.json();
+            this.displayDICOMMetadata(metadata);
+        } catch (error) {
+            console.error('Error fetching DICOM metadata:', error);
+            // Fallback to basic metadata if available
+            const basicMetadata = this.getBasicMetadata();
+            this.displayDICOMMetadata(basicMetadata);
+        }
+    }
+
+    getBasicMetadata() {
+        const img = this.currentImages[this.currentImageIndex];
+        return {
+            'Patient Name': img.patient_name || 'Unknown',
+            'Patient ID': img.patient_id || 'Unknown',
+            'Study Date': img.study_date || 'Unknown',
+            'Study Description': img.study_description || 'Unknown',
+            'Series Description': img.series_description || 'Unknown',
+            'Modality': img.modality || 'Unknown',
+            'Image Dimensions': `${img.columns || 0} × ${img.rows || 0}`,
+            'Pixel Spacing': `${img.pixel_spacing_x || 1.0} × ${img.pixel_spacing_y || 1.0} mm`,
+            'Slice Thickness': `${img.slice_thickness || 'Unknown'} mm`,
+            'Window Width': img.window_width || 'Unknown',
+            'Window Center': img.window_center || 'Unknown',
+            'Institution': img.institution_name || 'Unknown'
+        };
+    }
+
+    displayDICOMMetadata(metadata) {
+        const modal = this.createMetadataModal();
+        const content = modal.querySelector('#metadata-content');
+        
+        let html = '<table style="width: 100%; border-collapse: collapse;">';
+        html += '<tr style="background: #333;"><th style="padding: 8px; border: 1px solid #666;">Tag</th><th style="padding: 8px; border: 1px solid #666;">Value</th></tr>';
+        
+        Object.entries(metadata).forEach(([tag, value]) => {
+            html += `<tr><td style="padding: 8px; border: 1px solid #666; font-weight: bold;">${tag}</td>`;
+            html += `<td style="padding: 8px; border: 1px solid #666;">${value}</td></tr>`;
+        });
+        
+        html += '</table>';
+        content.innerHTML = html;
+        modal.style.display = 'block';
+    }
+
+    createMetadataModal() {
+        let modal = document.getElementById('metadata-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'metadata-modal';
+            modal.innerHTML = `
+                <div class="modal-content" style="background: #1a1a1a; color: white; padding: 20px; border-radius: 8px; max-width: 600px; max-height: 80vh; overflow-y: auto; margin: 50px auto;">
+                    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3>DICOM Metadata</h3>
+                        <button onclick="this.closest('.modal').style.display='none'" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer;">×</button>
+                    </div>
+                    <div id="metadata-content"></div>
+                </div>
+            `;
+            modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; display: none;';
+            document.body.appendChild(modal);
+        }
+        return modal;
+    }
+
+    // === ENHANCED REDRAW WITH ALL OVERLAYS ===
+    redrawCanvas() {
+        if (!this.currentImage || !this.canvas) return;
+
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Draw main image
+        this.displayProcessedImage();
+
+        // Draw all overlays
+        this.drawMeasurements();
+        this.drawAnnotations();
+        this.drawROIs();
+
+        // Draw crosshairs if enabled
+        if (this.activeTool === 'crosshair') {
+            this.drawCrosshairs();
         }
     }
 }

@@ -178,6 +178,10 @@
                         <i class="fas fa-crosshairs"></i>
                         <span>HU</span>
                     </button>
+                    <button class="tool-btn-advanced" id="roi-btn" title="ROI Analysis" data-key="">
+                        <i class="fas fa-square-full"></i>
+                        <span>ROI</span>
+                    </button>
                 </div>
 
                 <div class="tool-group-advanced" data-group="annotation">
@@ -224,6 +228,14 @@
                         <i class="fas fa-eye"></i>
                         <span>Sharpen</span>
                     </button>
+                    <button class="tool-btn-advanced" id="edge-enhancement-btn" title="Edge Enhancement" data-key="">
+                        <i class="fas fa-border-style"></i>
+                        <span>Edge</span>
+                    </button>
+                    <button class="tool-btn-advanced" id="toggle-units-btn" title="Toggle mm/cm Units" data-key="">
+                        <i class="fas fa-ruler"></i>
+                        <span>Units</span>
+                    </button>
                 </div>
 
                 <div class="tool-group-advanced" data-group="3d">
@@ -248,15 +260,23 @@
                 <div class="tool-group-advanced" data-group="ai">
                     <div class="group-header">
                         <i class="fas fa-brain"></i>
-                        AI Analysis
+                        Analysis
                     </div>
                     <button class="tool-btn-advanced" id="ai-analysis-btn" title="AI Analysis" data-key="">
                         <i class="fas fa-robot"></i>
-                        <span>Analyze</span>
+                        <span>AI Analyze</span>
                     </button>
-                    <button class="tool-btn-advanced" id="ai-segment-btn" title="AI Segmentation" data-key="">
-                        <i class="fas fa-puzzle-piece"></i>
-                        <span>Segment</span>
+                    <button class="tool-btn-advanced" id="histogram-btn" title="Image Histogram" data-key="">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>Histogram</span>
+                    </button>
+                    <button class="tool-btn-advanced" id="metadata-btn" title="DICOM Metadata" data-key="">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Metadata</span>
+                    </button>
+                    <button class="tool-btn-advanced" id="statistics-btn" title="Image Statistics" data-key="">
+                        <i class="fas fa-calculator"></i>
+                        <span>Stats</span>
                     </button>
                 </div>
 
@@ -387,6 +407,20 @@
                     </div>
                     <div class="measurements-list" id="measurements-list">
                         <!-- Measurements will be populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- ROI Analysis Panel -->
+                <div class="control-panel" id="roi-panel">
+                    <div class="panel-header">
+                        <i class="fas fa-square-full"></i>
+                        ROI Analysis
+                        <button class="clear-btn" id="clear-roi-btn" title="Clear All ROIs">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    <div class="roi-list" id="roi-list">
+                        <!-- ROI analysis results will be populated dynamically -->
                     </div>
                 </div>
 
