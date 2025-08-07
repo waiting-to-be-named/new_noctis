@@ -1,0 +1,638 @@
+/* === DICOM VIEWER MAGNIFICATION === */
+.magnification-canvas {
+    position: absolute;
+    border: 2px solid #00ff00;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 1000;
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+}
+
+/* === HOUNSFIELD UNIT DISPLAY === */
+#hounsfield-display {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.9);
+    color: #00ff00;
+    padding: 12px;
+    border-radius: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    border: 1px solid #00ff00;
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
+    z-index: 999;
+    min-width: 200px;
+}
+
+#hounsfield-display div {
+    margin: 2px 0;
+    white-space: nowrap;
+}
+
+/* === MEASUREMENT TOOLS === */
+.measurement-item {
+    background: rgba(0, 0, 0, 0.8);
+    border: 1px solid #00ff00;
+    border-radius: 5px;
+    padding: 8px;
+    margin: 5px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #e0e0e0;
+}
+
+.measurement-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.measurement-type {
+    font-weight: bold;
+    color: #00ff00;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.measurement-value {
+    color: #ffffff;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+}
+
+.delete-measurement {
+    background: #ff4444;
+    border: none;
+    border-radius: 3px;
+    color: white;
+    padding: 4px 6px;
+    cursor: pointer;
+    font-size: 10px;
+    transition: background 0.2s;
+}
+
+.delete-measurement:hover {
+    background: #ff6666;
+}
+
+/* === MPR WORKSPACE === */
+.mpr-workspace {
+    position: fixed;
+    top: 50px;
+    left: 50px;
+    right: 50px;
+    bottom: 50px;
+    background: rgba(0, 0, 0, 0.95);
+    border: 2px solid #00ff00;
+    border-radius: 10px;
+    z-index: 1000;
+    display: none;
+    overflow: auto;
+    box-shadow: 0 0 50px rgba(0, 255, 0, 0.4);
+}
+
+.mpr-header {
+    background: linear-gradient(135deg, #0d4f0c 0%, #0a3d0a 100%);
+    padding: 15px;
+    border-bottom: 2px solid #00ff00;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.mpr-header h3 {
+    color: #00ff00;
+    margin: 0;
+    font-size: 18px;
+}
+
+.mpr-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.mpr-view-btn {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    padding: 8px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-size: 12px;
+}
+
+.mpr-view-btn:hover {
+    background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+    color: #000000;
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+}
+
+.mpr-view-btn.active {
+    background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+    color: #000000;
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.6);
+}
+
+.mpr-views {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 15px;
+    padding: 20px;
+    height: calc(100% - 80px);
+}
+
+.mpr-view-panel {
+    background: rgba(26, 26, 26, 0.9);
+    border: 1px solid #00ff00;
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
+    display: none;
+}
+
+.mpr-view-panel.active {
+    display: block;
+}
+
+.mpr-view-panel h4 {
+    color: #00ff00;
+    margin: 0 0 15px 0;
+    font-size: 16px;
+}
+
+.mpr-view-panel canvas {
+    border: 1px solid #333;
+    border-radius: 5px;
+    background: #000;
+    max-width: 100%;
+    height: auto;
+}
+
+.mpr-slice-control {
+    margin-top: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+}
+
+.mpr-slice-control input[type="range"] {
+    width: 100%;
+    height: 6px;
+    background: #333;
+    border-radius: 3px;
+    outline: none;
+}
+
+.mpr-slice-control input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 15px;
+    height: 15px;
+    background: #00ff00;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
+
+.render-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.render-controls label {
+    color: #e0e0e0;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* === MIP WORKSPACE === */
+.mip-workspace {
+    position: fixed;
+    top: 50px;
+    left: 50px;
+    right: 50px;
+    bottom: 50px;
+    background: rgba(0, 0, 0, 0.95);
+    border: 2px solid #00ff00;
+    border-radius: 10px;
+    z-index: 1000;
+    display: none;
+    overflow: auto;
+    box-shadow: 0 0 50px rgba(0, 255, 0, 0.4);
+}
+
+.mip-header {
+    background: linear-gradient(135deg, #0d4f0c 0%, #0a3d0a 100%);
+    padding: 15px;
+    border-bottom: 2px solid #00ff00;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.mip-header h3 {
+    color: #00ff00;
+    margin: 0;
+    font-size: 18px;
+}
+
+.mip-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.mip-view-btn {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    padding: 8px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-size: 11px;
+}
+
+.mip-view-btn:hover {
+    background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+    color: #000000;
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+}
+
+.mip-view-btn.active {
+    background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+    color: #000000;
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.6);
+}
+
+.mip-views {
+    padding: 20px;
+    height: calc(100% - 80px);
+}
+
+.mip-view-panel {
+    background: rgba(26, 26, 26, 0.9);
+    border: 1px solid #00ff00;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    display: none;
+    height: calc(100% - 40px);
+}
+
+.mip-view-panel.active {
+    display: block;
+}
+
+.mip-view-panel h4 {
+    color: #00ff00;
+    margin: 0 0 20px 0;
+    font-size: 16px;
+}
+
+.mip-view-panel canvas {
+    border: 1px solid #333;
+    border-radius: 5px;
+    background: #000;
+    max-width: 100%;
+    max-height: calc(100% - 100px);
+}
+
+.rotation-controls {
+    margin-top: 20px;
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    align-items: center;
+}
+
+.rotation-controls button {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    padding: 8px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.rotation-controls button:hover {
+    background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+    color: #000000;
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+}
+
+/* === BONE RECONSTRUCTION WORKSPACE === */
+.bone-workspace {
+    position: fixed;
+    top: 50px;
+    left: 50px;
+    right: 50px;
+    bottom: 50px;
+    background: rgba(0, 0, 0, 0.95);
+    border: 2px solid #00ff00;
+    border-radius: 10px;
+    z-index: 1000;
+    display: none;
+    overflow: auto;
+    box-shadow: 0 0 50px rgba(0, 255, 0, 0.4);
+}
+
+.bone-header {
+    background: linear-gradient(135deg, #0d4f0c 0%, #0a3d0a 100%);
+    padding: 15px;
+    border-bottom: 2px solid #00ff00;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.bone-header h3 {
+    color: #00ff00;
+    margin: 0;
+    font-size: 18px;
+}
+
+.bone-controls {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.bone-controls label {
+    color: #e0e0e0;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.bone-controls select,
+.bone-controls input[type="range"] {
+    background: #2a2a2a;
+    border: 1px solid #00ff00;
+    color: #e0e0e0;
+    padding: 4px 8px;
+    border-radius: 3px;
+}
+
+.bone-views {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+    padding: 20px;
+    height: calc(100% - 80px);
+}
+
+.bone-view-panel {
+    background: rgba(26, 26, 26, 0.9);
+    border: 1px solid #00ff00;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+}
+
+.bone-view-panel h4 {
+    color: #00ff00;
+    margin: 0 0 20px 0;
+    font-size: 16px;
+}
+
+.bone-view-panel canvas {
+    border: 1px solid #333;
+    border-radius: 5px;
+    background: #000;
+    max-width: 100%;
+    height: auto;
+}
+
+.bone-segmentation-panel {
+    background: rgba(26, 26, 26, 0.9);
+    border: 1px solid #00ff00;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+}
+
+.bone-segmentation-panel h4 {
+    color: #00ff00;
+    margin: 0 0 20px 0;
+    font-size: 16px;
+}
+
+.segmentation-info {
+    margin-top: 15px;
+    text-align: left;
+}
+
+.segmentation-info p {
+    color: #e0e0e0;
+    margin: 8px 0;
+    font-size: 12px;
+}
+
+.segmentation-info span {
+    color: #00ff00;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+}
+
+.bone-3d-controls {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.bone-3d-controls button {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    padding: 8px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin: 2px;
+}
+
+.bone-3d-controls button:hover {
+    background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+    color: #000000;
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+}
+
+/* === CLOSE BUTTONS === */
+.btn-close {
+    background: #ff4444;
+    border: none;
+    color: white;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: bold;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-close:hover {
+    background: #ff6666;
+    transform: scale(1.1);
+    box-shadow: 0 0 15px rgba(255, 68, 68, 0.5);
+}
+
+/* === WINDOW PRESETS === */
+.window-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin: 10px 0;
+}
+
+.window-preset-btn {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    padding: 4px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 10px;
+    transition: all 0.3s;
+}
+
+.window-preset-btn:hover {
+    background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+    color: #000000;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
+
+/* === MEASUREMENT PANEL ENHANCEMENTS === */
+.measurement-panel {
+    background: rgba(0, 0, 0, 0.9);
+    border: 1px solid #00ff00;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 10px 0;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.measurement-panel h4 {
+    color: #00ff00;
+    margin: 0 0 15px 0;
+    font-size: 14px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 8px;
+}
+
+/* === ANNOTATION STYLES === */
+.annotation-controls {
+    background: rgba(0, 0, 0, 0.9);
+    border: 1px solid #00ff00;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 10px 0;
+}
+
+.annotation-controls h4 {
+    color: #00ff00;
+    margin: 0 0 15px 0;
+    font-size: 14px;
+}
+
+.annotation-color-picker {
+    display: flex;
+    gap: 5px;
+    margin: 10px 0;
+}
+
+.color-option {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid #333;
+    transition: border-color 0.3s;
+}
+
+.color-option:hover,
+.color-option.active {
+    border-color: #00ff00;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
+
+/* === RESPONSIVE DESIGN === */
+@media (max-width: 1200px) {
+    .mpr-workspace,
+    .mip-workspace,
+    .bone-workspace {
+        top: 20px;
+        left: 20px;
+        right: 20px;
+        bottom: 20px;
+    }
+    
+    .mpr-views {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+    }
+    
+    .bone-views {
+        grid-template-columns: 1fr;
+    }
+    
+    #hounsfield-display {
+        position: relative;
+        top: auto;
+        right: auto;
+        margin: 10px 0;
+    }
+}
+
+/* === ENHANCED TOOL BUTTONS === */
+.tool-btn-advanced.active {
+    background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+    color: #000000;
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.6);
+    transform: scale(1.05);
+}
+
+.tool-btn-advanced[data-tool="mpr"].active,
+.tool-btn-advanced[data-tool="mip"].active,
+.tool-btn-advanced[data-tool="bone-recon"].active {
+    background: linear-gradient(135deg, #ff6600 0%, #ff4400 100%);
+    color: #ffffff;
+    box-shadow: 0 0 20px rgba(255, 102, 0, 0.6);
+}
+
+/* === STATUS INDICATORS === */
+.status-indicator {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #00ff00;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
+}
