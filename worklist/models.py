@@ -608,3 +608,59 @@ class Report(models.Model):
                 'status': self.get_status_display(),
             }
         }
+
+class StudyAttachment(models.Model):
+    """File attachments for studies - accessible to everyone"""
+    
+    FILE_TYPE_CHOICES = [
+        ('dicom', 'DICOM File'),
+        ('report', 'Report/PDF'),
+        ('image', 'Image'),
+        ('document', 'Document'),
+        ('other', 'Other'),
+    ]
+    
+    study = models.ForeignKey(Study, on_delete=models.CASCADE, related_name='attachments')
+    uploaded_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True)
+    
+    file_name = models.CharField(max_length=255)
+    file_path = models.CharField(max_length=500)
+    file_type = models.CharField(max_length=20, choices=FILE_TYPE_CHOICES, default='other')
+    file_size = models.BigIntegerField(help_text="File size in bytes")
+    
+    notes = models.TextField(blank=True, help_text="Notes about this attachment")
+    
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-uploaded_at']
+    
+    def __str__(self):
+        return f"{self.file_name} - {self.study.patient_name}"
+    
+    def get_file_size_display(self):
+        """Human readable file size"""
+        size = self.file_size
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size < 1024.0:
+                return f"{size:.1f} {unit}"
+            size /= 1024.0
+        return f"{size:.1f} TB"
+    
+    def can_view(self, user):
+        """Check if user can view this attachment"""
+        # Everyone can view if they can access the study
+        if hasattr(user, 'can_view_study'):
+            return user.can_view_study(self.study)
+        return True
+    
+    def can_view_content(self, user):
+        """Check if user can view the actual file content (for DICOM/reports)"""
+        if hasattr(user, 'role'):
+            # Admin and radiologists can view all content
+            if user.role in [UserRole.ADMIN, UserRole.RADIOLOGIST]:
+                return True
+            # Facility users can view non-sensitive content
+            elif user.role in [UserRole.FACILITY, UserRole.TECHNICIAN]:
+                return self.file_type in ['image', 'document', 'other']
+        return False

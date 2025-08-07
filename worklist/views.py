@@ -1,420 +1,425 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
+from django.http import JsonResponse, HttpResponse, Http404
 from django.contrib.auth.decorators import login_required
-from django.views.generic import ListView, DetailView, CreateView, UpdateView
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import JsonResponse, HttpResponse
-from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 from django.utils import timezone
-from django.db.models import Q
-from django.contrib.auth.models import User
-from viewer.models import (
-    DicomStudy, WorklistEntry, Facility, Report, 
-    Notification, DicomSeries, DicomImage, ChatMessage
-)
-import json
 from django.core.paginator import Paginator
-from django.template.loader import render_to_string
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import inch
-import io
+from django.contrib import messages
+from django.conf import settings
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+import json
+import os
+import mimetypes
+from .models import Study, Series, DICOMImage, Report, Notification, AuditLog, Facility, CustomUser, UserRole, StudyAttachment
+from .notification_service import NotificationService
+from django.db.models import Count
+import logging
 
+logger = logging.getLogger(__name__)
 
-class WorklistView(LoginRequiredMixin, ListView):
-    """Main worklist view showing all patients"""
-    model = WorklistEntry
-    template_name = 'worklist/worklist.html'
-    context_object_name = 'entries'
-    paginate_by = 20
-    
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        
-        # Debug: Print total count before filtering
-        total_count = WorklistEntry.objects.count()
-        print(f"Total worklist entries in database: {total_count}")
-        
-        # Filter by facility if user is facility staff
-        if hasattr(self.request.user, 'facility') and self.request.user.facility:
-            # Facility users see only their facility's worklist entries
-            queryset = queryset.filter(facility=self.request.user.facility)
-            print(f"Filtered by facility, count: {queryset.count()}")
-        elif self.request.user.groups.filter(name='Facilities').exists():
-            # Facility group members without specific facility see nothing
-            queryset = queryset.none()
-            print(f"No facility assigned, showing no entries")
-        else:
-            # Admin and radiologists see all worklist entries
-            print(f"Admin/Radiologist access, showing all entries: {queryset.count()}")
-        
-        # Apply search filters
-        search = self.request.GET.get('search')
-        if search:
-            queryset = queryset.filter(
-                Q(patient_name__icontains=search) |
-                Q(patient_id__icontains=search) |
-                Q(accession_number__icontains=search)
-            )
-            print(f"After search filter '{search}': {queryset.count()}")
-        
-        # Filter by status
-        status = self.request.GET.get('status')
-        if status:
-            queryset = queryset.filter(status=status)
-            print(f"After status filter '{status}': {queryset.count()}")
-            
-        # Filter by modality
-        modality = self.request.GET.get('modality')
-        if modality:
-            queryset = queryset.filter(modality=modality)
-            print(f"After modality filter '{modality}': {queryset.count()}")
-        
-        # Filter by date range
-        start_date = self.request.GET.get('start_date')
-        end_date = self.request.GET.get('end_date')
-        if start_date:
-            queryset = queryset.filter(scheduled_procedure_step_start_date__gte=start_date)
-            print(f"After start date filter '{start_date}': {queryset.count()}")
-        if end_date:
-            queryset = queryset.filter(scheduled_procedure_step_start_date__lte=end_date)
-            print(f"After end date filter '{end_date}': {queryset.count()}")
-        
-        print(f"Final queryset count: {queryset.count()}")
-        return queryset.order_by('-scheduled_procedure_step_start_date', '-scheduled_procedure_step_start_time')
-    
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['facilities'] = Facility.objects.all()
-        context['modalities'] = ['CT', 'MR', 'CR', 'DX', 'US', 'MG', 'PT', 'NM']
-        context['is_radiologist'] = self.request.user.groups.filter(name='Radiologists').exists()
-        context['is_admin'] = self.request.user.is_superuser
-        return context
-
+# Initialize notification service
+notification_service = NotificationService()
 
 @login_required
-@require_http_methods(['POST'])
-def add_clinical_info(request, entry_id):
-    """Add clinical information to a worklist entry"""
-    entry = get_object_or_404(WorklistEntry, id=entry_id)
-    
-    # Check permissions - only radiologists, technicians, and admins can add clinical info
-    if not (request.user.is_superuser or 
-            request.user.groups.filter(name__in=['Radiologists', 'Technicians']).exists()):
-        return JsonResponse({'error': 'Permission denied. Only radiologists, technicians, and administrators can add clinical information.'}, status=403)
-    
-    # Check if user can access this worklist entry
-    if not (request.user.is_superuser or 
-            request.user.groups.filter(name='Radiologists').exists() or
-            (hasattr(request.user, 'facility') and 
-             request.user.facility == entry.facility)):
-        return JsonResponse({'error': 'Access denied. You do not have permission to access this worklist entry.'}, status=403)
-    
-    data = json.loads(request.body)
-    clinical_info = data.get('clinical_info', '')
-    
-    # Update associated study if exists
-    if entry.study:
-        entry.study.clinical_info = clinical_info
-        entry.study.save()
-    
-    return JsonResponse({'success': True})
-
-
-@login_required
-def view_study_from_worklist(request, entry_id):
-    """Launch viewer with images from worklist entry"""
-    entry = get_object_or_404(WorklistEntry, id=entry_id)
-    
-    # Check if user can access this worklist entry
-    if not (request.user.is_superuser or 
-            request.user.groups.filter(name='Radiologists').exists() or
-            (hasattr(request.user, 'facility') and 
-             request.user.facility == entry.facility)):
-        return JsonResponse({'error': 'Access denied. You do not have permission to view this study.'}, status=403)
-    
-    if entry.study:
-        # Redirect to viewer with study ID
-        return redirect('viewer:viewer_with_study', study_id=entry.study.id)
+def worklist_view(request):
+    """Main worklist view with role-based filtering"""
+    # Get studies based on user role
+    if hasattr(request.user, 'role'):
+        accessible_studies = request.user.get_accessible_studies()
     else:
-        return JsonResponse({'error': 'No images available for this entry'}, status=404)
-
-
-class FacilityWorklistView(LoginRequiredMixin, ListView):
-    """Facility-specific worklist view"""
-    model = WorklistEntry
-    template_name = 'worklist/facility_worklist.html'
-    context_object_name = 'entries'
-    paginate_by = 20
+        # Fallback for existing users without roles
+        accessible_studies = Study.objects.all()
     
-    def get_queryset(self):
-        facility_id = self.kwargs.get('facility_id')
-        facility = get_object_or_404(Facility, id=facility_id)
-        
-        # Check permissions using the new access control system
-        if not (self.request.user.is_superuser or 
-                self.request.user.groups.filter(name='Radiologists').exists() or
-                (hasattr(self.request.user, 'facility') and 
-                 self.request.user.facility == facility)):
-            return WorklistEntry.objects.none()
-        
-        return WorklistEntry.objects.filter(facility=facility)
+    # Apply filters
+    status_filter = request.GET.get('status')
+    modality_filter = request.GET.get('modality')
+    date_filter = request.GET.get('date')
+    search_query = request.GET.get('search')
     
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['facility'] = get_object_or_404(Facility, id=self.kwargs.get('facility_id'))
-        context['can_write_report'] = (
-            self.request.user.is_superuser or 
-            self.request.user.groups.filter(name='Radiologists').exists()
+    if status_filter:
+        accessible_studies = accessible_studies.filter(status=status_filter)
+    
+    if modality_filter:
+        accessible_studies = accessible_studies.filter(series__modality=modality_filter).distinct()
+    
+    if date_filter:
+        accessible_studies = accessible_studies.filter(study_date=date_filter)
+    
+    if search_query:
+        accessible_studies = accessible_studies.filter(
+            patient_name__icontains=search_query
+        ).union(
+            accessible_studies.filter(patient_id__icontains=search_query)
+        ).union(
+            accessible_studies.filter(accession_number__icontains=search_query)
         )
-        return context
-
+    
+    # Pagination
+    paginator = Paginator(accessible_studies.order_by('-created_at'), 10)
+    page_number = request.GET.get('page')
+    studies = paginator.get_page(page_number)
+    
+    # Get user's unread notifications
+    unread_notifications = 0
+    if hasattr(request.user, 'notifications'):
+        unread_notifications = request.user.notifications.filter(is_read=False).count()
+    
+    context = {
+        'studies': studies,
+        'unread_notifications': unread_notifications,
+        'user_role': getattr(request.user, 'role', None),
+        'user_facility': getattr(request.user, 'facility', None),
+        'current_filters': {
+            'status': status_filter,
+            'modality': modality_filter,
+            'date': date_filter,
+            'search': search_query,
+        }
+    }
+    
+    return render(request, 'worklist/worklist.html', context)
 
 @login_required
-def create_report(request, study_id):
-    """Create or edit a radiology report"""
-    study = get_object_or_404(DicomStudy, id=study_id)
+def study_detail(request, study_id):
+    """Study detail view with role-based access"""
+    study = get_object_or_404(Study, id=study_id)
     
-    # Check permissions - only radiologists and admins can create reports
-    if not (request.user.is_superuser or 
-            request.user.groups.filter(name='Radiologists').exists()):
-        return JsonResponse({'error': 'Permission denied. Only radiologists and administrators can create reports.'}, status=403)
+    # Check access permissions
+    if hasattr(request.user, 'can_view_study'):
+        if not request.user.can_view_study(study):
+            return HttpResponse('Access denied. You do not have permission to view this study.', status=403)
     
-    # Check if user can access this study
-    if not (request.user.is_superuser or 
-            request.user.groups.filter(name='Radiologists').exists() or
-            (hasattr(request.user, 'facility') and 
-             request.user.facility == study.facility)):
-        return JsonResponse({'error': 'Access denied. You do not have permission to access this study.'}, status=403)
+    # Log access
+    AuditLog.objects.create(
+        user=request.user,
+        action='view_study',
+        description=f"Viewed study {study.study_instance_uid}",
+        study=study,
+        facility=getattr(request.user, 'facility', None),
+        ip_address=get_client_ip(request)
+    )
+    
+    # Get related data
+    series_list = study.series_set.all().order_by('series_number')
+    reports = study.reports.all().order_by('-created_at')
+    
+    # Filter reports based on user role
+    if hasattr(request.user, 'role'):
+        if request.user.role in [UserRole.FACILITY, UserRole.TECHNICIAN]:
+            reports = reports.filter(status__in=['final', 'amended'])
+    
+    context = {
+        'study': study,
+        'series_list': series_list,
+        'reports': reports,
+        'can_edit': hasattr(request.user, 'can_edit_study') and request.user.can_edit_study(study),
+        'can_create_report': hasattr(request.user, 'role') and request.user.role in [UserRole.RADIOLOGIST, UserRole.ADMIN],
+    }
+    
+    return render(request, 'worklist/study_detail.html', context)
+
+@login_required
+def create_edit_report(request, study_id):
+    """Create or edit radiology report - Enhanced version"""
+    study = get_object_or_404(Study, id=study_id)
+    
+    # Check permissions - only radiologists and admins can create/edit reports
+    if not (hasattr(request.user, 'role') and request.user.role in [UserRole.RADIOLOGIST, UserRole.ADMIN]):
+        return HttpResponse('Access denied. Only radiologists and administrators can create reports.', status=403)
+    
+    # Check if user can view this study
+    if hasattr(request.user, 'can_view_study') and not request.user.can_view_study(study):
+        return HttpResponse('Access denied. You do not have permission to access this study.', status=403)
     
     if request.method == 'POST':
-        data = json.loads(request.body)
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': 'Invalid JSON data'})
         
         # Get or create report
         report, created = Report.objects.get_or_create(
             study=study,
-            radiologist=request.user,
+            status__in=['draft', 'preliminary'],
             defaults={
+                'radiologist': request.user,
+                'clinical_history': data.get('clinical_history', ''),
+                'technique': data.get('technique', ''),
                 'findings': data.get('findings', ''),
                 'impression': data.get('impression', ''),
                 'recommendations': data.get('recommendations', ''),
+                'comparison_studies': data.get('comparison_studies', ''),
+                'limitations': data.get('limitations', ''),
                 'status': 'draft'
             }
         )
         
-        if not created:
+        # Update existing report if not created
+        if not created and report.can_edit(request.user):
+            report.clinical_history = data.get('clinical_history', report.clinical_history)
+            report.technique = data.get('technique', report.technique)
             report.findings = data.get('findings', report.findings)
             report.impression = data.get('impression', report.impression)
             report.recommendations = data.get('recommendations', report.recommendations)
-            
-        if data.get('finalize'):
-            report.status = 'finalized'
-            report.finalized_at = timezone.now()
-            
-            # Update worklist entry status to completed
-            worklist_entries = WorklistEntry.objects.filter(study=study)
-            for entry in worklist_entries:
-                entry.status = 'completed'
-                entry.save()
-            
-            # Create notification for facility
-            if study.facility:
-                facility_users = study.facility.staff.all()
-                for user in facility_users:
-                    Notification.objects.create(
-                        recipient=user,
-                        notification_type='report_ready',
-                        title=f'Report Ready: {study.patient_name}',
-                        message=f'The radiology report for {study.patient_name} is now available.',
-                        related_study=study
-                    )
+            report.comparison_studies = data.get('comparison_studies', report.comparison_studies)
+            report.limitations = data.get('limitations', report.limitations)
+        elif not created:
+            return JsonResponse({'success': False, 'error': 'Cannot edit this report'})
+        
+        # Handle finalization
+        if data.get('finalize') and report.radiologist == request.user:
+            success = report.finalize(request.user)
+            if success:
+                # Update study status
+                study.status = 'reviewed'
+                study.reviewed_at = timezone.now()
+                study.save()
+                
+                # Send notifications
+                notification_service.send_report_ready_notification(report)
         
         report.save()
+        
+        # Log the action
+        action = 'create_report' if created else 'edit_report'
+        AuditLog.objects.create(
+            user=request.user,
+            action=action,
+            description=f"{'Created' if created else 'Updated'} report for study {study.study_instance_uid}",
+            study=study,
+            facility=getattr(request.user, 'facility', None),
+            ip_address=get_client_ip(request)
+        )
         
         return JsonResponse({
             'success': True,
             'report_id': report.id,
-            'status': report.status
+            'status': report.status,
+            'created': created
         })
     
     else:
-        # GET request - check if it's an AJAX request or regular page load
-        if request.headers.get('Content-Type') == 'application/json' or request.headers.get('Accept') == 'application/json':
-            # AJAX request - return existing report if any
-            try:
-                report = Report.objects.filter(study=study).latest('created_at')
-                return JsonResponse({
-                    'findings': report.findings,
-                    'impression': report.impression,
-                    'recommendations': report.recommendations,
-                    'status': report.status,
-                    'radiologist': report.radiologist.get_full_name() or report.radiologist.username,
-                    'created_at': report.created_at.isoformat(),
-                    'finalized_at': report.finalized_at.isoformat() if report.finalized_at else None
-                })
-            except Report.DoesNotExist:
-                return JsonResponse({})
-        else:
-            # Regular page request - render report creation template
-            try:
-                report = Report.objects.filter(study=study).latest('created_at')
-            except Report.DoesNotExist:
-                report = None
-            
-            context = {
-                'study': study,
-                'report': report,
-                'is_radiologist': request.user.groups.filter(name='Radiologists').exists(),
-                'is_admin': request.user.is_superuser
-            }
-            return render(request, 'worklist/report.html', context)
+        # GET request
+        try:
+            report = Report.objects.filter(study=study).latest('created_at')
+        except Report.DoesNotExist:
+            report = None
+        
+        # Get previous studies for comparison
+        previous_studies = Study.objects.filter(
+            patient_id=study.patient_id,
+            study_date__lt=study.study_date
+        ).order_by('-study_date')[:5]
+        
+        context = {
+            'study': study,
+            'report': report,
+            'previous_studies': previous_studies,
+            'is_radiologist': hasattr(request.user, 'role') and request.user.role == UserRole.RADIOLOGIST,
+            'is_admin': hasattr(request.user, 'role') and request.user.role == UserRole.ADMIN,
+            'can_edit': report is None or (report and report.can_edit(request.user)),
+        }
+        return render(request, 'worklist/report.html', context)
 
+@login_required
+def attach_files(request, study_id):
+    """Attach files to a study - Available to everyone"""
+    study = get_object_or_404(Study, id=study_id)
+    
+    # Everyone can attach files, but check basic study access
+    if hasattr(request.user, 'can_view_study') and not request.user.can_view_study(study):
+        return HttpResponse('Access denied. You do not have permission to access this study.', status=403)
+    
+    if request.method == 'POST':
+        try:
+            uploaded_files = request.FILES.getlist('attachments')
+            attachment_notes = request.POST.get('notes', '')
+            
+            attachments_created = []
+            
+            for file in uploaded_files:
+                # Validate file
+                if file.size > 100 * 1024 * 1024:  # 100MB limit
+                    return JsonResponse({
+                        'success': False, 
+                        'error': f'File {file.name} is too large. Maximum size is 100MB.'
+                    })
+                
+                # Determine file type
+                file_type = 'other'
+                content_type = file.content_type or mimetypes.guess_type(file.name)[0]
+                
+                if content_type:
+                    if content_type.startswith('application/dicom') or file.name.lower().endswith(('.dcm', '.dicom')):
+                        file_type = 'dicom'
+                    elif content_type.startswith('application/pdf'):
+                        file_type = 'report'
+                    elif content_type.startswith('image/'):
+                        file_type = 'image'
+                
+                # Save file
+                filename = f"attachments/{study.id}/{file.name}"
+                file_path = default_storage.save(filename, ContentFile(file.read()))
+                
+                # Create attachment record
+                attachment = StudyAttachment.objects.create(
+                    study=study,
+                    uploaded_by=request.user,
+                    file_name=file.name,
+                    file_path=file_path,
+                    file_type=file_type,
+                    file_size=file.size,
+                    notes=attachment_notes
+                )
+                
+                attachments_created.append({
+                    'id': attachment.id,
+                    'name': attachment.file_name,
+                    'type': attachment.file_type,
+                    'size': attachment.file_size,
+                    'uploaded_at': attachment.uploaded_at.isoformat()
+                })
+            
+            # Log the action
+            AuditLog.objects.create(
+                user=request.user,
+                action='attach_files',
+                description=f"Attached {len(uploaded_files)} files to study {study.study_instance_uid}",
+                study=study,
+                facility=getattr(request.user, 'facility', None),
+                ip_address=get_client_ip(request)
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'attachments': attachments_created,
+                'message': f'Successfully attached {len(uploaded_files)} files'
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'Error uploading files: {str(e)}'
+            })
+    
+    return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+@login_required
+def view_attachment(request, attachment_id):
+    """View attached files - Enhanced for DICOM and reports"""
+    attachment = get_object_or_404(StudyAttachment, id=attachment_id)
+    study = attachment.study
+    
+    # Check access permissions
+    if hasattr(request.user, 'can_view_study') and not request.user.can_view_study(study):
+        return HttpResponse('Access denied. You do not have permission to view this attachment.', status=403)
+    
+    # Enhanced access for admin/radiologist
+    can_view_all = hasattr(request.user, 'role') and request.user.role in [UserRole.ADMIN, UserRole.RADIOLOGIST]
+    
+    try:
+        file_path = attachment.file_path
+        
+        if attachment.file_type == 'dicom' and can_view_all:
+            # Redirect to DICOM viewer for DICOM files
+            return redirect(f'/viewer/?dicom_file={attachment.id}')
+        
+        elif attachment.file_type == 'report' and can_view_all:
+            # Open PDF reports in browser
+            with default_storage.open(file_path, 'rb') as f:
+                response = HttpResponse(f.read(), content_type='application/pdf')
+                response['Content-Disposition'] = f'inline; filename="{attachment.file_name}"'
+                return response
+        
+        elif attachment.file_type == 'image':
+            # Display images
+            with default_storage.open(file_path, 'rb') as f:
+                content_type = mimetypes.guess_type(attachment.file_name)[0] or 'application/octet-stream'
+                response = HttpResponse(f.read(), content_type=content_type)
+                response['Content-Disposition'] = f'inline; filename="{attachment.file_name}"'
+                return response
+        
+        else:
+            # Download other files
+            with default_storage.open(file_path, 'rb') as f:
+                content_type = mimetypes.guess_type(attachment.file_name)[0] or 'application/octet-stream'
+                response = HttpResponse(f.read(), content_type=content_type)
+                response['Content-Disposition'] = f'attachment; filename="{attachment.file_name}"'
+                return response
+    
+    except FileNotFoundError:
+        return HttpResponse('File not found', status=404)
+    except Exception as e:
+        return HttpResponse(f'Error accessing file: {str(e)}', status=500)
 
 @login_required
 def print_report(request, report_id):
-    """Generate PDF report with facility letterhead"""
+    """Generate printable report with enhanced access control"""
     report = get_object_or_404(Report, id=report_id)
     study = report.study
     
-    # Check if user can access this study
-    if not (request.user.is_superuser or 
-            request.user.groups.filter(name='Radiologists').exists() or
-            (hasattr(request.user, 'facility') and 
-             request.user.facility == study.facility)):
-        return HttpResponse('Access denied. You do not have permission to access this report.', status=403)
+    # Check if user can print this report
+    if not report.can_print(request.user):
+        return HttpResponse('Access denied. You do not have permission to print this report.', status=403)
     
-    # Check permissions - allow all authenticated users to print finalized reports
-    if report.status not in ['finalized', 'printed']:
-        return HttpResponse('Report is not finalized yet', status=403)
+    # Record print action
+    report.record_print(request.user)
     
-    # Create PDF
-    buffer = io.BytesIO()
-    p = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter
+    # Get printable content
+    content = report.get_printable_content()
+    content['metadata']['_printed_by'] = request.user
     
-    # Add letterhead if facility has logo
-    if study.facility and study.facility.letterhead_logo:
-        # This is simplified - in production you'd properly handle the logo
-        p.drawString(inch, height - inch, study.facility.name)
-        p.drawString(inch, height - 1.5*inch, study.facility.address)
-        p.drawString(inch, height - 1.75*inch, f"Phone: {study.facility.phone}")
-        y_position = height - 2.5*inch
-    else:
-        y_position = height - inch
-    
-    # Report header
-    p.setFont("Helvetica-Bold", 16)
-    p.drawString(inch, y_position, "RADIOLOGY REPORT")
-    y_position -= 0.5*inch
-    
-    # Patient information
-    p.setFont("Helvetica", 12)
-    p.drawString(inch, y_position, f"Patient: {study.patient_name}")
-    y_position -= 0.25*inch
-    p.drawString(inch, y_position, f"Patient ID: {study.patient_id}")
-    y_position -= 0.25*inch
-    p.drawString(inch, y_position, f"Study Date: {study.study_date}")
-    y_position -= 0.25*inch
-    p.drawString(inch, y_position, f"Modality: {study.modality}")
-    y_position -= 0.5*inch
-    
-    # Clinical Information
-    if study.clinical_info:
-        p.setFont("Helvetica-Bold", 12)
-        p.drawString(inch, y_position, "CLINICAL INFORMATION:")
-        y_position -= 0.25*inch
-        p.setFont("Helvetica", 10)
-        # Wrap text - simplified version
-        lines = study.clinical_info.split('\n')
-        for line in lines[:5]:  # Limit lines for simplicity
-            p.drawString(inch, y_position, line[:80])
-            y_position -= 0.2*inch
-        y_position -= 0.3*inch
-    
-    # Findings
-    p.setFont("Helvetica-Bold", 12)
-    p.drawString(inch, y_position, "FINDINGS:")
-    y_position -= 0.25*inch
-    p.setFont("Helvetica", 10)
-    lines = report.findings.split('\n')
-    for line in lines[:10]:  # Limit lines for simplicity
-        p.drawString(inch, y_position, line[:80])
-        y_position -= 0.2*inch
-    y_position -= 0.3*inch
-    
-    # Impression
-    p.setFont("Helvetica-Bold", 12)
-    p.drawString(inch, y_position, "IMPRESSION:")
-    y_position -= 0.25*inch
-    p.setFont("Helvetica", 10)
-    lines = report.impression.split('\n')
-    for line in lines[:5]:
-        p.drawString(inch, y_position, line[:80])
-        y_position -= 0.2*inch
-    y_position -= 0.3*inch
-    
-    # Recommendations
-    if report.recommendations:
-        p.setFont("Helvetica-Bold", 12)
-        p.drawString(inch, y_position, "RECOMMENDATIONS:")
-        y_position -= 0.25*inch
-        p.setFont("Helvetica", 10)
-        lines = report.recommendations.split('\n')
-        for line in lines[:5]:
-            p.drawString(inch, y_position, line[:80])
-            y_position -= 0.2*inch
-    
-    # Signature
-    y_position -= 0.5*inch
-    p.setFont("Helvetica", 10)
-    p.drawString(inch, y_position, f"Reported by: {report.radiologist.get_full_name() or report.radiologist.username}")
-    y_position -= 0.2*inch
-    p.drawString(inch, y_position, f"Date: {report.finalized_at or report.created_at}")
-    
-    p.showPage()
-    p.save()
-    
-    # Return PDF
-    buffer.seek(0)
-    response = HttpResponse(buffer, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="report_{study.patient_name}_{study.study_date}.pdf"'
-    
-    # Update report status
-    if report.status == 'finalized':
-        report.status = 'printed'
-        report.save()
-    
-    return response
-
+    # Return HTML for printing (you can also generate PDF here)
+    return render(request, 'worklist/report_print.html', {
+        'content': content,
+        'report': report,
+        'study': study
+    })
 
 @login_required
 def get_notifications(request):
-    """Get unread notifications for the current user"""
-    notifications = Notification.objects.filter(
-        recipient=request.user,
-        is_read=False
-    )[:10]
+    """Get user notifications"""
+    if not hasattr(request.user, 'notifications'):
+        return JsonResponse({'notifications': []})
     
-    data = [{
-        'id': n.id,
-        'type': n.notification_type,
-        'title': n.title,
-        'message': n.message,
-        'study_id': n.related_study.id if n.related_study else None,
-        'created_at': n.created_at.isoformat()
-    } for n in notifications]
+    notifications = request.user.notifications.filter(is_read=False).order_by('-created_at')[:10]
     
-    return JsonResponse({'notifications': data})
-
+    notifications_data = []
+    for notification in notifications:
+        notifications_data.append({
+            'id': notification.id,
+            'type': notification.notification_type,
+            'title': notification.title,
+            'message': notification.message,
+            'created_at': notification.created_at.isoformat(),
+            'study_id': notification.study.id if notification.study else None
+        })
+    
+    return JsonResponse({'notifications': notifications_data})
 
 @login_required
-@require_http_methods(['POST'])
 def mark_notification_read(request, notification_id):
-    """Mark a notification as read"""
-    notification = get_object_or_404(Notification, id=notification_id, recipient=request.user)
-    notification.is_read = True
-    notification.save()
-    return JsonResponse({'success': True})
+    """Mark notification as read"""
+    if request.method == 'POST':
+        try:
+            notification = request.user.notifications.get(id=notification_id)
+            notification.mark_as_read()
+            return JsonResponse({'success': True})
+        except:
+            return JsonResponse({'success': False, 'error': 'Notification not found'})
+    
+    return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+def get_client_ip(request):
+    """Get client IP address"""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0]
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip
 
 
 # New API endpoints for enhanced functionality
