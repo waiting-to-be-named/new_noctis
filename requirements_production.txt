@@ -1,0 +1,46 @@
+# NOCTIS DICOM System - Production Requirements
+# HIPAA-Compliant Medical Imaging Platform
+
+# Core Django
+Django==4.2.7
+django-extensions==3.2.3
+django-cors-headers==4.3.1
+
+# Database
+psycopg2-binary==2.9.7
+
+# Web Server
+gunicorn==21.2.0
+whitenoise==6.6.0
+
+# DICOM Processing
+pydicom==2.4.3
+gdcm==1.1
+pillow==10.1.0
+numpy==1.24.4
+SimpleITK==2.3.1
+
+# Async Processing
+celery==5.3.4
+redis==5.0.1
+
+# Security
+cryptography==41.0.7
+django-security==0.20.0
+django-ratelimit==4.1.0
+python-decouple==3.8
+
+# API and Utilities
+requests==2.31.0
+python-dateutil==2.8.2
+
+# Medical Standards
+pynetdicom==2.0.2
+
+# Monitoring and Logging
+sentry-sdk==1.38.0
+
+# Development Tools (Optional)
+# Uncomment for development environments
+# django-debug-toolbar==4.2.0
+# django-silk==5.0.4
