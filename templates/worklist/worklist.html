@@ -43,17 +43,66 @@
         <div class="upload-section">
             <div class="upload-container">
                 <div class="upload-zone" id="upload-zone">
-                    <i class="fas fa-cloud-upload-alt" style="font-size: 24px; margin-bottom: 10px;"></i>
-                    <p>Drop DICOM files or folders here, or click to browse</p>
-                    <p style="font-size: 12px; color: #666; margin-top: 5px;">
-                        <i class="fas fa-info-circle"></i> Large folders (100+ files) will be processed in the background
-                    </p>
+                    <div class="upload-icon">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                    </div>
+                    <h3>Upload DICOM Files</h3>
+                    <p>Drag and drop DICOM files or folders here</p>
+                    <p class="upload-hint">Supports: .dcm, .dicom files and large folders (up to 10GB per upload)</p>
+                    
+                    <!-- Progress tracking -->
+                    <div id="upload-progress-container" style="display: none;">
+                        <div class="upload-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="upload-progress-fill"></div>
+                            </div>
+                            <div class="progress-text">
+                                <span id="upload-progress-text">Preparing upload...</span>
+                                <span id="upload-speed"></span>
+                            </div>
+                            <div class="upload-details">
+                                <span id="files-processed">0</span> / <span id="total-files">0</span> files processed
+                                <span id="data-transferred">0 MB</span> / <span id="total-data">0 MB</span>
+                            </div>
+                        </div>
+                        <button class="btn btn-danger" id="cancel-upload-btn" onclick="cancelUpload()">
+                            <i class="fas fa-stop"></i> Cancel Upload
+                        </button>
+                    </div>
+
+                    <!-- File inputs -->
                     <input type="file" id="file-input" multiple webkitdirectory style="display: none;">
                     <input type="file" id="file-input-files" multiple accept=".dcm,.dicom" style="display: none;">
                 </div>
+                
                 <button class="btn btn-upload-unified" onclick="showUploadModal()">
                     <i class="fas fa-upload"></i> Upload Files/Folders
                 </button>
+                
+                <!-- Remote DICOM section -->
+                <div class="remote-dicom-section">
+                    <h4><i class="fas fa-globe"></i> Remote DICOM Import</h4>
+                    <div class="remote-input-group">
+                        <input type="url" id="remote-dicom-url" placeholder="Enter DICOM server URL or file URL..." class="form-control">
+                        <select id="remote-protocol" class="form-select">
+                            <option value="http">HTTP/HTTPS</option>
+                            <option value="dicom">DICOM C-MOVE</option>
+                            <option value="ftp">FTP/SFTP</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="importRemoteDICOM()">
+                            <i class="fas fa-download"></i> Import
+                        </button>
+                    </div>
+                    
+                    <!-- DICOM server credentials -->
+                    <div id="dicom-server-credentials" style="display: none;">
+                        <div class="credentials-row">
+                            <input type="text" id="dicom-aet" placeholder="Application Entity Title" class="form-control">
+                            <input type="text" id="dicom-host" placeholder="DICOM Server Host" class="form-control">
+                            <input type="number" id="dicom-port" placeholder="Port (default: 104)" class="form-control">
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="upload-progress" id="upload-progress">
                 <div class="progress-bar">
