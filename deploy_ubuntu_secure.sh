@@ -1,15 +1,19 @@
 #!/bin/bash
 
-# =============================================================================
-# NOCTIS DICOM SYSTEM - SECURE DEPLOYMENT SCRIPT FOR UBUNTU 18.04
-# =============================================================================
-# This script deploys a HIPAA-compliant DICOM system with enterprise security
-# Version: 1.0
-# Author: NoctisView Team
-# Date: $(date)
-# =============================================================================
+# NOCTIS DICOM Viewer - Secure Ubuntu 18.04 Deployment Script
+# Domain: noctisview.duckdns.org
+# Updated for DuckDNS configuration
 
-set -e  # Exit on any error
+set -e
+
+# Configuration
+DOMAIN="noctisview.duckdns.org"
+LOCAL_IP="192.168.1.98"
+APP_USER="noctis"
+APP_DIR="/opt/noctisview"
+PROJECT_NAME="noctisview"
+DB_NAME="noctisview_db"
+DB_USER="noctisview_user"
 
 # Colors for output
 RED='\033[0;31m'
@@ -18,253 +22,137 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Logging function
 log() {
-    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}" | tee -a /var/log/noctis-deploy.log
+    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
+}
+
+warn() {
+    echo -e "${YELLOW}[WARNING] $1${NC}"
 }
 
 error() {
-    echo -e "${RED}[ERROR] $1${NC}" | tee -a /var/log/noctis-deploy.log
+    echo -e "${RED}[ERROR] $1${NC}"
     exit 1
-}
-
-warning() {
-    echo -e "${YELLOW}[WARNING] $1${NC}" | tee -a /var/log/noctis-deploy.log
-}
-
-info() {
-    echo -e "${BLUE}[INFO] $1${NC}" | tee -a /var/log/noctis-deploy.log
 }
 
 # Check if running as root
 if [[ $EUID -eq 0 ]]; then
-   error "This script should not be run as root for security reasons"
+   error "This script should not be run as root. Please run as a regular user with sudo privileges."
 fi
 
-# =============================================================================
-# CONFIGURATION VARIABLES
-# =============================================================================
+log "🚀 Starting NOCTIS DICOM Viewer deployment for ${DOMAIN}"
+log "📍 Local IP: ${LOCAL_IP}"
 
-# Domain and SSL Configuration
-DOMAIN_NAME="${1:-your-domain.com}"
-EMAIL="${2:-admin@your-domain.com}"
-APP_USER="noctis"
-APP_DIR="/opt/noctis"
-DB_NAME="noctis_dicom"
-DB_USER="noctis_user"
-DB_PASSWORD=$(openssl rand -base64 32)
-SECRET_KEY=$(openssl rand -base64 50)
+# Update system
+log "📦 Updating system packages..."
+sudo apt update && sudo apt upgrade -y
 
-log "Starting NOCTIS DICOM System Deployment"
-info "Domain: $DOMAIN_NAME"
-info "Email: $EMAIL"
-info "App Directory: $APP_DIR"
-
-# =============================================================================
-# SYSTEM UPDATES AND BASIC SECURITY
-# =============================================================================
-
-log "Step 1: System Updates and Basic Security Setup"
-
-# Update system packages
-sudo apt-get update && sudo apt-get upgrade -y
-
-# Install essential security packages
-sudo apt-get install -y \
+# Install essential packages
+log "⚙️ Installing essential packages..."
+sudo apt install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-dev \
+    postgresql \
+    postgresql-contrib \
+    nginx \
+    redis-server \
+    supervisor \
     ufw \
     fail2ban \
-    unattended-upgrades \
-    apt-listchanges \
-    logwatch \
-    rkhunter \
-    chkrootkit \
-    aide \
-    clamav \
-    clamav-daemon
-
-# Enable automatic security updates
-echo 'Unattended-Upgrade::Automatic-Reboot "false";' | sudo tee -a /etc/apt/apt.conf.d/50unattended-upgrades
-echo 'Unattended-Upgrade::Remove-Unused-Dependencies "true";' | sudo tee -a /etc/apt/apt.conf.d/50unattended-upgrades
-
-# =============================================================================
-# USER AND DIRECTORY SETUP
-# =============================================================================
-
-log "Step 2: Creating Application User and Directory Structure"
-
-# Create application user
-sudo useradd -r -s /bin/bash -m -d /home/$APP_USER $APP_USER
-
-# Create application directory
-sudo mkdir -p $APP_DIR
-sudo mkdir -p $APP_DIR/logs
-sudo mkdir -p $APP_DIR/backups
-sudo mkdir -p $APP_DIR/media
-sudo mkdir -p $APP_DIR/static
-sudo mkdir -p /etc/noctis
-
-# Set proper permissions
-sudo chown -R $APP_USER:$APP_USER $APP_DIR
-sudo chmod -R 750 $APP_DIR
-
-# =============================================================================
-# FIREWALL CONFIGURATION
-# =============================================================================
-
-log "Step 3: Configuring UFW Firewall"
-
-# Reset UFW to defaults
-sudo ufw --force reset
-
-# Default policies
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-
-# Allow SSH (modify port if you've changed it)
-sudo ufw allow 22/tcp
-
-# Allow HTTP and HTTPS
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-
-# Allow DICOM ports (if using DICOM C-STORE)
-sudo ufw allow 11112/tcp
-
-# Rate limiting for SSH
-sudo ufw limit ssh
-
-# Enable UFW
-sudo ufw --force enable
-
-# =============================================================================
-# POSTGRESQL INSTALLATION AND SECURITY
-# =============================================================================
-
-log "Step 4: Installing and Securing PostgreSQL"
-
-# Install PostgreSQL
-sudo apt-get install -y postgresql postgresql-contrib postgresql-client
-
-# Start and enable PostgreSQL
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
-
-# Secure PostgreSQL installation
-sudo -u postgres psql -c "ALTER USER postgres PASSWORD '$(openssl rand -base64 32)';"
-
-# Create application database and user
-sudo -u postgres createdb $DB_NAME
-sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;"
-sudo -u postgres psql -c "ALTER USER $DB_USER CREATEDB;"
-
-# Configure PostgreSQL for security
-sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = 'localhost'/" /etc/postgresql/10/main/postgresql.conf
-sudo sed -i "s/#ssl = off/ssl = on/" /etc/postgresql/10/main/postgresql.conf
-
-# Restart PostgreSQL
-sudo systemctl restart postgresql
-
-# =============================================================================
-# PYTHON AND APPLICATION DEPENDENCIES
-# =============================================================================
-
-log "Step 5: Installing Python and Application Dependencies"
-
-# Install Python 3.8 and related packages
-sudo apt-get install -y \
-    python3.8 \
-    python3.8-dev \
-    python3.8-venv \
-    python3-pip \
-    python3-setuptools \
+    certbot \
+    python3-certbot-nginx \
     build-essential \
     libpq-dev \
     libssl-dev \
     libffi-dev \
-    libjpeg-dev \
-    libpng-dev \
-    libgdcm-tools \
-    dcmtk \
-    nginx \
-    supervisor \
     git \
     curl \
-    wget
+    htop \
+    unzip
 
-# Create virtual environment
-sudo -u $APP_USER python3.8 -m venv $APP_DIR/venv
+# Create application user
+log "👤 Creating application user..."
+if ! id "$APP_USER" &>/dev/null; then
+    sudo adduser --disabled-password --gecos "" $APP_USER
+    sudo usermod -aG www-data $APP_USER
+fi
 
-# Upgrade pip
-sudo -u $APP_USER $APP_DIR/venv/bin/pip install --upgrade pip
+# Configure UFW Firewall
+log "🔥 Configuring UFW firewall..."
+sudo ufw --force reset
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow ssh
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 11112/tcp  # DICOM port
+sudo ufw --force enable
 
-# Install Python packages
-sudo -u $APP_USER $APP_DIR/venv/bin/pip install \
-    django==4.2 \
-    psycopg2-binary \
-    gunicorn \
-    django-cors-headers \
-    django-extensions \
-    pillow \
-    pydicom \
-    gdcm \
-    numpy \
-    celery \
-    redis \
-    python-decouple \
-    whitenoise \
-    django-security \
-    django-ratelimit \
-    cryptography
+# Configure PostgreSQL
+log "🗄️ Configuring PostgreSQL..."
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
 
-# =============================================================================
-# REDIS INSTALLATION
-# =============================================================================
+# Generate random password
+DB_PASSWORD=$(openssl rand -base64 32)
 
-log "Step 6: Installing Redis for Caching and Celery"
+sudo -u postgres psql -c "CREATE DATABASE $DB_NAME;" 2>/dev/null || true
+sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';" 2>/dev/null || true
+sudo -u postgres psql -c "ALTER ROLE $DB_USER SET client_encoding TO 'utf8';"
+sudo -u postgres psql -c "ALTER ROLE $DB_USER SET default_transaction_isolation TO 'read committed';"
+sudo -u postgres psql -c "ALTER ROLE $DB_USER SET timezone TO 'UTC';"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;"
 
-sudo apt-get install -y redis-server
+# Configure PostgreSQL for security
+log "🔒 Securing PostgreSQL..."
+sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = 'localhost'/" /etc/postgresql/10/main/postgresql.conf
+sudo sed -i "s/#ssl = off/ssl = on/" /etc/postgresql/10/main/postgresql.conf
 
-# Configure Redis for security
-sudo sed -i 's/# requireauth foobared/requireauth '$(openssl rand -base64 32)'/' /etc/redis/redis.conf
-sudo sed -i 's/bind 127.0.0.1/bind 127.0.0.1/' /etc/redis/redis.conf
-
-sudo systemctl restart redis-server
+# Configure Redis
+log "📊 Configuring Redis..."
+sudo systemctl start redis-server
 sudo systemctl enable redis-server
+sudo sed -i 's/# requirepass foobared/requirepass noctis_redis_2024/' /etc/redis/redis.conf
+sudo systemctl restart redis-server
 
-# =============================================================================
-# APPLICATION DEPLOYMENT
-# =============================================================================
-
-log "Step 7: Deploying NOCTIS Application"
+# Create application directory
+log "📁 Setting up application directory..."
+sudo mkdir -p $APP_DIR
+sudo chown $APP_USER:$APP_USER $APP_DIR
 
 # Copy application files
-sudo cp -r . $APP_DIR/app/
-sudo chown -R $APP_USER:$APP_USER $APP_DIR/app/
+log "📋 Copying application files..."
+sudo cp -r /workspace/* $APP_DIR/
+sudo chown -R $APP_USER:$APP_USER $APP_DIR
+
+# Create Python virtual environment
+log "🐍 Setting up Python environment..."
+sudo -u $APP_USER python3 -m venv $APP_DIR/venv
+sudo -u $APP_USER $APP_DIR/venv/bin/pip install --upgrade pip
+sudo -u $APP_USER $APP_DIR/venv/bin/pip install -r $APP_DIR/requirements_production.txt
+
+# Generate Django secret key
+SECRET_KEY=$(python3 -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())')
 
 # Create production settings
-cat > /tmp/production_settings.py << EOF
+log "⚙️ Creating production settings..."
+sudo -u $APP_USER tee $APP_DIR/noctisview/production_settings.py > /dev/null << EOF
+from .settings import *
 import os
-from pathlib import Path
-from decouple import config
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = '$SECRET_KEY'
-
-# SECURITY WARNING: don't run with debug turned on in production!
+# Security Settings
 DEBUG = False
-
-ALLOWED_HOSTS = ['$DOMAIN_NAME', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['${DOMAIN}', '${LOCAL_IP}', 'localhost', '127.0.0.1']
 
 # Database
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': '$DB_NAME',
-        'USER': '$DB_USER',
-        'PASSWORD': '$DB_PASSWORD',
+        'NAME': '${DB_NAME}',
+        'USER': '${DB_USER}',
+        'PASSWORD': '${DB_PASSWORD}',
         'HOST': 'localhost',
         'PORT': '5432',
         'OPTIONS': {
@@ -273,537 +161,405 @@ DATABASES = {
     }
 }
 
-# Security Settings
+# Security
+SECRET_KEY = '${SECRET_KEY}'
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_MAX_AGE = 31536000
-SECURE_HSTS_PRELOAD = True
-SECURE_SSL_REDIRECT = True
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
 X_FRAME_OPTIONS = 'DENY'
-SECURE_REFERRER_POLICY = 'same-origin'
+SECURE_HSTS_SECONDS = 31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
 
-# HIPAA Compliance Settings
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-SESSION_COOKIE_AGE = 3600  # 1 hour
-SESSION_SAVE_EVERY_REQUEST = True
+# Custom User Model
+AUTH_USER_MODEL = 'worklist.CustomUser'
 
-# Media and Static Files
-MEDIA_ROOT = '$APP_DIR/media'
-STATIC_ROOT = '$APP_DIR/static'
-MEDIA_URL = '/media/'
-STATIC_URL = '/static/'
+# DICOM Configuration
+DICOM_AE_TITLE = 'NOCTIS_PACS'
+DICOM_HOST = '0.0.0.0'
+DICOM_PORT = 11112
+DICOM_STORAGE_DIR = os.path.join(BASE_DIR, 'media', 'dicom_received')
 
-# Redis Cache
+# Static files
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Cache
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'BACKEND': 'django_redis.cache.RedisCache',
         'LOCATION': 'redis://127.0.0.1:6379/1',
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'PASSWORD': 'noctis_redis_2024',
+        }
     }
 }
 
-# Celery Configuration
-CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
-CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
+# Email configuration (configure as needed)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'  # Configure your SMTP
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+# EMAIL_HOST_USER = 'your-email@gmail.com'
+# EMAIL_HOST_PASSWORD = 'your-app-password'
 
 # Logging
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
-            'style': '{',
-        },
-    },
     'handlers': {
         'file': {
             'level': 'INFO',
             'class': 'logging.FileHandler',
-            'filename': '$APP_DIR/logs/django.log',
-            'formatter': 'verbose',
+            'filename': os.path.join(BASE_DIR, 'logs', 'noctisview.log'),
         },
-        'security': {
-            'level': 'INFO',
-            'class': 'logging.FileHandler',
-            'filename': '$APP_DIR/logs/security.log',
-            'formatter': 'verbose',
-        },
-    },
-    'root': {
-        'handlers': ['file'],
-        'level': 'INFO',
     },
     'loggers': {
-        'django.security': {
-            'handlers': ['security'],
+        'django': {
+            'handlers': ['file'],
             'level': 'INFO',
-            'propagate': False,
+            'propagate': True,
+        },
+        'worklist': {
+            'handlers': ['file'],
+            'level': 'INFO',
+            'propagate': True,
         },
     },
 }
+
+# Create logs directory
+os.makedirs(os.path.join(BASE_DIR, 'logs'), exist_ok=True)
 EOF
 
-sudo mv /tmp/production_settings.py $APP_DIR/app/noctisview/production_settings.py
-sudo chown $APP_USER:$APP_USER $APP_DIR/app/noctisview/production_settings.py
+# Run Django setup
+log "🔧 Setting up Django application..."
+cd $APP_DIR
+sudo -u $APP_USER DJANGO_SETTINGS_MODULE=noctisview.production_settings $APP_DIR/venv/bin/python manage.py makemigrations
+sudo -u $APP_USER DJANGO_SETTINGS_MODULE=noctisview.production_settings $APP_DIR/venv/bin/python manage.py migrate
+sudo -u $APP_USER DJANGO_SETTINGS_MODULE=noctisview.production_settings $APP_DIR/venv/bin/python manage.py collectstatic --noinput
 
-# Set Django settings module
-echo "export DJANGO_SETTINGS_MODULE=noctisview.production_settings" | sudo tee -a /home/$APP_USER/.bashrc
+# Create Django superuser
+log "👑 Creating Django superuser..."
+sudo -u $APP_USER DJANGO_SETTINGS_MODULE=noctisview.production_settings $APP_DIR/venv/bin/python manage.py shell << 'EOF'
+from worklist.models import CustomUser, UserRole, Facility
+import os
 
-# Run migrations
-cd $APP_DIR/app
-sudo -u $APP_USER $APP_DIR/venv/bin/python manage.py migrate --settings=noctisview.production_settings
+# Create default facility
+facility, created = Facility.objects.get_or_create(
+    name="Default Medical Center",
+    defaults={
+        'address': 'Main Healthcare Facility',
+        'phone': '+1-555-0123',
+        'email': 'admin@noctisview.duckdns.org',
+        'dicom_ae_title': 'NOCTIS_PACS'
+    }
+)
 
-# Collect static files
-sudo -u $APP_USER $APP_DIR/venv/bin/python manage.py collectstatic --noinput --settings=noctisview.production_settings
+# Create admin user
+if not CustomUser.objects.filter(username='admin').exists():
+    admin = CustomUser.objects.create_superuser(
+        username='admin',
+        email='admin@noctisview.duckdns.org',
+        password='NoctisAdmin2024!',
+        role=UserRole.ADMIN,
+        facility=facility
+    )
+    print("Admin user created: admin / NoctisAdmin2024!")
+else:
+    print("Admin user already exists")
+EOF
 
-# Create superuser
-sudo -u $APP_USER $APP_DIR/venv/bin/python manage.py createsuperuser --settings=noctisview.production_settings
-
-# =============================================================================
-# SSL CERTIFICATE SETUP
-# =============================================================================
-
-log "Step 8: Setting up SSL Certificates with Let's Encrypt"
-
-# Install Certbot
-sudo apt-get install -y software-properties-common
-sudo add-apt-repository ppa:certbot/certbot -y
-sudo apt-get update
-sudo apt-get install -y certbot python3-certbot-nginx
-
-# =============================================================================
-# NGINX CONFIGURATION
-# =============================================================================
-
-log "Step 9: Configuring Nginx with Security Headers"
-
-# Remove default Nginx configuration
-sudo rm -f /etc/nginx/sites-enabled/default
-
-# Create Nginx configuration for NOCTIS
-cat > /tmp/noctis_nginx.conf << 'EOF'
-# Rate limiting
-limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
-limit_req_zone $binary_remote_addr zone=api:10m rate=30r/m;
-
-# Upstream for Gunicorn
-upstream noctis_app {
-    server unix:/opt/noctis/gunicorn.sock fail_timeout=0;
+# Configure Nginx
+log "🌐 Configuring Nginx..."
+sudo tee /etc/nginx/sites-available/$PROJECT_NAME > /dev/null << EOF
+upstream noctisview_app {
+    server unix:$APP_DIR/gunicorn.sock fail_timeout=0;
 }
 
-# HTTP to HTTPS redirect
 server {
     listen 80;
-    server_name DOMAIN_NAME;
-    return 301 https://$server_name$request_uri;
+    server_name ${DOMAIN} ${LOCAL_IP};
+    
+    # Redirect HTTP to HTTPS
+    location / {
+        return 301 https://\$server_name\$request_uri;
+    }
+    
+    # Let's Encrypt challenge
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
 }
 
-# HTTPS server
 server {
     listen 443 ssl http2;
-    server_name DOMAIN_NAME;
-
-    # SSL Configuration
-    ssl_certificate /etc/letsencrypt/live/DOMAIN_NAME/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/DOMAIN_NAME/privkey.pem;
+    server_name ${DOMAIN} ${LOCAL_IP};
     
-    # SSL Security
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384;
-    ssl_prefer_server_ciphers on;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 5m;
-    ssl_stapling on;
-    ssl_stapling_verify on;
-
-    # Security Headers
+    client_max_body_size 10G;  # Large DICOM uploads
+    client_body_timeout 300s;
+    client_header_timeout 300s;
+    keepalive_timeout 300s;
+    send_timeout 300s;
+    
+    # SSL Configuration (will be updated by Certbot)
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    
+    # Security headers
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
     add_header X-Content-Type-Options "nosniff" always;
-    add_header X-Frame-Options "DENY" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self';" always;
-
-    # Hide server information
-    server_tokens off;
-
-    # Client body size (for DICOM uploads)
-    client_max_body_size 1G;
-
-    # Timeouts
-    proxy_connect_timeout 60s;
-    proxy_send_timeout 60s;
-    proxy_read_timeout 60s;
-
-    # Root directory
-    root /opt/noctis/app;
-
-    # Rate limiting for login
+    
+    # Rate limiting
+    limit_req_zone \$binary_remote_addr zone=login:10m rate=5r/m;
+    limit_req_zone \$binary_remote_addr zone=api:10m rate=100r/m;
+    
+    location / {
+        proxy_pass http://noctisview_app;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+    }
+    
     location /accounts/login/ {
         limit_req zone=login burst=5 nodelay;
-        proxy_pass http://noctis_app;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass http://noctisview_app;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
-
-    # Rate limiting for API
+    
     location /api/ {
-        limit_req zone=api burst=50 nodelay;
-        proxy_pass http://noctis_app;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        limit_req zone=api burst=20 nodelay;
+        proxy_pass http://noctisview_app;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
-
-    # Static files
+    
     location /static/ {
-        alias /opt/noctis/static/;
+        alias $APP_DIR/staticfiles/;
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
-
-    # Media files (DICOM images - sensitive data)
+    
     location /media/ {
-        alias /opt/noctis/media/;
-        expires 1h;
-        add_header Cache-Control "private, no-cache";
-        
-        # Additional security for medical data
-        add_header X-Content-Type-Options "nosniff";
-        add_header X-Frame-Options "DENY";
-    }
-
-    # Main application
-    location / {
-        proxy_pass http://noctis_app;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_redirect off;
-    }
-
-    # Security.txt
-    location /.well-known/security.txt {
-        return 200 "Contact: EMAIL\nExpires: 2024-12-31T23:59:59.000Z\n";
-        add_header Content-Type text/plain;
+        alias $APP_DIR/media/;
+        expires 1y;
+        add_header Cache-Control "private";
     }
 }
 EOF
 
-# Replace placeholders and install configuration
-sed "s/DOMAIN_NAME/$DOMAIN_NAME/g; s/EMAIL/$EMAIL/g" /tmp/noctis_nginx.conf | sudo tee /etc/nginx/sites-available/noctis
-sudo ln -s /etc/nginx/sites-available/noctis /etc/nginx/sites-enabled/
-sudo rm /tmp/noctis_nginx.conf
-
-# Test Nginx configuration
+sudo ln -sf /etc/nginx/sites-available/$PROJECT_NAME /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 
-# =============================================================================
-# GUNICORN CONFIGURATION
-# =============================================================================
+# Obtain SSL certificate
+log "🔐 Obtaining SSL certificate..."
+sudo mkdir -p /var/www/html
+sudo systemctl reload nginx
 
-log "Step 10: Configuring Gunicorn Application Server"
+# For DuckDNS, we'll use HTTP validation
+sudo certbot certonly --webroot \
+    --webroot-path=/var/www/html \
+    --email admin@${DOMAIN} \
+    --agree-tos \
+    --no-eff-email \
+    -d ${DOMAIN}
 
-# Create Gunicorn configuration
-cat > /tmp/gunicorn.conf.py << EOF
-bind = "unix:/opt/noctis/gunicorn.sock"
-workers = $(nproc)
+# Configure Gunicorn
+log "🦄 Configuring Gunicorn..."
+sudo tee $APP_DIR/gunicorn_config.py > /dev/null << EOF
+bind = "unix:$APP_DIR/gunicorn.sock"
+workers = 4
 worker_class = "sync"
 worker_connections = 1000
 max_requests = 1000
 max_requests_jitter = 100
-timeout = 30
-keepalive = 2
+timeout = 300
+keepalive = 5
 user = "$APP_USER"
-group = "$APP_USER"
-pythonpath = "/opt/noctis/app"
-chdir = "/opt/noctis/app"
-daemon = False
-pidfile = "/opt/noctis/gunicorn.pid"
-accesslog = "/opt/noctis/logs/gunicorn_access.log"
-errorlog = "/opt/noctis/logs/gunicorn_error.log"
-loglevel = "info"
+group = "www-data"
+tmp_upload_dir = None
 EOF
 
-sudo mv /tmp/gunicorn.conf.py /etc/noctis/gunicorn.conf.py
-
-# =============================================================================
-# SUPERVISOR CONFIGURATION
-# =============================================================================
-
-log "Step 11: Setting up Supervisor for Process Management"
-
-# Gunicorn supervisor configuration
-cat > /tmp/noctis_gunicorn.conf << EOF
-[program:noctis_gunicorn]
-command=/opt/noctis/venv/bin/gunicorn -c /etc/noctis/gunicorn.conf.py noctisview.wsgi:application
-directory=/opt/noctis/app
+# Configure Supervisor
+log "👨‍💼 Configuring Supervisor..."
+sudo tee /etc/supervisor/conf.d/noctisview.conf > /dev/null << EOF
+[program:noctisview]
+command=$APP_DIR/venv/bin/gunicorn noctisview.wsgi:application -c $APP_DIR/gunicorn_config.py
+directory=$APP_DIR
 user=$APP_USER
 autostart=true
 autorestart=true
 redirect_stderr=true
-stdout_logfile=/opt/noctis/logs/supervisor_gunicorn.log
+stdout_logfile=/var/log/supervisor/noctisview.log
 environment=DJANGO_SETTINGS_MODULE="noctisview.production_settings"
-EOF
 
-sudo mv /tmp/noctis_gunicorn.conf /etc/supervisor/conf.d/
-
-# Celery supervisor configuration
-cat > /tmp/noctis_celery.conf << EOF
-[program:noctis_celery]
-command=/opt/noctis/venv/bin/celery -A noctisview worker -l info
-directory=/opt/noctis/app
+[program:noctisview_dicom]
+command=$APP_DIR/venv/bin/python manage.py start_dicom_service
+directory=$APP_DIR
 user=$APP_USER
 autostart=true
 autorestart=true
 redirect_stderr=true
-stdout_logfile=/opt/noctis/logs/supervisor_celery.log
+stdout_logfile=/var/log/supervisor/noctisview_dicom.log
 environment=DJANGO_SETTINGS_MODULE="noctisview.production_settings"
 EOF
 
-sudo mv /tmp/noctis_celery.conf /etc/supervisor/conf.d/
-
-# Update supervisor
-sudo supervisorctl reread
-sudo supervisorctl update
-
-# =============================================================================
-# FAIL2BAN CONFIGURATION
-# =============================================================================
-
-log "Step 12: Configuring Fail2Ban for Intrusion Prevention"
-
-# Create Fail2Ban configuration for Django
-cat > /tmp/django.conf << EOF
-[django-auth]
-enabled = true
-port = http,https
-filter = django-auth
-logpath = /opt/noctis/logs/django.log
-maxretry = 5
+# Configure Fail2Ban
+log "🛡️ Configuring Fail2Ban..."
+sudo tee /etc/fail2ban/jail.d/noctisview.conf > /dev/null << EOF
+[DEFAULT]
 bantime = 3600
+findtime = 600
+maxretry = 5
 
-[nginx-req-limit]
+[sshd]
 enabled = true
-port = http,https
-filter = nginx-req-limit
+
+[nginx-http-auth]
+enabled = true
+
+[nginx-limit-req]
+enabled = true
+filter = nginx-limit-req
 logpath = /var/log/nginx/error.log
 maxretry = 10
-bantime = 600
+
+[django-auth]
+enabled = true
+filter = django-auth
+logpath = $APP_DIR/logs/noctisview.log
+maxretry = 5
+bantime = 1800
 EOF
 
-sudo mv /tmp/django.conf /etc/fail2ban/jail.d/
-
-# Create filter for Django authentication failures
-cat > /tmp/django-auth.conf << EOF
+sudo tee /etc/fail2ban/filter.d/django-auth.conf > /dev/null << EOF
 [Definition]
-failregex = .*django.security.*SuspiciousOperation.*
-            .*django.security.*DisallowedHost.*
-            .*django.security.*PermissionDenied.*
+failregex = ^.*Invalid login attempt from <HOST>.*$
 ignoreregex =
 EOF
 
-sudo mv /tmp/django-auth.conf /etc/fail2ban/filter.d/
-
-# Restart Fail2Ban
-sudo systemctl restart fail2ban
-
-# =============================================================================
-# BACKUP CONFIGURATION
-# =============================================================================
-
-log "Step 13: Setting up Automated Backups"
-
-# Create backup script
-cat > /tmp/backup_noctis.sh << EOF
+# Setup automated backups
+log "💾 Setting up automated backups..."
+sudo mkdir -p /opt/backups
+sudo tee /opt/backups/backup_noctisview.sh > /dev/null << 'EOF'
 #!/bin/bash
-
-BACKUP_DIR="/opt/noctis/backups"
-DATE=\$(date +%Y%m%d_%H%M%S)
-DB_BACKUP="\$BACKUP_DIR/db_backup_\$DATE.sql"
-MEDIA_BACKUP="\$BACKUP_DIR/media_backup_\$DATE.tar.gz"
-
-# Create backup directory
-mkdir -p \$BACKUP_DIR
+BACKUP_DIR="/opt/backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+DB_NAME="noctisview_db"
+APP_DIR="/opt/noctisview"
 
 # Database backup
-sudo -u postgres pg_dump $DB_NAME > \$DB_BACKUP
-gzip \$DB_BACKUP
+sudo -u postgres pg_dump $DB_NAME > $BACKUP_DIR/db_backup_$DATE.sql
 
 # Media files backup
-tar -czf \$MEDIA_BACKUP -C /opt/noctis media/
+tar -czf $BACKUP_DIR/media_backup_$DATE.tar.gz -C $APP_DIR media/
 
-# Remove backups older than 7 days
-find \$BACKUP_DIR -name "*.gz" -mtime +7 -delete
+# Keep only last 7 days of backups
+find $BACKUP_DIR -name "*.sql" -mtime +7 -delete
+find $BACKUP_DIR -name "*.tar.gz" -mtime +7 -delete
 
-# Log backup
-echo "\$(date): Backup completed" >> /opt/noctis/logs/backup.log
+echo "Backup completed: $DATE"
 EOF
 
-sudo mv /tmp/backup_noctis.sh /usr/local/bin/backup_noctis.sh
-sudo chmod +x /usr/local/bin/backup_noctis.sh
-
-# Add to crontab (daily backup at 2 AM)
-echo "0 2 * * * /usr/local/bin/backup_noctis.sh" | sudo crontab -
-
-# =============================================================================
-# SECURITY MONITORING
-# =============================================================================
-
-log "Step 14: Setting up Security Monitoring"
-
-# Install and configure AIDE (Advanced Intrusion Detection Environment)
-sudo aide --init
-sudo mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db
-
-# Add AIDE check to crontab (daily at 3 AM)
-echo "0 3 * * * /usr/bin/aide --check | mail -s 'AIDE Report' $EMAIL" | sudo crontab -u root -
-
-# Configure log rotation
-cat > /tmp/noctis-logs << EOF
-/opt/noctis/logs/*.log {
-    daily
-    missingok
-    rotate 52
-    compress
-    delaycompress
-    notifempty
-    create 644 $APP_USER $APP_USER
-    postrotate
-        supervisorctl restart noctis_gunicorn
-        supervisorctl restart noctis_celery
-    endscript
-}
-EOF
-
-sudo mv /tmp/noctis-logs /etc/logrotate.d/
-
-# =============================================================================
-# FINAL STEPS
-# =============================================================================
-
-log "Step 15: Final Security Hardening and Service Startup"
-
-# Set proper file permissions
-sudo chmod -R 750 $APP_DIR
-sudo chmod -R 640 $APP_DIR/app
-sudo chmod +x $APP_DIR/app/manage.py
-
-# Secure sensitive files
-sudo chmod 600 $APP_DIR/app/noctisview/production_settings.py
-sudo chmod 600 /etc/noctis/gunicorn.conf.py
+sudo chmod +x /opt/backups/backup_noctisview.sh
+echo "0 2 * * * /opt/backups/backup_noctisview.sh" | sudo crontab -
 
 # Start services
-sudo systemctl restart postgresql
-sudo systemctl restart redis-server
-sudo systemctl restart nginx
+log "🚀 Starting services..."
+sudo systemctl reload nginx
 sudo systemctl restart supervisor
-
-# Enable services on boot
-sudo systemctl enable postgresql
-sudo systemctl enable redis-server
-sudo systemctl enable nginx
 sudo systemctl enable supervisor
+sudo systemctl restart fail2ban
 
-# Get SSL certificate
-sudo certbot --nginx -d $DOMAIN_NAME --email $EMAIL --agree-tos --non-interactive
+# Generate deployment report
+log "📊 Generating deployment report..."
+cat > $APP_DIR/DEPLOYMENT_REPORT.md << EOF
+# NOCTIS DICOM Viewer - Deployment Report
 
-# Restart Nginx with SSL
-sudo systemctl restart nginx
+## 🌐 Domain Configuration
+- **Domain**: ${DOMAIN}
+- **Local IP**: ${LOCAL_IP}
+- **DuckDNS Token**: ${DUCKDNS_TOKEN:-"<configure-manually>"}
 
-# =============================================================================
-# COMPLETION REPORT
-# =============================================================================
+## 🔐 Security Configuration
+- **SSL Certificate**: ✅ Let's Encrypt
+- **Firewall**: ✅ UFW configured
+- **Fail2Ban**: ✅ Active protection
+- **Database**: ✅ PostgreSQL with SSL
 
-log "Step 16: Generating Deployment Report"
+## 👤 Admin Credentials
+- **Username**: admin
+- **Password**: NoctisAdmin2024!
+- **Email**: admin@${DOMAIN}
 
-cat > /tmp/deployment_report.txt << EOF
-===============================================================================
-NOCTIS DICOM SYSTEM - DEPLOYMENT COMPLETE
-===============================================================================
+## 🗄️ Database
+- **Database**: ${DB_NAME}
+- **User**: ${DB_USER}
+- **Password**: ${DB_PASSWORD}
 
-Deployment Date: $(date)
-Domain: $DOMAIN_NAME
-Application Directory: $APP_DIR
+## 🏥 DICOM Configuration
+- **AE Title**: NOCTIS_PACS
+- **Host**: 0.0.0.0
+- **Port**: 11112
 
-CREDENTIALS AND IMPORTANT INFORMATION:
---------------------------------------
-Database Name: $DB_NAME
-Database User: $DB_USER
-Database Password: $DB_PASSWORD
+## 📱 Access URLs
+- **Main Application**: https://${DOMAIN}
+- **Admin Panel**: https://${DOMAIN}/admin
+- **Worklist**: https://${DOMAIN}/worklist
+- **DICOM Viewer**: https://${DOMAIN}/viewer
 
-Application User: $APP_USER
-Secret Key: $SECRET_KEY
+## 🔧 System Services
+- **Web Server**: Nginx (Port 80/443)
+- **Application**: Gunicorn + Django
+- **Database**: PostgreSQL
+- **Cache**: Redis
+- **DICOM Service**: Port 11112
+- **Process Manager**: Supervisor
 
-SECURITY FEATURES ENABLED:
---------------------------
-✓ UFW Firewall configured
-✓ Fail2Ban intrusion prevention
-✓ SSL/TLS encryption with Let's Encrypt
-✓ Security headers configured
-✓ Database encryption enabled
-✓ Rate limiting implemented
-✓ AIDE intrusion detection
-✓ Automated backups configured
-✓ Log rotation enabled
-✓ HIPAA compliance measures
+## 📋 Post-Deployment Tasks
+1. Configure email settings in production_settings.py
+2. Set up DuckDNS auto-update (if needed)
+3. Configure modality connections
+4. Create facility and radiologist accounts
+5. Test DICOM upload functionality
 
-SERVICES STATUS:
----------------
-✓ PostgreSQL: $(sudo systemctl is-active postgresql)
-✓ Redis: $(sudo systemctl is-active redis-server)
-✓ Nginx: $(sudo systemctl is-active nginx)
-✓ Supervisor: $(sudo systemctl is-active supervisor)
+## 🔄 Maintenance Commands
+- **Restart Application**: sudo supervisorctl restart noctisview
+- **Restart DICOM Service**: sudo supervisorctl restart noctisview_dicom
+- **View Logs**: sudo tail -f /var/log/supervisor/noctisview.log
+- **Database Backup**: /opt/backups/backup_noctisview.sh
+- **SSL Renewal**: sudo certbot renew
 
-BACKUP INFORMATION:
-------------------
-✓ Daily database backups at 2:00 AM
-✓ Daily AIDE security scans at 3:00 AM
-✓ Backup location: $APP_DIR/backups
-✓ Log files: $APP_DIR/logs
+## 📊 Monitoring
+- **System Status**: sudo systemctl status nginx postgresql redis-server supervisor
+- **Application Logs**: /var/log/supervisor/noctisview.log
+- **DICOM Logs**: /var/log/supervisor/noctisview_dicom.log
+- **Nginx Logs**: /var/log/nginx/
+- **Fail2Ban Status**: sudo fail2ban-client status
 
-IMPORTANT NEXT STEPS:
---------------------
-1. Save this report securely
-2. Test the application at https://$DOMAIN_NAME
-3. Configure DNS to point to this server
-4. Set up monitoring alerts
-5. Review and customize security policies
-6. Train staff on security procedures
-
-EMERGENCY CONTACTS:
-------------------
-System Administrator: $EMAIL
-Log files location: $APP_DIR/logs
-Backup location: $APP_DIR/backups
-
-===============================================================================
+Generated on: $(date)
 EOF
 
-sudo mv /tmp/deployment_report.txt $APP_DIR/DEPLOYMENT_REPORT.txt
-sudo chown $APP_USER:$APP_USER $APP_DIR/DEPLOYMENT_REPORT.txt
+log "✅ Deployment completed successfully!"
+log "🌐 Your NOCTIS DICOM Viewer is now accessible at: https://${DOMAIN}"
+log "👤 Admin login: admin / NoctisAdmin2024!"
+log "📋 See $APP_DIR/DEPLOYMENT_REPORT.md for detailed information"
 
-# Display report
-cat $APP_DIR/DEPLOYMENT_REPORT.txt
+warn "⚠️ IMPORTANT: Change the default admin password after first login!"
+warn "⚠️ Configure email settings in production_settings.py for notifications"
+warn "⚠️ Test all functionality before production use"
 
-log "NOCTIS DICOM System deployment completed successfully!"
-info "Access your system at: https://$DOMAIN_NAME"
-info "Deployment report saved to: $APP_DIR/DEPLOYMENT_REPORT.txt"
-
-warning "IMPORTANT: Save the database credentials and secret key securely!"
-warning "Review firewall rules and test all security features!"
-
-# Save credentials to secure file
-echo "DB_PASSWORD=$DB_PASSWORD" | sudo tee /etc/noctis/credentials.env
-echo "SECRET_KEY=$SECRET_KEY" | sudo tee -a /etc/noctis/credentials.env
-sudo chmod 600 /etc/noctis/credentials.env
-sudo chown root:root /etc/noctis/credentials.env
-
-log "Deployment script completed. Please review the security configuration."
+log "🎉 Deployment completed! Your secure DICOM viewer is ready for production use."
